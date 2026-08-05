@@ -13,11 +13,26 @@ Inspect the current test names before documenting a case; do not rely on old cou
 
 ## On-machine phases
 
-1. **Smoke, 10-30 minutes**: grab/start/stop, display modes, review navigation, report ranges, persistence, and hardware status.
-2. **Load**: production camera count, frame dimensions, line rate, save mode, and accumulated CSV volume.
-3. **Interaction under load**: parameter changes, tab switches, rapid review IDs, report range scrolling, zoom/pan, and background preview.
-4. **Soak, shift or 24 hours**: no crash; frame, save, remote-copy, RAM, handle, VRAM, and queue trends remain bounded.
-5. **Failure injection**: disconnect/reconnect PLC, light, camera, storage network, and low-disk conditions one at a time. Verify recovery and retained data.
+Follow this verification ladder in order:
+
+1. **Refactor slice**: move one responsibility at a time. After every slice, require the affected
+   Release x64 build, automated checks, and a short smoke of the touched behavior. Do not stack
+   several unverified slices and postpone all functional evidence until the end.
+2. **Complete functional DVT**: after the planned refactor slices are integrated, run monitoring,
+   background capture/preview, review, report, settings, bridges, persistence, and shutdown once
+   against the golden flow contract.
+3. **Stress/load**: run repeated IO cycles, production-sized files, rapid navigation, parameter
+   changes, tab switches, zoom/pan, remote-copy recovery, and low-disk retention. This phase proves
+   throughput and race boundaries, not multi-hour stability.
+4. **Soak, shift or 24 hours**: no crash; frame, save, remote-copy, RAM, handle, VRAM, and queue
+   trends remain bounded.
+5. **Failure injection**: disconnect/reconnect PLC, light, camera, storage network, and low-disk
+   conditions one at a time. Verify recovery and retained data.
+
+The first-frame phase gate needs a short Grab/Curve/save smoke before its branch can be integrated.
+Its rare-event evidence is deferred to stress: repeat at least the previous comparable baseline
+(158 IO cycles / about 30 minutes) and require every rejected head probe to stop before firstFrame,
+CSV, or persistence. The shift/24-hour run remains a separate final phase.
 
 For the shift/24-hour phase, run `IoBridge.IoSimulator` as the repeatable IO source and schedule
 start/stop/Mura transitions throughout the run. Include at least one simulator restart and one

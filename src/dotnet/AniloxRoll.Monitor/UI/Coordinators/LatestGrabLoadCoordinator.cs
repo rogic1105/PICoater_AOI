@@ -17,7 +17,8 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
     /// <summary>
     /// Serializes single-grab loads and retains only the latest request that has not started.
-    /// The running request may finish its IO, but IsCurrent prevents stale results from applying.
+    /// Callers choose strict latest-only presentation with IsCurrent, or progressive presentation
+    /// of already-started work with CanApplyStarted. Explicit invalidation rejects both policies.
     /// </summary>
     internal sealed class LatestGrabLoadCoordinator
     {

@@ -1,9 +1,11 @@
+using System.Collections.Generic;
 using System.Drawing;
 using System.Reflection;
 using System.Threading;
 using System.Windows.Forms;
 using NUnit.Framework;
 using TanukiCv.Controls;
+using TanukiCv.Core;
 
 namespace AniloxRoll.Monitor.Tests
 {
@@ -58,6 +60,31 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void Layout_UsesEachCameraOpsForPhysicalWidth()
+        {
+            using (var host = new Panel { Size = new Size(600, 200) })
+            using (var view = new WaterfallView(
+                host,
+                camCount: 2,
+                totalHeight: 1000,
+                fullMode: WaterfallFullMode.Restart,
+                screenMmPerPx: 0.264))
+            {
+                WritePrivate(view, "_defaultFrameW", 100);
+                view.SetLayout(
+                    new[] { 0d, 100d },
+                    new[] { 1000d, 2000d },
+                    refOpsMm: 1d);
+
+                List<CameraPlacement> placements =
+                    ReadPrivate<List<CameraPlacement>>(view, "_cameraPlacements");
+                Assert.That(ReadPrivate<int>(view, "_fullW"), Is.EqualTo(300));
+                Assert.That(placements[0].DestWidth, Is.EqualTo(100));
+                Assert.That(placements[1].DestWidth, Is.EqualTo(200));
+            }
+        }
+
+        [Test]
         public void DisplayLayerSwitch_PreservesHistoryWriteHeadAndView()
         {
             using (var host = new Panel { Size = new Size(320, 240) })
@@ -91,8 +118,8 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(
                     SpinWait.SpinUntil(() =>
                     {
-                        byte[][][] pendingLayers = ReadPrivate<byte[][][]>(view, "_layerChunks");
-                        return pendingLayers[0][0] != null
+                        byte[][][][] pendingLayers = ReadPrivate<byte[][][][]>(view, "_cameraLayerChunks");
+                        return pendingLayers[0][0][0] != null
                             && !ReadPrivate<bool>(view, "_writerRunning");
                     }, 2000),
                     Is.True,
@@ -102,11 +129,11 @@ namespace AniloxRoll.Monitor.Tests
                 float zoomBefore = canvas.Zoom;
                 PointF panBefore = canvas.PanOffset;
                 int writeRowBefore = ReadPrivate<int>(view, "_writeRow");
-                byte[][][] layers = ReadPrivate<byte[][][]>(view, "_layerChunks");
+                byte[][][][] layers = ReadPrivate<byte[][][][]>(view, "_cameraLayerChunks");
 
-                Assert.That(layers[(int)WaterfallFrameLayer.Raw][0][0], Is.EqualTo(10));
-                Assert.That(layers[(int)WaterfallFrameLayer.Column][0][0], Is.EqualTo(20));
-                Assert.That(layers[(int)WaterfallFrameLayer.Row][0][0], Is.EqualTo(30));
+                Assert.That(layers[(int)WaterfallFrameLayer.Raw][0][0][0], Is.EqualTo(10));
+                Assert.That(layers[(int)WaterfallFrameLayer.Column][0][0][0], Is.EqualTo(20));
+                Assert.That(layers[(int)WaterfallFrameLayer.Row][0][0][0], Is.EqualTo(30));
 
                 view.SetDisplayLayer(WaterfallFrameLayer.Column);
                 view.SetDisplayLayer(WaterfallFrameLayer.Row);
@@ -145,18 +172,73 @@ namespace AniloxRoll.Monitor.Tests
                     Is.True);
 
                 int writeRow = ReadPrivate<int>(view, "_writeRow");
-                byte[][][] history = ReadPrivate<byte[][][]>(view, "_layerChunks");
-                byte firstPixel = history[(int)WaterfallFrameLayer.Raw][0][0];
+                byte[][][][] history = ReadPrivate<byte[][][][]>(view, "_cameraLayerChunks");
+                byte firstPixel = history[(int)WaterfallFrameLayer.Raw][0][0][0];
 
                 view.SetHorizontalDisplayCrop(0.25, 0.25);
 
                 Assert.That(
-                    ReadPrivate<byte[][][]>(view, "_layerChunks"),
+                    ReadPrivate<byte[][][][]>(view, "_cameraLayerChunks"),
                     Is.SameAs(history));
                 Assert.That(ReadPrivate<int>(view, "_writeRow"), Is.EqualTo(writeRow));
                 Assert.That(
-                    history[(int)WaterfallFrameLayer.Raw][0][0],
+                    history[(int)WaterfallFrameLayer.Raw][0][0][0],
                     Is.EqualTo(firstPixel));
+            }
+        }
+
+        [Test]
+        public void StartChange_RepositionsAlreadyWrittenWaterfallHistory()
+        {
+            using (var host = new Panel { Size = new Size(320, 240) })
+            using (var view = new WaterfallView(
+                host,
+                camCount: 2,
+                totalHeight: 1000,
+                fullMode: WaterfallFullMode.Restart,
+                screenMmPerPx: 0.264))
+            {
+                view.SetLayout(
+                    new[] { 0.0, 2.0 },
+                    new[] { 1000.0, 1000.0 },
+                    refOpsMm: 1.0);
+                view.SetExpectedFramePeriod(periodTicks: 100, periodMs: 100);
+                view.PushFrame(1, new byte[] { 10, 11 }, 2, 1, tick: 100);
+                view.PushFrame(2, new byte[] { 20, 21 }, 2, 1, tick: 100);
+
+                Thread.Sleep(200);
+                Application.DoEvents();
+                Assert.That(
+                    SpinWait.SpinUntil(
+                        () => ReadPrivate<int>(view, "_writeRow") >= 1 &&
+                              !ReadPrivate<bool>(view, "_writerRunning"),
+                        2000),
+                    Is.True);
+
+                using (Bitmap before = ReadRegion(view, width: 4))
+                {
+                    Assert.That(before.GetPixel(0, 0).R, Is.EqualTo(10));
+                    Assert.That(before.GetPixel(1, 0).R, Is.EqualTo(11));
+                    Assert.That(before.GetPixel(2, 0).R, Is.EqualTo(20));
+                    Assert.That(before.GetPixel(3, 0).R, Is.EqualTo(21));
+                }
+
+                int historyRows = ReadPrivate<int>(view, "_writeRow");
+                view.SetLayout(
+                    new[] { 0.0, 4.0 },
+                    new[] { 1000.0, 1000.0 },
+                    refOpsMm: 1.0);
+
+                Assert.That(ReadPrivate<int>(view, "_writeRow"), Is.EqualTo(historyRows));
+                using (Bitmap after = ReadRegion(view, width: 6))
+                {
+                    Assert.That(after.GetPixel(0, 0).R, Is.EqualTo(10));
+                    Assert.That(after.GetPixel(1, 0).R, Is.EqualTo(11));
+                    Assert.That(after.GetPixel(2, 0).R, Is.Zero);
+                    Assert.That(after.GetPixel(3, 0).R, Is.Zero);
+                    Assert.That(after.GetPixel(4, 0).R, Is.EqualTo(20));
+                    Assert.That(after.GetPixel(5, 0).R, Is.EqualTo(21));
+                }
             }
         }
 
@@ -270,6 +352,17 @@ namespace AniloxRoll.Monitor.Tests
                 BindingFlags.Instance | BindingFlags.NonPublic);
             Assert.That(field, Is.Not.Null, fieldName);
             field.SetValue(target, value);
+        }
+
+        private static Bitmap ReadRegion(WaterfallView view, int width)
+        {
+            MethodInfo method = typeof(WaterfallView).GetMethod(
+                "ProvideRegion",
+                BindingFlags.Instance | BindingFlags.NonPublic);
+            Assert.That(method, Is.Not.Null);
+            return (Bitmap)method.Invoke(
+                view,
+                new object[] { new Rectangle(0, 0, width, 1), new Size(width, 1) });
         }
     }
 }

@@ -170,7 +170,7 @@ namespace AniloxRoll.Monitor.Forms
                     InspectionDefaults.WaterfallTotalHeight);
                 int boundaryGraceSeconds =
                     _liveCameraManager.GetCaptureBoundaryGraceSeconds();
-                bool waitForFirstSet = _captureStopCoordinator.Arm(
+                bool activateTimeAfterFirstSet = _captureStopCoordinator.Arm(
                     stopCondition,
                     ioControlled,
                     configuredLimitSeconds,
@@ -188,37 +188,35 @@ namespace AniloxRoll.Monitor.Forms
                 }
                 UpdateGrabButton(true);
 
-                if (waitForFirstSet)
+                int firstSetTimeoutMs =
+                    _liveCameraManager.GetCaptureFirstSetTimeoutMs();
+                bool firstSetReady =
+                    await _liveCameraManager.WaitForCaptureFirstSetReadyAsync(
+                        firstSetTimeoutMs);
+                if (!firstSetReady || !_liveCameraManager.IsLiveGrabbing)
                 {
-                    int firstSetTimeoutMs =
-                        _liveCameraManager.GetCaptureFirstSetTimeoutMs();
-                    bool firstSetReady =
-                        await _liveCameraManager.WaitForCaptureFirstSetReadyAsync(
-                            firstSetTimeoutMs);
-                    if (!firstSetReady || !_liveCameraManager.IsLiveGrabbing)
+                    _captureStopCoordinator.FailFirstSet();
+                    FlowTrace.Log(
+                        $"capture start failed condition={stopCondition} " +
+                        $"reason=first-set-not-ready timeoutMs={firstSetTimeoutMs} " +
+                        $"grab={_currentGrabId}");
+                    if (_liveCameraManager.IsLiveGrabbing)
                     {
-                        _captureStopCoordinator.FailFirstSet();
-                        FlowTrace.Log(
-                            $"grab stop start failed condition=Time " +
-                            $"reason=first-set-not-ready timeoutMs={firstSetTimeoutMs} " +
-                            $"grab={_currentGrabId}");
-                        if (_liveCameraManager.IsLiveGrabbing)
-                        {
-                            await ToggleLiveGrabAsync(
-                                $"auto:抓取取消 condition=Time " +
-                                $"reason=first-set-not-ready grab={_currentGrabId}",
-                                ioControlled: ioControlled);
-                        }
-                        else
-                        {
-                            LightTurnOff();
-                            UpdateGrabButton(false);
-                        }
-                        return false;
+                        await ToggleLiveGrabAsync(
+                            $"auto:抓取取消 condition={stopCondition} " +
+                            $"reason=first-set-not-ready grab={_currentGrabId}",
+                            ioControlled: ioControlled);
                     }
-
-                    _captureStopCoordinator.ActivateTimeAfterFirstSet();
+                    else
+                    {
+                        LightTurnOff();
+                        UpdateGrabButton(false);
+                    }
+                    return false;
                 }
+
+                if (activateTimeAfterFirstSet)
+                    _captureStopCoordinator.ActivateTimeAfterFirstSet();
             }
 
             // 剛從「抓取中」→「停止」：關燈 + 觸發循環儲存 + 通知儲存機清理
@@ -363,15 +361,37 @@ namespace AniloxRoll.Monitor.Forms
                 if (!File.Exists(archivePath))
                     throw new FileNotFoundException("Grab 封裝檔未建立。", archivePath);
 
+                var columnMean = new float[CameraCount][];
+                var columnMax = new float[CameraCount][];
+                CsvConfigSnapshot captureConfig = BuildCaptureConfigSnapshot(grabId);
                 CaptureArchivePreviewAtlasResult preview = await Task.Run(() =>
-                    CaptureArchiveStore.AddPreviewAtlasesToArchive(
-                        archivePath,
-                        previewMaxWidth,
-                        previewMaxHeight,
-                        replaceExisting: true));
+                {
+                    CaptureArchivePreviewAtlasResult result =
+                        CaptureArchiveStore.AddPreviewAtlasesToArchive(
+                            archivePath,
+                            previewMaxWidth,
+                            previewMaxHeight,
+                            replaceExisting: true);
+
+                    for (int camId = 1; camId <= CameraCount; camId++)
+                    {
+                        List<string> framePaths = CaptureArchiveStore.ListVirtualRawPaths(
+                            archivePath, camId);
+                        CurveMergeHelper.MergeCurves(
+                            framePaths, out columnMean[camId - 1], out columnMax[camId - 1]);
+                    }
+                    return result;
+                });
                 if (preview.FailedArchiveCount != 0 || preview.AtlasCount != 3)
                     throw new InvalidDataException(
                         $"預覽圖集不完整：atlas={preview.AtlasCount}/3 failed={preview.FailedArchiveCount}。");
+
+                _inspectionLogService?.AppendColumnCurveSummary(
+                    grabId,
+                    captureDate,
+                    captureConfig?.HessianMaxFactorV ?? _settings.HessianMaxFactorV,
+                    columnMean,
+                    columnMax);
 
                 string csvPath = CaptureStoragePaths.DailyCsv(captureRoot, captureDate);
                 var completedFiles = new List<string> { archivePath };
@@ -463,7 +483,12 @@ namespace AniloxRoll.Monitor.Forms
             float thMean = direction == "h" ? _settings.ErrorValueMeanH : _settings.ErrorValueMeanV;
             float thMax  = direction == "h" ? _settings.ErrorValueMaxH  : _settings.ErrorValueMaxV;
 
-            bool exceed = meanPeak > thMean || maxPeak > thMax;
+            ColumnCurveDisplayMode columnMode = direction == "v"
+                ? _settings.ColumnCurveMode
+                : ColumnCurveDisplayMode.Both;
+            ColumnFailureCause cause = ThresholdContext.EvaluateColumnFailureCause(
+                meanPeak, maxPeak, thMean, thMax, columnMode);
+            bool exceed = cause != ColumnFailureCause.None;
             int di = direction == "h" ? 1 : 0;
             if (exceed != _muraExceedLatch[di])   // 邊緣觸發：進入/離開超標各記一行
             {
@@ -936,8 +961,17 @@ namespace AniloxRoll.Monitor.Forms
                 _liveCameraManager?.RefreshHorizontalDisplayCrop();
             }
             if (OpsStartSettingNames.Contains(name) && _liveCameraManager?.IsGlobalMergeActive == true)
-                _liveCameraManager.RefreshGlobalMergeLayout(
-                    _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
+            {
+                double[] opsUm = _settings.GetCameraOpsUmArray();
+                double[] startsMm = _settings.GetCameraStartPositionMmArray();
+                _liveCameraManager.RefreshGlobalMergeLayout(opsUm, startsMm);
+
+                CaptureLayoutSnapshot layout = CaptureLayoutSnapshot.FromSettings(
+                    _currentGrabId, _settings, DateTime.Now);
+                FlowTrace.Log(
+                    $"displayLayout applied setting={name} refGrid=cam1 " +
+                    $"{layout.ToFlowValues()} scope=main+column-chart source=unchanged");
+            }
         }
 
         /// <summary>強化 setting（監控 hc / 回顧 hd / 熱力圖 hda）→ 套用對應顯示。（Wave3 選項1：從 dispatcher 搬入。）</summary>

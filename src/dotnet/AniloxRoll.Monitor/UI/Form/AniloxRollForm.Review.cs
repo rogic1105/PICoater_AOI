@@ -62,7 +62,17 @@ namespace AniloxRoll.Monitor.Forms
             FlowTrace.Log("ui:【讀取資料】鈕（Review）");   // intent 行（孤兒判讀規則；grab 中按會動到監控合圖）
             try
             {
-                _reviewFolderCoordinator.SelectAndLoadFolder();
+                bool loaded;
+                _reviewBusyUi?.SetBusy(true);
+                try
+                {
+                    loaded = await _reviewFolderCoordinator.SelectAndLoadFolderAsync();
+                }
+                finally
+                {
+                    _reviewBusyUi?.SetBusy(false);
+                }
+                if (!loaded) return;
                 _presenter.UpdatePeriodNavigationState();
                 await ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: false);
             }
@@ -77,6 +87,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private async Task ResetAndLoadReviewAfterFolderChanged(bool dataPresenterAlreadySynced)
         {
+            _stitchCoordinator.InvalidateImageLoad();
             _stitchCoordinator.LastReviewProcessedMode = false;
             _settingsHub.SetBatch(s =>
             {

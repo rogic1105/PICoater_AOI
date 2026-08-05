@@ -736,11 +736,13 @@ namespace AniloxRoll.Monitor.Forms
 
             _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewColumn);
             _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+            _reviewOverviewHelper.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
             if (chartReviewColumn.ChartAreas.Count > 0)
                 chartReviewColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveColumn);
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+            _liveOverviewHelper.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
             if (chartLiveColumn.ChartAreas.Count > 0)
                 chartLiveColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
@@ -1213,6 +1215,7 @@ namespace AniloxRoll.Monitor.Forms
             // PropertyGrid wrapper aliases（實務上 PropertyGrid 改值送的就是這組）
             "dc_HessianMaxFactorV", "dd_HessianMaxFactorH",
             "db_Algorithm", "eb_RidgeDir",
+            "eca_ColumnCurveMode",
             "ec_ErrorValueMeanV", "ed_ErrorValueMaxV",
             "ee_ErrorValueMeanH", "ef_ErrorValueMaxH",
             // InspectionRecipe.* 真名（程式碼直接改 Recipe 時用）
@@ -1222,6 +1225,7 @@ namespace AniloxRoll.Monitor.Forms
             nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "欄最大閾值",
             nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "列平均閾值",
             nameof(InspectionRecipe.ErrorValueMaxH),   "Error Value Max H",  "列最大閾值",
+            nameof(InspectionRecipe.ColumnCurveMode),  "Column Curve Mode",  "欄曲線判定",
             nameof(InspectionRecipe.Algorithm),        "去背演算法",
             nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
@@ -1283,7 +1287,9 @@ namespace AniloxRoll.Monitor.Forms
                     MachineLayoutSettingNames.Contains(c.Name);
                 if (machineLayoutChangedDuringGrab)
                 {
-                    bool applyDisplayImmediately = CropSettingNames.Contains(c.Name);
+                    bool applyDisplayImmediately =
+                        CropSettingNames.Contains(c.Name) ||
+                        OpsStartSettingNames.Contains(c.Name);
                     _captureLayoutPending = true;
                     _captureLayoutDeferredRenderPending |= !applyDisplayImmediately;
                     FlowTrace.Log(
@@ -1320,6 +1326,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+                _reviewOverviewHelper?.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
+                _liveOverviewHelper?.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
             }
             if ((impacts & SettingImpact.RowThresholds) != 0)
             {

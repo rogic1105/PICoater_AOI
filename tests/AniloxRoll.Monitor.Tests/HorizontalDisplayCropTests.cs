@@ -51,6 +51,33 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void Apply_MapsDisplayCropBackToScaledSourcePixels()
+        {
+            var source = new List<CameraPlacement>
+            {
+                new CameraPlacement
+                {
+                    CameraId = 1,
+                    XOffset = 0,
+                    SrcLeft = 0,
+                    SrcWidth = 100,
+                    DisplayLeft = 0,
+                    DisplayWidth = 200
+                }
+            };
+            HorizontalDisplayCrop crop = HorizontalDisplayCrop.Compute(
+                200, 0d, 1d, 50d, 0d);
+
+            List<CameraPlacement> visible = crop.Apply(source);
+
+            Assert.That(visible.Count, Is.EqualTo(1));
+            Assert.That(visible[0].SrcLeft, Is.EqualTo(25));
+            Assert.That(visible[0].SrcWidth, Is.EqualTo(75));
+            Assert.That(visible[0].DestX, Is.EqualTo(0));
+            Assert.That(visible[0].DestWidth, Is.EqualTo(150));
+        }
+
+        [Test]
         public void ColumnChartFallbackRange_UsesCropWithoutMutatingCurveLength()
         {
             double left = double.NaN;

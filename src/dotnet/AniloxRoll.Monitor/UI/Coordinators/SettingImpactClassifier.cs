@@ -115,6 +115,8 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 SettingImpact.CapturePolicy);
             Add(routes, nameof(InspectionSettings.eb_RidgeDir), SettingFeatureOwner.DataStats,
                 SettingImpact.InspectionService | SettingImpact.CapturePolicy | SettingImpact.ReviewCurves);
+            Add(routes, nameof(InspectionSettings.eca_ColumnCurveMode), SettingFeatureOwner.DataStats,
+                SettingImpact.ColumnThresholds | SettingImpact.ReviewCurves);
             Add(routes, nameof(InspectionSettings.ec_ErrorValueMeanV), SettingFeatureOwner.DataStats,
                 SettingImpact.InspectionService | SettingImpact.ColumnThresholds | SettingImpact.ReviewCurves);
             Add(routes, nameof(InspectionSettings.ed_ErrorValueMaxV), SettingFeatureOwner.DataStats,

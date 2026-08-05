@@ -51,9 +51,9 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - **三個 GroupBox 標題都可點切模式**（`SwitchActiveStatGroupBox`）— 與 Review tab 的 `grpReviewGrabNav.Click` 對等
 - `btnDataSelectFolder`/`btnReviewSelectFolder` 讀取資料後預設 `GrpDataSingleSheet` 模式：**單片顯示最新一筆**（`cbDataId` descending [0]）；**序號範圍預設「起始 cbDataIdStart=最舊、結束 cbDataIdEnd=最新」**（切範圍模式即涵蓋全部；明細列表隨 start/end 連動＝顯示全部）。兩路徑共用 `SelectLatestInSingleSheetMode()`（在 `StatComboGuard` 內設 start/end/cbDataId、不觸發 `OnSingleSheetComboChanged`；`SetActiveStatGroupBox` 顯式切模式、`RefreshStats` 由 caller 呼）。**勿在 `PopulateAllGrabIdCombos` guard 外再設 `cbDataId`＝會誤觸發 handler 把 start 拉回最新**
 - **年/月/日期間可點設範圍**（`DataDateGrabIdNavigator`，`GrabIdRangeSource` enum：Global/Year/Month/Day/Custom）：點 `lblChartNavYear/Month/Day`（浮雕 Fixed3D 小晶片 + 手指游標）→ cbDataIdStart/End 只取該期間（值取自 `cbDataYieldYear/Month/Day`）；**範圍模式再點同一 active label → 轉 Custom 解除綁定，保留目前起訖且不重算**；點 `groupBoxGrabIdRange`→全局；手動拖範圍→Custom。**互斥高亮**：同時只有一個來源綠（`SetChipActive`/`SetGroupBoxActive` 同色 `_activeGrpFill/_activeGrpBorder`）；解除綁定時全滅。**單片 toggle 記憶**＝`_rangeSource` 保留 + 範圍 cb 不被單片動（見 [[cbDataId 取消同動]]）→ 回範圍自動還原。**active 來源的 cbDataYield 改變→範圍跟著更新**（`OnPeriodComboChangedForRange`，Custom/非 active 來源/串聯不觸發）
-- **序號模式**：`ComputeByGrabIdRange` — 分母=唯一序號數，同序號同相機一票否決
+- **序號模式**：`ComputeByGrabIdRange` — 分母=唯一序號數；有 `#CURVE-C` 時以整筆合併曲線判定，舊資料缺摘要才暫用逐幀一票否決 fallback
 - **時間模式**：找時間範圍內 GrabIds → 同樣用 `ComputeByGrabIdRange`
-- Period Charts（`ScanCsvByDateRange`）同樣用 (GrabId, CamId) 一票否決
+- Period Charts 使用相同的整筆合併曲線摘要／舊資料 fallback，不得另建判定公式
 
 ### CSV 格式
 - 路徑：`{Root}\{yyyy}\{yyyyMM}\{yyyyMMdd}.csv`
@@ -65,8 +65,21 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
   `MeanPeak/MaxPeak/MaxCMean/MeanRPeak/MaxRPeak` 是 capture 當下從同份 bin 資料算出的可重建標量索引。
   報表明細第 8 判定欄固定為「列」：Row peaks 缺少時顯示 `—`，不得當 Pass；存在時以
   `HM_V_capture/HM_H_current` 與當前列門檻重判，同序號任一相機／capture Fail 即為 X。
-  報表調整欄正規值或 Mean/Max 門檻時，以 CSV 索引重判全資料，不逐筆重讀 bin；
+  報表調整欄正規值或 Mean/Max 門檻時，以 CSV `#CURVE-C` 摘要重判全資料，不逐筆重讀 bin；
   不改寫歷史 CSV。若外部修改 bin，必須同步重建 CSV 索引，不得讓 Curve 與判定分歧。
+
+### 報表欄判定
+- **報表欄 O/X 的 SSoT**：監控逐幀判定仍可立即告警；報表則以同一序號、同一相機的
+  最終可見合併曲線判定。多幀先合成每台相機 Curve，再與欄圖表共用
+  `CurveOverviewMerger + MergeLayout(Midline)` 套用 OPS／Start 與重疊歸屬；每台相機只檢查
+  最終畫面實際由它顯示的點，被相鄰相機遮掉的重疊區峰值不得造成 X。
+  `CurveMean` 峰值只對「欄平均閾值」，`CurveMax` 峰值只對「欄最大閾值」。
+- `欄曲線判定` 同時控制欄圖表顯示、監控欄 MURA 與報表 O/X：顯示平均只啟用 Mean／平均閾值，
+  顯示最大只啟用 Max／最大閾值，顯示兩者則任一超標即 X。List、色卡、期間統計與 DVT 必須共用
+  `ThresholdContext.EvaluateColumn`，不可各自重寫公式。
+- 擷取完成後寫入 `#CURVE-C,1,grabId,camId,HM_V,meanPeak,maxPeak`；它會覆蓋逐幀
+  `MeanPeak/MaxPeak` 的暫定 veto。舊資料在單序號曲線載入後以實際合併曲線校正當列，
+  不得把 `CurveMax` 超過平均線誤判為 X。
 
 ### Period Charts
 - StackedColumn 綁 `YAxisType.Secondary`（AxisY2 右側顯示 label）
@@ -77,7 +90,7 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - chart.Tag = `"auto"` 代表 AutoScale 模式，null = FixedScale
 
 ### chartDataColumn（Mura 空間分布圖）
-- 單序號模式的每次實際上畫都必須是該 grab 的完整 Curve；孤立選擇立即載入。快速連續滾動時以 33ms 最短週期合併尚未開始的中間序號；已開始的 Curve 依序完成上畫，再接最新待辦，形成單調跳著更新，停下後最後序號必須完整顯示。切模式的明確 invalidation 仍禁止舊結果上畫。範圍模式則顯示 50 筆 Mean 均勻候選與 50 筆 MaxCMean 排名候選。
+- 單序號模式的每次實際上畫都必須是該 grab 的完整 Curve；孤立選擇立即載入。快速連續滾動時以 33ms 最短週期合併尚未開始的中間序號；已開始的 Curve 依序完成上畫，再接最新待辦，形成單調跳著更新，停下後最後序號必須完整顯示。切模式的明確 invalidation 仍禁止舊結果上畫。範圍模式則顯示 50 筆 Mean 均勻候選與 50 筆 MaxCMean 排名候選；兩組候選都必須先依各筆 `#CFG` 的拍攝欄正規值換算到目前 PropertyGrid 欄正規值，MaxCMean 排名也使用換算後數值。
 - 報表列 Curve 只屬單序號模式；與欄 Curve 共用單序號 profile/cache/prefetch，並沿用
   `RowCurveChartHelper + RowCurveDisplayAdapter`。切到序號範圍或年/月/日範圍必清空，不得保留上一筆。
 - 單序號資料來源：`InspectionConfigRepository.LoadForGrabId`（#CFG OPS/Pos）+ `SingleGrabCurveSummaryStore`；匯總缺少／失效時才走 `InspectionImagePathRepository.LoadForGrabId`，最多 2 台相機並行執行欄／列 bin 合併，先顯示 Curve，再由單一背景 writer 原子寫回。

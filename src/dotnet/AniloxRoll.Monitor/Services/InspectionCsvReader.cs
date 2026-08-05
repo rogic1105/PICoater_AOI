@@ -20,6 +20,15 @@ namespace AniloxRoll.Monitor.Core.Services
         public float MaxRPeak { get; set; } = float.NaN;
     }
 
+    internal sealed class ColumnCurveSummaryRecord
+    {
+        public string GrabId { get; set; }
+        public int CameraId { get; set; }
+        public float CaptureHmV { get; set; }
+        public float MeanPeak { get; set; }
+        public float MaxPeak { get; set; }
+    }
+
     /// <summary>
     /// Owns the inspection CSV line format and shared-read file access used by report and review queries.
     /// </summary>
@@ -88,6 +97,40 @@ namespace AniloxRoll.Monitor.Core.Services
             if (string.IsNullOrEmpty(line) || !line.StartsWith("#CFG,")) return false;
             if (CsvConfigSnapshot.TryParse(line, out var config) && config.HessianMaxFactorV > 0f)
                 captureHmV = config.HessianMaxFactorV;
+            return true;
+        }
+
+        public static bool TryParseColumnCurveSummary(
+            string line, out ColumnCurveSummaryRecord record)
+        {
+            record = null;
+            if (string.IsNullOrWhiteSpace(line) ||
+                !line.StartsWith("#CURVE-C,1,", StringComparison.Ordinal))
+                return false;
+
+            string[] columns = line.Split(',');
+            if (columns.Length != 7 ||
+                !int.TryParse(columns[3].Trim(), out int cameraId) ||
+                !float.TryParse(columns[4].Trim(), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out float captureHmV) ||
+                !float.TryParse(columns[5].Trim(), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out float meanPeak) ||
+                !float.TryParse(columns[6].Trim(), NumberStyles.Float,
+                    CultureInfo.InvariantCulture, out float maxPeak))
+                return false;
+
+            string grabId = columns[2].Trim();
+            if (string.IsNullOrEmpty(grabId) || cameraId < 1 || cameraId > 7)
+                return false;
+
+            record = new ColumnCurveSummaryRecord
+            {
+                GrabId = grabId,
+                CameraId = cameraId,
+                CaptureHmV = captureHmV,
+                MeanPeak = meanPeak,
+                MaxPeak = maxPeak
+            };
             return true;
         }
 

@@ -29,6 +29,10 @@ namespace TanukiCv.Core
             public double GridMm;
             /// <summary>點數。</summary>
             public int Length;
+            /// <summary>
+            /// Camera index owning each merged point after overlap clipping; -1 means no source data.
+            /// </summary>
+            public int[] OwnerCameraIndices;
             /// <summary>是否有有效輸出（false = 輸入不足/退化，呼叫端應略過）。</summary>
             public bool Valid;
         }
@@ -114,6 +118,9 @@ namespace TanukiCv.Core
             var mergedMean = new float[totalLen];
             var mergedMax  = new float[totalLen];
             var hit        = new bool[totalLen];
+            var ownerCameraIndices = new int[totalLen];
+            for (int i = 0; i < ownerCameraIndices.Length; i++)
+                ownerCameraIndices[i] = -1;
 
             for (int i = 0; i < cameraCount; i++)
             {
@@ -135,6 +142,7 @@ namespace TanukiCv.Core
                     float mv = (curveMax != null && j < curveMax.Length) ? curveMax[j] : 0;
                     if (!hit[idx] || mv > mergedMax[idx]) mergedMax[idx] = mv;
                     hit[idx] = true;
+                    ownerCameraIndices[idx] = i;
                 }
             }
 
@@ -143,6 +151,7 @@ namespace TanukiCv.Core
             result.GlobalMinMm = globalMin;
             result.GridMm = gridMm;
             result.Length = totalLen;
+            result.OwnerCameraIndices = ownerCameraIndices;
             result.Valid = true;
             return result;
         }

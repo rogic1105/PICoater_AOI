@@ -30,6 +30,8 @@ namespace TanukiCv.Controls
 
         /// <summary>最近一次更新實際送進圖表的顯示點數。</summary>
         public int DisplayPointCount => _displayXs.Length;
+        public double DisplayMeanPeak { get; private set; } = double.NaN;
+        public double DisplayMaxPeak { get; private set; } = double.NaN;
 
         public ColumnCurveChartHelper(Chart chart) : base(chart)
         {
@@ -69,16 +71,20 @@ namespace TanukiCv.Controls
                 for (int b = 0; b < displayCount; b++)
                 {
                     int i0 = b * stride, i1 = Math.Min(i0 + stride, n);
-                    double sum = 0, bmax = 0; int cnt = 0;
+                    double meanPeak = double.NegativeInfinity;
+                    double maxPeak = double.NegativeInfinity;
                     for (int j = i0; j < i1; j++)
                     {
-                        sum += meanData[j]; cnt++;
-                        if (maxData != null && j < maxData.Length && maxData[j] > bmax) bmax = maxData[j];
+                        if (meanData[j] > meanPeak) meanPeak = meanData[j];
+                        if (maxData != null && j < maxData.Length && maxData[j] > maxPeak)
+                            maxPeak = maxData[j];
                     }
                     int mid = (i0 + i1 - 1) / 2;
                     _displayXs[b]   = startPos + mid * _opsInMm;
-                    _displayMean[b] = sum / cnt / 255.0;
-                    _displayMax[b]  = bmax / 255.0;
+                    // MeanData is already the row average at each X. Averaging it again while
+                    // reducing display points would hide narrow peaks used by the verdict.
+                    _displayMean[b] = meanPeak / 255.0;
+                    _displayMax[b]  = double.IsNegativeInfinity(maxPeak) ? 0.0 : maxPeak / 255.0;
                 }
             }
             else
@@ -92,6 +98,11 @@ namespace TanukiCv.Controls
                         : 0.0;
                 }
             }
+
+            DisplayMeanPeak = FindPeak(_displayMean);
+            DisplayMaxPeak = maxData != null && maxData.Length > 0
+                ? FindPeak(_displayMax)
+                : double.NaN;
 
             _chart.Series.SuspendUpdates();
 
@@ -132,6 +143,15 @@ namespace TanukiCv.Controls
 
             _chart.Series.ResumeUpdates();
             _chart.Invalidate();
+        }
+
+        private static double FindPeak(double[] values)
+        {
+            if (values == null || values.Length == 0) return double.NaN;
+            double peak = values[0];
+            for (int i = 1; i < values.Length; i++)
+                if (values[i] > peak) peak = values[i];
+            return peak;
         }
 
         private void EnsureDisplayBuffers(int count)
@@ -446,11 +466,16 @@ namespace TanukiCv.Controls
             axisY.StripLines.Clear();
             if (_showThresholds)
             {
-                axisY.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));
-                axisY.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
+                if (_showMaxMetric)
+                    axisY.StripLines.Add(MakeStripLine(_errorValueMax, ChartDashStyle.Solid));
+                if (_showMeanMetric)
+                    axisY.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
             }
 
-            double yMax = Math.Max(1.0, Math.Max(_errorValueMean, _errorValueMax) * 1.1);
+            double activeThreshold = _showMeanMetric && _showMaxMetric
+                ? Math.Max(_errorValueMean, _errorValueMax)
+                : _showMeanMetric ? _errorValueMean : _errorValueMax;
+            double yMax = Math.Max(1.0, activeThreshold * 1.1);
             area.AxisY.Maximum  = yMax;
             area.AxisY2.Maximum = yMax;
         }

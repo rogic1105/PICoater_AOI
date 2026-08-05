@@ -29,6 +29,8 @@ namespace TanukiCv.Controls
 
         /// <summary>是否顯示紅色閾值線（mura 用）。純剖面（L0）等場景可關；設值即重整。子類 RefreshThresholds 依此 gate。</summary>
         protected bool _showThresholds = true;
+        protected bool _showMeanMetric = true;
+        protected bool _showMaxMetric = true;
         public bool ShowThresholds { get => _showThresholds; set { _showThresholds = value; if (_chart.ChartAreas.Count > 0) RefreshThresholds(); } }
 
         protected static readonly Font  UnitFont  = new Font("Segoe UI", 7f);
@@ -53,6 +55,21 @@ namespace TanukiCv.Controls
             _errorValueMean = errorValueMean;
             _errorValueMax  = errorValueMax;
             RefreshThresholds();
+        }
+
+        /// <summary>Controls Mean/Max series and their corresponding threshold lines as one policy.</summary>
+        public void SetVisibleMetrics(bool showMean, bool showMax)
+        {
+            if (!showMean && !showMax)
+                throw new ArgumentException("At least one curve metric must remain visible.");
+            _showMeanMetric = showMean;
+            _showMaxMetric = showMax;
+            if (_chart.Series.IndexOf("Mean") >= 0)
+                _chart.Series["Mean"].Enabled = showMean;
+            if (_chart.Series.IndexOf("Max") >= 0)
+                _chart.Series["Max"].Enabled = showMax;
+            RefreshThresholds();
+            _chart.Invalidate();
         }
 
         // ── 建立骨架 ──────────────────────────────────────────────────────
@@ -97,19 +114,21 @@ namespace TanukiCv.Controls
         /// <summary>建立 Mean/Max FastLine series（綁 Primary Y 軸）。</summary>
         private void AddMeanMaxSeries()
         {
-            _chart.Series.Add(new Series("Mean")
-            {
-                ChartType       = SeriesChartType.FastLine,
-                Color           = Color.DeepSkyBlue,
-                BorderDashStyle = ChartDashStyle.Dash,
-                YAxisType       = AxisType.Primary
-            });
-
+            // Max usually sits only slightly above Mean. Draw it first so the dashed Mean
+            // remains visible instead of being hidden by the solid Max curve.
             _chart.Series.Add(new Series("Max")
             {
                 ChartType       = SeriesChartType.FastLine,
                 Color           = Color.Blue,
                 BorderDashStyle = ChartDashStyle.Solid,
+                YAxisType       = AxisType.Primary
+            });
+
+            _chart.Series.Add(new Series("Mean")
+            {
+                ChartType       = SeriesChartType.FastLine,
+                Color           = Color.DeepSkyBlue,
+                BorderDashStyle = ChartDashStyle.Dash,
                 YAxisType       = AxisType.Primary
             });
         }

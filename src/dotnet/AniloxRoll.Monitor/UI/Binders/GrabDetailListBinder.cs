@@ -36,6 +36,7 @@ namespace AniloxRoll.Monitor.UI.Binders
         private List<GrabDetail> _visibleDetails = new List<GrabDetail>();
         private string _selectedGrabId;
         private bool _initialized;
+        private long _lastVirtualFallbackTicks;
 
         public GrabDetailListBinder(ListView listView, int cameraCount)
         {
@@ -78,8 +79,14 @@ namespace AniloxRoll.Monitor.UI.Binders
             _listView.BeginUpdate();
             try
             {
-                _visibleDetails = details ?? new List<GrabDetail>();
                 _listView.SelectedIndices.Clear();
+                // Keep the native virtual-list size and the managed snapshot in lockstep.
+                // Windows may request an old row while VirtualListSize is changing, so the
+                // RetrieveVirtualItem handler must stay attached throughout this transition.
+                _listView.VirtualListSize = 0;
+                _visibleDetails = details == null
+                    ? new List<GrabDetail>()
+                    : new List<GrabDetail>(details);
                 _listView.VirtualListSize = _visibleDetails.Count;
                 FitColumnsToContent();
             }
@@ -98,6 +105,17 @@ namespace AniloxRoll.Monitor.UI.Binders
                 EnsureRowInBufferedViewport(row);
             RedrawRow(previousRow);
             RedrawRow(row);
+        }
+
+        public void Refresh(string grabId)
+        {
+            RedrawRow(FindRow(grabId));
+        }
+
+        public void RefreshAll()
+        {
+            if (_listView.IsHandleCreated && !_listView.IsDisposed)
+                _listView.Invalidate();
         }
 
         public void ClearSelection()
@@ -124,6 +142,23 @@ namespace AniloxRoll.Monitor.UI.Binders
         public void Dispose()
         {
             if (!_initialized) return;
+            // Drain native virtual-row requests before detaching RetrieveVirtualItem. Leaving a
+            // non-zero VirtualListSize without a handler causes an endless WinForms exception
+            // loop during teardown or a late redraw.
+            if (!_listView.IsDisposed)
+            {
+                _listView.BeginUpdate();
+                try
+                {
+                    _listView.SelectedIndices.Clear();
+                    _listView.VirtualListSize = 0;
+                    _visibleDetails = new List<GrabDetail>();
+                }
+                finally
+                {
+                    _listView.EndUpdate();
+                }
+            }
             _listView.DrawColumnHeader -= OnDrawColumnHeader;
             _listView.DrawSubItem -= OnDrawSubItem;
             _listView.RetrieveVirtualItem -= OnRetrieveVirtualItem;
@@ -155,22 +190,42 @@ namespace AniloxRoll.Monitor.UI.Binders
 
         private void OnRetrieveVirtualItem(object sender, RetrieveVirtualItemEventArgs e)
         {
-            e.Item = BuildItem(e.ItemIndex);
+            // Assign a valid item first. Even malformed/stale data must never escape this event
+            // without e.Item, because WinForms turns that into a repeating UI-thread exception.
+            e.Item = BuildPlaceholderItem();
+            try
+            {
+                if (e.ItemIndex < 0 || e.ItemIndex >= _visibleDetails.Count)
+                {
+                    LogVirtualFallback(e.ItemIndex, "stale-index");
+                    return;
+                }
+                e.Item = BuildItem(e.ItemIndex);
+            }
+            catch (Exception ex)
+            {
+                LogVirtualFallback(e.ItemIndex, ex.GetType().Name);
+            }
         }
 
         private ListViewItem BuildItem(int index)
         {
             if (index < 0 || index >= _visibleDetails.Count)
-                return new ListViewItem(string.Empty);
+                return BuildPlaceholderItem();
 
             var detail = _visibleDetails[index];
+            if (detail == null)
+                return BuildPlaceholderItem();
             var item = new ListViewItem(detail.GrabId);
             bool rowHasFail = false;
             for (int i = 0; i < _cameraCount; i++)
             {
-                if (detail.CamResult[i] == null)
+                bool? result = detail.CamResult != null && i < detail.CamResult.Length
+                    ? detail.CamResult[i]
+                    : null;
+                if (result == null)
                     item.SubItems.Add("—");
-                else if (detail.CamResult[i] == false)
+                else if (result == false)
                     item.SubItems.Add("○");
                 else
                 {
@@ -191,6 +246,26 @@ namespace AniloxRoll.Monitor.UI.Binders
             item.Tag = rowHasFail;
             item.BackColor = rowHasFail ? DetailFail : DetailPass;
             return item;
+        }
+
+        private ListViewItem BuildPlaceholderItem()
+        {
+            var item = new ListViewItem(string.Empty) { Tag = false, BackColor = DetailPass };
+            for (int i = 0; i <= _cameraCount; i++)
+                item.SubItems.Add("—");
+            return item;
+        }
+
+        private void LogVirtualFallback(int index, string reason)
+        {
+            long now = Stopwatch.GetTimestamp();
+            long previous = _lastVirtualFallbackTicks;
+            if (previous != 0 && now - previous < Stopwatch.Frequency * 5L)
+                return;
+            _lastVirtualFallbackTicks = now;
+            FlowTrace.Log(
+                $"DT list virtual fallback index={index} rows={_visibleDetails.Count} " +
+                $"native={_listView.VirtualListSize} reason={reason}");
         }
 
         private static void OnDrawColumnHeader(object sender, DrawListViewColumnHeaderEventArgs e)
@@ -233,7 +308,9 @@ namespace AniloxRoll.Monitor.UI.Binders
             using (var graphics = _listView.CreateGraphics())
             {
                 const int padding = 16;
-                string sample = _visibleDetails.Count > 0 && !string.IsNullOrEmpty(_visibleDetails[0].GrabId)
+                string sample = _visibleDetails.Count > 0 &&
+                                _visibleDetails[0] != null &&
+                                !string.IsNullOrEmpty(_visibleDetails[0].GrabId)
                     ? _visibleDetails[0].GrabId
                     : _listView.Columns[0].Text;
                 _listView.Columns[0].Width = (int)Math.Ceiling(Math.Max(

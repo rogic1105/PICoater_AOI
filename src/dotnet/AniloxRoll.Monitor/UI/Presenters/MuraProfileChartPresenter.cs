@@ -63,6 +63,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (_ctx.ChartDataPatch == null) return;
             _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartDataPatch);
+            _muraProfileHelper.SetVisibleMetrics(
+                _ctx.Settings.ShowColumnMean, _ctx.Settings.ShowColumnMax);
             if (_ctx.ChartDataRow != null)
             {
                 _rowDisplay = new RowCurveDisplayAdapter(
@@ -142,7 +144,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 Clear();
                 return;
             }
-            // 範圍/時間模式：aggregate 多 grab 平均，當作歷史快照不做 view-time rescale
+            // 範圍模式仍以 raw bin 為 SSoT；每筆先依拍攝 CFG 換算到目前欄正規值再彙總。
             ClearRow("range");
 
             // ── 範圍/時間模式：舊 aggregate 邏輯 ──
@@ -150,17 +152,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
             Dictionary<int, float[]> maxDict;
             if (candidateRange != null)
             {
-                var profiles = InspectionMuraProfileRepository.LoadRange(
-                    _getStatsRoot(), candidateRange, 50);
-                meanDict = profiles.Mean;
-                maxDict = profiles.Max;
-                string method = profiles.RankedCams == 0 ? "even" :
-                    profiles.RankedCams == profiles.TotalCams ? "top-maxcmean" : "mixed";
-                FlowTrace.Log($"DT curve candidates meanRows={profiles.MeanRows} maxRows={profiles.MaxRows} " +
-                    $"method={method} coverage={profiles.ScoredRows}/{profiles.TotalRows} " +
-                    $"rankedCams={profiles.RankedCams}/{profiles.TotalCams} " +
-                    $"index={profiles.IndexHits}/{profiles.IndexBuilds} " +
-                    $"cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses}");
+                // Range archive/index IO is intentionally async-only. The caller routes it
+                // through DataRangePreviewCoordinator so fast scrolling cancels stale work.
+                FlowTrace.Log($"DT range curve deferred rows={candidateRange.Count} source=async-only");
+                return;
             }
             else
             {
@@ -192,6 +187,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             double[] positions = _ctx.Settings.GetCameraStartPositionMmArray();
             float errorMean = _ctx.Settings.ErrorValueMeanV;
             float errorMax = _ctx.Settings.ErrorValueMaxV;
+            float currentHmV = _ctx.Settings.HessianMaxFactorV;
             string range = rangeSnapshot[0].GrabId + "~" +
                 rangeSnapshot[rangeSnapshot.Count - 1].GrabId;
             var sw = Stopwatch.StartNew();
@@ -199,13 +195,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var profiles = await Task.Run(() =>
                 InspectionMuraProfileRepository.LoadRange(
                     statsRoot, rangeSnapshot, DataRangePreviewCoordinator.CurveSampleLimit,
-                    cancellationToken), cancellationToken);
+                    cancellationToken, currentHmV), cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
+            int latestGeneration = getLatestGeneration?.Invoke() ?? generation;
             long loadMs = sw.ElapsedMilliseconds;
 
             ApplyAggregateProfiles(
                 profiles.Mean, profiles.Max, camCount, ops, positions, errorMean, errorMax);
-            int latestGeneration = getLatestGeneration?.Invoke() ?? generation;
             string method = profiles.RankedCams == 0 ? "even" :
                 profiles.RankedCams == profiles.TotalCams ? "top-maxcmean" : "mixed";
             FlowTrace.Log($"DT range preview apply gen={generation} latest={latestGeneration} range={range} " +
@@ -215,6 +211,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 $"rankedCams={profiles.RankedCams}/{profiles.TotalCams} " +
                 $"index={profiles.IndexHits}/{profiles.IndexBuilds} " +
                 $"cache={profiles.CurveCacheHits}/{profiles.CurveCacheMisses} " +
+                $"hmCoverage={profiles.HmRows}/{profiles.TotalRows} hmCurrent={currentHmV:F4} " +
                 $"sampleLimit={DataRangePreviewCoordinator.CurveSampleLimit}");
         }
 
@@ -344,6 +341,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _ctx.Settings.StitchMode, fitViewRange, valueScale: valueScale,
                     trimHeadMm: grabCfg?.TrimHeadMm ?? _ctx.Settings.TrimHeadMm,
                     trimTailMm: grabCfg?.TrimTailMm ?? _ctx.Settings.TrimTailMm);
+                FlowTrace.Dvt(
+                    $"DT curve display {request.GrabId} " +
+                    $"mode={_ctx.Settings.ColumnCurveMode.ToString().ToLowerInvariant()} " +
+                    $"mean={_muraProfileHelper.DisplayMeanPeak:F4}/{errMean:F4} " +
+                    $"max={_muraProfileHelper.DisplayMaxPeak:F4}/{errMax:F4} " +
+                    $"scale={valueScale:F4} points={_muraProfileHelper.DisplayPointCount}");
                 UpdateRowChart(data, grabCfg, request.GrabId, view, physicalScale);
                 SingleGrabCurvePresented?.Invoke(statsRoot, request.GrabId, data);
                 FlowTrace.Log($"DT curve load {request.GrabId} captures={data.ImageCount} " +
@@ -409,9 +412,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (_muraProfileHelper == null) return;
             _muraProfileHelper.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
+            _muraProfileHelper.SetVisibleMetrics(
+                _ctx.Settings.ShowColumnMean, _ctx.Settings.ShowColumnMax);
             _rowDisplay?.SetThresholds(
                 _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
-            // 單片模式才需要按 HM 重算曲線坡度；aggregate 模式維持快照
+            // 單片模式立即重載；範圍模式由 DataStatisticsPresenter 的 debounce 統一刷新。
             var grabIdInfos = _getGrabIdInfos();
             if (_getActiveStatMode() == _ctx.GrpDataSingleSheet)
             {

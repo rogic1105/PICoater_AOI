@@ -45,8 +45,10 @@ class ReviewFlowValidator:
         self._check_period_dedup(session, report)
         self._check_period_single_flight(session, report)
         self._check_curve_single_flight(session, report)
+        self._check_curve_backpressure(session, report)
         self._check_assets(session, report)
         self._check_thumbnail_lifecycle(session, report)
+        self._check_adjacent_prefetch(session, report)
         self._check_drag_first_publish(session, report)
         self._check_direction(session, report)
         self._check_tab_visible_repaint(session, report)
@@ -137,7 +139,8 @@ class ReviewFlowValidator:
                     open_loads.remove(matching)
                 if message.startswith("RV thumbnail done "):
                     source_match = re.search(
-                        r" source=(atlas|frames) atlas=(?:(\d+)x(\d+)|none)$",
+                        r" source=(atlas|frames)(?: cache=(?:cold|join|hit))? "
+                        r"atlas=(?:(\d+)x(\d+)|none)$",
                         message,
                     )
                     if source_match is None:
@@ -187,6 +190,70 @@ class ReviewFlowValidator:
             f"source=atlas:{source_counts['atlas']}/frames:{source_counts['frames']} "
             f"invalidSource={invalid_sources or 0} "
             f"invalidAtlas={invalid_atlas_sizes or 0}",
+        )
+
+    def _check_adjacent_prefetch(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        begin_pattern = re.compile(
+            r"^RV prefetch begin center=(?P<center>\d{6}-\d{6}) "
+            r"neighbors=(?P<neighbors>\d{6}-\d{6}(?:\|\d{6}-\d{6})*)$"
+        )
+        terminal_pattern = re.compile(
+            r"^RV prefetch (?P<state>ready|unavailable) "
+            r"center=(?P<center>\d{6}-\d{6}) "
+            r"neighbor=(?P<neighbor>\d{6}-\d{6}) "
+        )
+        thumbnail_hit_pattern = re.compile(
+            r"^RV thumbnail done (?P<id>\d{6}-\d{6}) .*\bcache=hit\b"
+        )
+
+        announced = {}
+        ready_neighbors = set()
+        invalid = []
+        begins = terminals = hits = prefetch_hits = 0
+        for line in session.lines:
+            message = line.message
+            begin = begin_pattern.match(message)
+            if begin is not None:
+                begins += 1
+                announced[begin.group("center")] = set(
+                    begin.group("neighbors").split("|")
+                )
+                continue
+
+            terminal = terminal_pattern.match(message)
+            if terminal is not None:
+                terminals += 1
+                center = terminal.group("center")
+                neighbor = terminal.group("neighbor")
+                if neighbor not in announced.get(center, set()):
+                    invalid.append(f"{center}->{neighbor}")
+                if terminal.group("state") == "ready":
+                    ready_neighbors.add(neighbor)
+                continue
+
+            thumbnail_hit = thumbnail_hit_pattern.match(message)
+            if thumbnail_hit is not None:
+                hits += 1
+                current = thumbnail_hit.group("id")
+                if current in ready_neighbors:
+                    prefetch_hits += 1
+
+        if begins == 0:
+            report.add(
+                self.domain, "R2.prefetch", CheckStatus.NOT_COVERED,
+                "無停穩後相鄰序號預載",
+            )
+            return
+
+        report.add(
+            self.domain,
+            "R2.prefetch",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"begin={begins} terminal={terminals} ready={len(ready_neighbors)} "
+            f"foregroundHits={hits} fromPrefetch={prefetch_hits} "
+            f"invalid={invalid or 0}",
         )
 
     def _check_tab_visible_repaint(
@@ -448,6 +515,77 @@ class ReviewFlowValidator:
             CheckStatus.PASS if not overlaps else CheckStatus.FAIL,
             f"啟動={started}；重疊={len(overlaps)}"
             + (f"；首例 {overlaps[0]}" if overlaps else ""),
+        )
+
+    def _check_curve_backpressure(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        policy_pattern = re.compile(
+            r"^RV curve load policy latest-only minCycleMs=(?P<ms>\d+)$"
+        )
+        path_pattern = re.compile(
+            r"^RV curves paths (?P<id>\d{6}-\d{6}) .* coalesced=(?P<count>\d+)$"
+        )
+        presentation_pattern = re.compile(
+            r"^RV curves (?P<id>\d{6}-\d{6}).* presentation=(?P<mode>latest|progressive)$"
+        )
+        policy_values = []
+        coalesced = []
+        invalid_paths = []
+        presentations = []
+        invalid_presentations = []
+        for line in session.lines:
+            message = line.message
+            policy = policy_pattern.match(message)
+            if policy is not None:
+                policy_values.append(int(policy.group("ms")))
+            elif message.startswith("RV curves paths "):
+                path = path_pattern.match(message)
+                if path is None:
+                    invalid_paths.append(message)
+                else:
+                    coalesced.append(int(path.group("count")))
+            elif (
+                message.startswith("RV curves ")
+                and "stale-drop" not in message
+            ):
+                presentation = presentation_pattern.match(message)
+                if presentation is None:
+                    invalid_presentations.append(message)
+                else:
+                    presentations.append(presentation.group("mode"))
+
+        if not policy_values:
+            report.add(
+                self.domain, "R2.backpressure", CheckStatus.NOT_COVERED,
+                "無新版 Curve 節流 policy 行",
+            )
+            return
+
+        if not coalesced:
+            report.add(
+                self.domain, "R2.backpressure", CheckStatus.NOT_COVERED,
+                f"minCycleMs={policy_values}；沒有單片 Curve 載入",
+            )
+            return
+
+        skipped = sum(coalesced)
+        progressive_required = skipped > 0
+        valid = (
+            all(value == 80 for value in policy_values)
+            and not invalid_paths
+            and not invalid_presentations
+            and "latest" in presentations
+            and (not progressive_required or "progressive" in presentations)
+        )
+        report.add(
+            self.domain,
+            "R2.backpressure",
+            CheckStatus.PASS if valid else CheckStatus.FAIL,
+            f"minCycleMs={policy_values}；啟動={len(coalesced)}；"
+            f"合併略過={skipped}；progressive={presentations.count('progressive')}；"
+            f"latest={presentations.count('latest')}；"
+            f"格式錯誤={len(invalid_paths) + len(invalid_presentations)}",
         )
 
     def _check_period_single_flight(

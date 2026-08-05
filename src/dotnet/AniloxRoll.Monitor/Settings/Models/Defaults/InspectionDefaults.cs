@@ -24,6 +24,7 @@ namespace AniloxRoll.Monitor.Core.Data
         // ── 2. 檢測配方 ────────────────────────────────────────────────────
         public static readonly BackgroundAlgorithm Algorithm  = BackgroundAlgorithm.SingleFrameBgSub; // 去背演算法
         public static readonly RidgeDirection       RidgeDir  = RidgeDirection.Both;                 // 檢出方向
+        public static readonly ColumnCurveDisplayMode ColumnCurveMode = ColumnCurveDisplayMode.Both; // 欄曲線顯示與判定
         public const float  HessianMaxFactorV       = 0.3f;   // 欄正規值（同時當作 capture-time 送進 native 的 HM）
         public const float  HessianMaxFactorH       = 0.3f;   // 列正規值（view-time only，僅作 H 曲線顯示縮放）
         public const float  ErrorValueMeanV         = 0.2f;   // Mura 圖表 > 欄平均閾值

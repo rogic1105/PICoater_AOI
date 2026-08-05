@@ -6,10 +6,21 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Core.Data
 {
+    public sealed class ImageRepositoryLoadResult
+    {
+        public int FileCount { get; internal set; }
+        public int CsvRecordCount { get; internal set; }
+        public int CsvBackedArchiveCount { get; internal set; }
+        public int ArchiveFallbackCount { get; internal set; }
+        public int LegacyFileCount { get; internal set; }
+        public long ElapsedMilliseconds { get; internal set; }
+    }
+
     /// <summary>
     /// [DAO] 影像檔案儲存庫，負責與檔案系統溝通。
     /// 核心功能包含：掃描目錄建立索引、提供時間階層的查詢 (Year->Month->Day...)
@@ -18,30 +29,98 @@ namespace AniloxRoll.Monitor.Core.Data
     /// 
     public class ImageRepository
     {
-        private List<ImageMetadata> _metadataCache = new List<ImageMetadata>();
-        private DateTime[] _availablePeriods = new DateTime[0];
+        private volatile ImageMetadata[] _metadataCache = new ImageMetadata[0];
+        private volatile DateTime[] _availablePeriods = new DateTime[0];
         // Regex: YYYYMMDD_HHMMSS.fff-CamID
         private readonly Regex _fileNameRegex = new Regex(@"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.(\d{3})-(\d)");
 
-        public int FileCount => _metadataCache.Count;
+        public int FileCount => _metadataCache.Length;
 
-        public void LoadDirectory(string rootPath)
+        public Task<ImageRepositoryLoadResult> LoadDirectoryAsync(string rootPath)
         {
-            _metadataCache.Clear();
-            _availablePeriods = new DateTime[0];
-            if (!Directory.Exists(rootPath)) return;
+            return Task.Run(() => LoadDirectory(rootPath));
+        }
 
-            var legacyFiles = Directory.GetFiles(
-                rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories);
-            var archiveFiles = Directory.GetFiles(
-                rootPath, "*" + CaptureArchiveStore.Extension, SearchOption.AllDirectories);
-            var archivePaths = archiveFiles
+        public ImageRepositoryLoadResult LoadDirectory(string rootPath)
+        {
+            var result = new ImageRepositoryLoadResult();
+            var watch = Stopwatch.StartNew();
+            if (!Directory.Exists(rootPath))
+            {
+                _metadataCache = new ImageMetadata[0];
+                _availablePeriods = new DateTime[0];
+                return result;
+            }
+
+            // These searches traverse the same large date tree but target disjoint file types.
+            // Run them together so a 30,000-grab catalog does not pay three full serial walks.
+            Task<string[]> legacyFilesTask = Task.Run(() => Directory.GetFiles(
+                rootPath, CaptureFileNaming.RawJpgGlob, SearchOption.AllDirectories));
+            Task<string[]> archiveFilesTask = Task.Run(() => Directory.GetFiles(
+                rootPath, "*" + CaptureArchiveStore.Extension, SearchOption.AllDirectories));
+            Task<string[]> csvFilesTask = Task.Run(() => Directory.GetFiles(
+                rootPath, "*.csv", SearchOption.AllDirectories));
+            Task.WhenAll(legacyFilesTask, archiveFilesTask, csvFilesTask)
+                .GetAwaiter()
+                .GetResult();
+
+            string[] legacyFiles = legacyFilesTask.Result;
+            string[] archiveFiles = archiveFilesTask.Result;
+            string[] csvFiles = csvFilesTask.Result;
+            var archiveFileSet = new HashSet<string>(
+                archiveFiles.Select(Path.GetFullPath),
+                StringComparer.OrdinalIgnoreCase);
+            var csvBackedPaths = new List<string>();
+            var csvBackedArchives = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string csvPath in csvFiles)
+            {
+                string dateName = Path.GetFileNameWithoutExtension(csvPath);
+                if (dateName.Length != 8 || !dateName.All(char.IsDigit)) continue;
+                string archiveDirectory = Path.Combine(
+                    Path.GetDirectoryName(csvPath), dateName);
+                try
+                {
+                    using (StreamReader reader = InspectionCsvReader.OpenShared(csvPath))
+                    {
+                        string line;
+                        while ((line = reader.ReadLine()) != null)
+                        {
+                            if (!InspectionCsvReader.TryParseRecord(
+                                line, out InspectionCsvRecord record))
+                                continue;
+                            result.CsvRecordCount++;
+                            string archivePath = Path.GetFullPath(Path.Combine(
+                                archiveDirectory,
+                                record.GrabId + CaptureArchiveStore.Extension));
+                            if (!archiveFileSet.Contains(archivePath)) continue;
+                            string baseName = record.FileName;
+                            if (CaptureFileNaming.IsRawJpg(baseName))
+                                baseName = CaptureFileNaming.StripRawJpg(baseName);
+                            csvBackedPaths.Add(
+                                CaptureArchiveStore.CreateVirtualRawPath(
+                                    archivePath, baseName));
+                            csvBackedArchives.Add(archivePath);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine(
+                        $"[ImageRepository] CSV index {csvPath} failed: " +
+                        $"{ex.GetType().Name}: {ex.Message}");
+                }
+            }
+
+            string[] fallbackArchives = archiveFiles
+                .Where(path => !csvBackedArchives.Contains(Path.GetFullPath(path)))
+                .ToArray();
+            var archivePaths = fallbackArchives
                 .AsParallel()
                 .SelectMany(CaptureArchiveStore.ListAllVirtualRawPaths)
                 .ToArray();
-            var files = legacyFiles.Concat(archivePaths);
+            var files = legacyFiles.Concat(csvBackedPaths).Concat(archivePaths);
 
-            _metadataCache = files.AsParallel()
+            ImageMetadata[] metadata = files.AsParallel()
                 .Select(f =>
                 {
                     try { return ParsePath(f); }
@@ -57,17 +136,30 @@ namespace AniloxRoll.Monitor.Core.Data
                     .OrderByDescending(item =>
                         CaptureArchiveStore.IsVirtualPath(item.FullPath))
                     .First())
-                .ToList();
+                .ToArray();
 
             // Period navigation reads this on every selection change. Build the sorted index once
             // with the file catalog instead of reparsing and sorting every image on the UI thread.
-            _availablePeriods = _metadataCache
+            DateTime[] availablePeriods = metadata
                 .Select(x => BuildDateTime(x.Year, x.Month, x.Day, x.Hour, x.Minute, x.Second + "." + x.Millisecond))
                 .Where(x => x.HasValue)
                 .Select(x => x.Value)
                 .Distinct()
                 .OrderBy(x => x)
                 .ToArray();
+
+            // Publish a complete immutable snapshot in one step. While a background refresh runs,
+            // readers continue using the previous catalog rather than observing a half-built list.
+            _metadataCache = metadata;
+            _availablePeriods = availablePeriods;
+
+            watch.Stop();
+            result.FileCount = metadata.Length;
+            result.CsvBackedArchiveCount = csvBackedArchives.Count;
+            result.ArchiveFallbackCount = fallbackArchives.Length;
+            result.LegacyFileCount = legacyFiles.Length;
+            result.ElapsedMilliseconds = watch.ElapsedMilliseconds;
+            return result;
         }
 
         private static string MetadataKey(ImageMetadata item)
@@ -100,7 +192,7 @@ namespace AniloxRoll.Monitor.Core.Data
 
         /// <summary>回傳所有不重複日期（YYYY-MM-DD），已排序。</summary>
         public List<string> GetDates() =>
-            _metadataCache
+            ((IEnumerable<ImageMetadata>)_metadataCache)
                 .Select(x => $"{x.Year}-{x.Month}-{x.Day}")
                 .Distinct()
                 .OrderByDescending(x => x)
@@ -108,7 +200,7 @@ namespace AniloxRoll.Monitor.Core.Data
 
         /// <summary>回傳指定日期下所有不重複時間（HH:mm:ss.fff），已排序。</summary>
         public List<string> GetTimesForDate(string date) =>
-            _metadataCache
+            ((IEnumerable<ImageMetadata>)_metadataCache)
                 .Where(x => $"{x.Year}-{x.Month}-{x.Day}" == date)
                 .Select(x => $"{x.Hour}:{x.Minute}:{x.Second}.{x.Millisecond}")
                 .Distinct()
@@ -154,7 +246,8 @@ namespace AniloxRoll.Monitor.Core.Data
                 if (dot >= 0) { sec = sFff.Substring(0, dot); ms = sFff.Substring(dot + 1); }
             }
             var result = new Dictionary<int, string>();
-            foreach (var x in _metadataCache)
+            ImageMetadata[] metadata = _metadataCache;
+            foreach (var x in metadata)
             {
                 if (x.Year != y || x.Month != m || x.Day != d || x.Hour != h || x.Minute != min || x.Second != sec || x.Millisecond != ms)
                     continue;

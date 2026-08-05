@@ -41,6 +41,20 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void ComputeMergeFit_UsesEachCameraOpsForPhysicalWidth()
+        {
+            bool ok = ImageDisplayView.TryComputeMergeFitViewRange(
+                new[] { 100, 100 }, new[] { 100, 100 },
+                new[] { 0d, 100d }, new[] { 1000d, 2000d },
+                1, 1d, true, MergeOverlap.Midline, false,
+                new Size(600, 200), out ImageViewRange range);
+
+            Assert.That(ok, Is.True);
+            Assert.That(range.ContentWidth, Is.EqualTo(300));
+            Assert.That(range.ContentHeight, Is.EqualTo(100));
+        }
+
+        [Test]
         public void GrayBitmap_ColdHeatmapPreservesIntensityInBlueChannel()
         {
             using (Bitmap bitmap = GrayBitmap.From(

@@ -28,9 +28,14 @@ namespace TanukiCv.Core
         public int SrcLeft;
         /// <summary>來源影像裁切寬度（px，重疊分界後；可能為 0=整台被相鄰覆蓋）。</summary>
         public int SrcWidth;
-        /// <summary>裁切區在全域座標的 x 起點 = <see cref="XOffset"/> + <see cref="SrcLeft"/>
-        /// （CPU 貼圖 dest 用；與 MIL <c>CopyDisplayToMergeTarget</c> 的 <c>dstX</c> 同義）。</summary>
-        public int DestX => XOffset + SrcLeft;
+        /// <summary>共同顯示格點內的裁切起點；舊呼叫端未設定時等同 <see cref="SrcLeft"/>。</summary>
+        public int DisplayLeft;
+        /// <summary>共同顯示格點內的裁切寬度；0 代表與 <see cref="SrcWidth"/> 相同。</summary>
+        public int DisplayWidth;
+        /// <summary>裁切區在全域合圖的 x 起點。</summary>
+        public int DestX => XOffset + (DisplayWidth > 0 ? DisplayLeft : SrcLeft);
+        /// <summary>裁切區在全域合圖的顯示寬度。</summary>
+        public int DestWidth => DisplayWidth > 0 ? DisplayWidth : SrcWidth;
     }
 
     /// <summary>
@@ -53,6 +58,8 @@ namespace TanukiCv.Core
             public double StartMm;
             /// <summary>相機影像在「顯示空間」的像素寬（全解析度合圖=FrameWidth；縮圖合圖=FrameWidth/scale）。</summary>
             public int WidthPx;
+            /// <summary>映射到共同實體格點後的顯示寬度；0 代表與 <see cref="WidthPx"/> 相同。</summary>
+            public int DisplayWidthPx;
         }
 
         /// <summary>
@@ -77,11 +84,15 @@ namespace TanukiCv.Core
 
             int n = cams.Count;
             var xOff = new int[n];
-            var width = new int[n];
+            var sourceWidth = new int[n];
+            var displayWidth = new int[n];
             for (int i = 0; i < n; i++)
             {
                 xOff[i] = (int)Math.Round((cams[i].StartMm - minStartMm) / refOpsMm / scale);
-                width[i] = Math.Max(0, cams[i].WidthPx);
+                sourceWidth[i] = Math.Max(0, cams[i].WidthPx);
+                displayWidth[i] = cams[i].DisplayWidthPx > 0
+                    ? cams[i].DisplayWidthPx
+                    : sourceWidth[i];
             }
 
             // 依 xOffset 排序（不動原陣列；order[k] = 第 k 個由左到右的相機 index）
@@ -91,14 +102,14 @@ namespace TanukiCv.Core
 
             var drawLeft = new int[n];
             var drawRight = new int[n];
-            for (int i = 0; i < n; i++) { drawLeft[i] = 0; drawRight[i] = width[i]; }
+            for (int i = 0; i < n; i++) { drawLeft[i] = 0; drawRight[i] = displayWidth[i]; }
 
             // 逐對（左、右相鄰）處理重疊：三策略只差 boundary 取哪。
             for (int k = 0; k < n - 1; k++)
             {
                 int a = order[k];      // 左
                 int b = order[k + 1];  // 右
-                int rightEdge = xOff[a] + width[a];
+                int rightEdge = xOff[a] + displayWidth[a];
                 int leftEdge  = xOff[b];
                 int overlap   = rightEdge - leftEdge;
                 if (overlap <= 0) continue;
@@ -118,15 +129,32 @@ namespace TanukiCv.Core
             int maxEnd = 0;
             for (int i = 0; i < n; i++)
             {
-                int sl = Math.Max(0, drawLeft[i]);
-                int sr = Math.Min(width[i], drawRight[i]);
-                int sw = Math.Max(0, sr - sl);
-                result.Add(new CameraPlacement { CameraId = cams[i].CameraId, XOffset = xOff[i], SrcLeft = sl, SrcWidth = sw });
-                int end = xOff[i] + width[i];
+                int displayLeft = Math.Max(0, drawLeft[i]);
+                int displayRight = Math.Min(displayWidth[i], drawRight[i]);
+                int drawWidth = Math.Max(0, displayRight - displayLeft);
+                int sourceLeft = ScaleCoordinate(displayLeft, displayWidth[i], sourceWidth[i]);
+                int sourceRight = ScaleCoordinate(displayRight, displayWidth[i], sourceWidth[i]);
+                result.Add(new CameraPlacement
+                {
+                    CameraId = cams[i].CameraId,
+                    XOffset = xOff[i],
+                    SrcLeft = sourceLeft,
+                    SrcWidth = Math.Max(0, sourceRight - sourceLeft),
+                    DisplayLeft = displayLeft,
+                    DisplayWidth = drawWidth
+                });
+                int end = xOff[i] + displayWidth[i];
                 if (end > maxEnd) maxEnd = end;
             }
             totalW = maxEnd;
             return result;
+        }
+
+        private static int ScaleCoordinate(int value, int fromWidth, int toWidth)
+        {
+            if (value <= 0 || fromWidth <= 0 || toWidth <= 0) return 0;
+            if (value >= fromWidth) return toWidth;
+            return (int)Math.Round(value * (double)toWidth / fromWidth);
         }
     }
 }

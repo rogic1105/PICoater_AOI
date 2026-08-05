@@ -1,7 +1,9 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
+using AniloxRoll.Monitor.Core.Data;
 
 namespace AniloxRoll.Monitor.Core.Services
 {
@@ -52,12 +54,16 @@ namespace AniloxRoll.Monitor.Core.Services
             SortedSet<DateTime> availableTimes,
             List<GrabIdInfo> grabIdsDescending,
             Dictionary<string, GrabDetail> detailsByGrabId,
+            Dictionary<string, float> captureHmVByGrabId,
+            Dictionary<string, CsvConfigSnapshot> configByGrabId,
             int csvFileCount,
             int recordCount)
         {
             AvailableTimes = availableTimes;
             GrabIdsDescending = grabIdsDescending;
             DetailsByGrabId = detailsByGrabId;
+            CaptureHmVByGrabId = captureHmVByGrabId;
+            ConfigByGrabId = configByGrabId;
             CsvFileCount = csvFileCount;
             RecordCount = recordCount;
         }
@@ -65,6 +71,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public SortedSet<DateTime> AvailableTimes { get; }
         public List<GrabIdInfo> GrabIdsDescending { get; }
         public Dictionary<string, GrabDetail> DetailsByGrabId { get; }
+        public Dictionary<string, float> CaptureHmVByGrabId { get; }
+        public Dictionary<string, CsvConfigSnapshot> ConfigByGrabId { get; }
         public int CsvFileCount { get; }
         public int RecordCount { get; }
     }
@@ -85,6 +93,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public float CurrentHmH { get; }
         public float CurrentRowErrMean { get; }
         public float CurrentRowErrMax { get; }
+        public ColumnCurveDisplayMode ColumnCurveMode { get; }
 
         public ThresholdContext(float currentHmV, float currentErrMean, float currentErrMax)
             : this(currentHmV, currentErrMean, currentErrMax,
@@ -95,6 +104,16 @@ namespace AniloxRoll.Monitor.Core.Services
         public ThresholdContext(
             float currentHmV, float currentErrMean, float currentErrMax,
             float currentHmH, float currentRowErrMean, float currentRowErrMax)
+            : this(currentHmV, currentErrMean, currentErrMax,
+                currentHmH, currentRowErrMean, currentRowErrMax,
+                ColumnCurveDisplayMode.Both)
+        {
+        }
+
+        public ThresholdContext(
+            float currentHmV, float currentErrMean, float currentErrMax,
+            float currentHmH, float currentRowErrMean, float currentRowErrMax,
+            ColumnCurveDisplayMode columnCurveMode)
         {
             CurrentHmV     = currentHmV;
             CurrentErrMean = currentErrMean;
@@ -102,14 +121,77 @@ namespace AniloxRoll.Monitor.Core.Services
             CurrentHmH = currentHmH;
             CurrentRowErrMean = currentRowErrMean;
             CurrentRowErrMax = currentRowErrMax;
+            ColumnCurveMode = columnCurveMode;
         }
 
         public bool IsFail(float meanPeak, float maxPeak, float captureHmV)
         {
-            float ratio = (captureHmV > 0f && CurrentHmV > 0f) ? captureHmV / CurrentHmV : 1f;
-            float displayMean = meanPeak * ratio;
-            float displayMax  = maxPeak  * ratio;
-            return displayMean > CurrentErrMean || displayMax > CurrentErrMax;
+            return GetColumnFailureCause(meanPeak, maxPeak, captureHmV) !=
+                ColumnFailureCause.None;
+        }
+
+        public ColumnFailureCause GetColumnFailureCause(
+            float meanPeak, float maxPeak, float captureHmV)
+        {
+            return EvaluateColumn(meanPeak, maxPeak, captureHmV).Cause;
+        }
+
+        public ColumnVerdictEvaluation EvaluateColumn(
+            float meanPeak, float maxPeak, float captureHmV)
+        {
+            float ratio = (captureHmV > 0f && CurrentHmV > 0f)
+                ? captureHmV / CurrentHmV
+                : 1f;
+            float displayMeanPeak = float.IsNaN(meanPeak) ? float.NaN : meanPeak * ratio;
+            float displayMaxPeak = float.IsNaN(maxPeak) ? float.NaN : maxPeak * ratio;
+            bool meanEnabled = ColumnCurveMode != ColumnCurveDisplayMode.Max;
+            bool maxEnabled = ColumnCurveMode != ColumnCurveDisplayMode.Mean;
+            ColumnFailureCause cause = EvaluateColumnFailureCause(
+                displayMeanPeak, displayMaxPeak,
+                CurrentErrMean, CurrentErrMax,
+                ColumnCurveMode);
+            bool hasData = (meanEnabled && !float.IsNaN(displayMeanPeak)) ||
+                (maxEnabled && !float.IsNaN(displayMaxPeak));
+            return new ColumnVerdictEvaluation(
+                displayMeanPeak, displayMaxPeak,
+                meanEnabled, maxEnabled, hasData, cause);
+        }
+
+        internal static ColumnFailureCause EvaluateColumnFailureCause(
+            float meanPeak, float maxPeak,
+            float meanThreshold, float maxThreshold,
+            ColumnCurveDisplayMode mode)
+        {
+            bool meanFail = mode != ColumnCurveDisplayMode.Max &&
+                !float.IsNaN(meanPeak) && meanPeak > meanThreshold;
+            bool maxFail = mode != ColumnCurveDisplayMode.Mean &&
+                !float.IsNaN(maxPeak) && maxPeak > maxThreshold;
+            if (meanFail && maxFail) return ColumnFailureCause.Both;
+            if (meanFail) return ColumnFailureCause.Mean;
+            if (maxFail) return ColumnFailureCause.Max;
+            return ColumnFailureCause.None;
+        }
+
+        public bool? IsColumnCurveFail(
+            float[] meanCurve, float[] maxCurve, float captureHmV,
+            out float displayMeanPeak, out float displayMaxPeak)
+        {
+            displayMeanPeak = FindPeakNormalized(meanCurve);
+            displayMaxPeak = FindPeakNormalized(maxCurve);
+            ColumnVerdictEvaluation evaluation = EvaluateColumn(
+                displayMeanPeak, displayMaxPeak, captureHmV);
+            displayMeanPeak = evaluation.DisplayMeanPeak;
+            displayMaxPeak = evaluation.DisplayMaxPeak;
+            return evaluation.HasData ? (bool?)evaluation.IsFail : null;
+        }
+
+        internal static float FindPeakNormalized(float[] curve)
+        {
+            if (curve == null || curve.Length == 0) return float.NaN;
+            float peak = curve[0];
+            for (int i = 1; i < curve.Length; i++)
+                if (curve[i] > peak) peak = curve[i];
+            return peak / 255f;
         }
 
         public bool? IsRowFail(float meanPeak, float maxPeak, float captureHmV)
@@ -120,6 +202,38 @@ namespace AniloxRoll.Monitor.Core.Services
             return meanPeak * ratio > CurrentRowErrMean ||
                    maxPeak * ratio > CurrentRowErrMax;
         }
+    }
+
+    public enum ColumnFailureCause
+    {
+        None,
+        Mean,
+        Max,
+        Both
+    }
+
+    public sealed class ColumnVerdictEvaluation
+    {
+        public ColumnVerdictEvaluation(
+            float displayMeanPeak, float displayMaxPeak,
+            bool meanEnabled, bool maxEnabled, bool hasData,
+            ColumnFailureCause cause)
+        {
+            DisplayMeanPeak = displayMeanPeak;
+            DisplayMaxPeak = displayMaxPeak;
+            MeanEnabled = meanEnabled;
+            MaxEnabled = maxEnabled;
+            HasData = hasData;
+            Cause = cause;
+        }
+
+        public float DisplayMeanPeak { get; }
+        public float DisplayMaxPeak { get; }
+        public bool MeanEnabled { get; }
+        public bool MaxEnabled { get; }
+        public bool HasData { get; }
+        public ColumnFailureCause Cause { get; }
+        public bool IsFail => Cause != ColumnFailureCause.None;
     }
 
     /// <summary>
@@ -142,13 +256,22 @@ namespace AniloxRoll.Monitor.Core.Services
                 new SortedDictionary<string, GrabIdInfo>(StringComparer.Ordinal);
             var detailsByGrabId =
                 new Dictionary<string, GrabDetail>(StringComparer.Ordinal);
+            var columnSummaries =
+                new Dictionary<string, ColumnCurveSummaryRecord>(StringComparer.Ordinal);
+            var captureHmVByGrabId =
+                new Dictionary<string, float>(StringComparer.Ordinal);
+            var configByGrabId =
+                new Dictionary<string, CsvConfigSnapshot>(StringComparer.Ordinal);
+            var finalLayoutByGrabId =
+                new Dictionary<string, CaptureLayoutSnapshot>(StringComparer.Ordinal);
             int recordCount = 0;
 
             if (string.IsNullOrWhiteSpace(captureRootPath) ||
                 !Directory.Exists(captureRootPath))
             {
                 return new InspectionStatisticsSnapshot(
-                    availableTimes, new List<GrabIdInfo>(), detailsByGrabId, 0, 0);
+                    availableTimes, new List<GrabIdInfo>(), detailsByGrabId,
+                    captureHmVByGrabId, configByGrabId, 0, 0);
             }
 
             string[] csvFiles = GetInspectionCsvFiles(captureRootPath);
@@ -158,11 +281,33 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 try
                 {
+                    CsvConfigSnapshot activeConfig = null;
                     using (var reader = InspectionCsvReader.OpenShared(csvPath))
                     {
                         string line;
                         while ((line = reader.ReadLine()) != null)
                         {
+                            if (InspectionCsvReader.TryParseColumnCurveSummary(
+                                line, out ColumnCurveSummaryRecord columnSummary))
+                            {
+                                columnSummaries[ColumnSummaryKey(
+                                    columnSummary.GrabId, columnSummary.CameraId)] = columnSummary;
+                                continue;
+                            }
+                            if (line.StartsWith("#CFG,", StringComparison.Ordinal) &&
+                                CsvConfigSnapshot.TryParse(line, out CsvConfigSnapshot parsedConfig))
+                            {
+                                activeConfig = parsedConfig;
+                                if (parsedConfig.HessianMaxFactorV > 0f)
+                                    captureHmV = parsedConfig.HessianMaxFactorV;
+                                continue;
+                            }
+                            if (CaptureLayoutSnapshot.TryParse(
+                                line, out CaptureLayoutSnapshot finalLayout))
+                            {
+                                finalLayoutByGrabId[finalLayout.GrabId] = finalLayout;
+                                continue;
+                            }
                             if (InspectionCsvReader.TryUpdateHmFromConfig(
                                 line, ref captureHmV))
                                 continue;
@@ -173,6 +318,10 @@ namespace AniloxRoll.Monitor.Core.Services
                                 continue;
 
                             recordCount++;
+                            if (!captureHmVByGrabId.ContainsKey(record.GrabId))
+                                captureHmVByGrabId[record.GrabId] = captureHmV;
+                            if (activeConfig != null && !configByGrabId.ContainsKey(record.GrabId))
+                                configByGrabId[record.GrabId] = activeConfig;
                             availableTimes.Add(timestamp);
                             if (infosByGrabId.TryGetValue(
                                 record.GrabId, out GrabIdInfo info))
@@ -221,11 +370,19 @@ namespace AniloxRoll.Monitor.Core.Services
                 }
             }
 
+            foreach (var entry in finalLayoutByGrabId)
+            {
+                if (configByGrabId.TryGetValue(entry.Key, out CsvConfigSnapshot config))
+                    configByGrabId[entry.Key] = config.WithMachineLayout(entry.Value);
+            }
+
+            ApplyColumnCurveSummaries(detailsByGrabId, columnSummaries, ctx);
+
             var grabIds = new List<GrabIdInfo>(infosByGrabId.Values);
             grabIds.Reverse();
             return new InspectionStatisticsSnapshot(
                 availableTimes, grabIds, detailsByGrabId,
-                csvFiles.Length, recordCount);
+                captureHmVByGrabId, configByGrabId, csvFiles.Length, recordCount);
         }
 
         private static string[] GetInspectionCsvFiles(string captureRootPath)
@@ -323,71 +480,8 @@ namespace AniloxRoll.Monitor.Core.Services
             string endGrabId,
             ThresholdContext ctx = null)
         {
-            var stats = new Dictionary<int, CameraStats>();
-            for (int i = 1; i <= 7; i++)
-                stats[i] = new CameraStats { CamId = i };
-
-            if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
-                return stats;
-
-            string lo = StringComparer.Ordinal.Compare(startGrabId, endGrabId) <= 0 ? startGrabId : endGrabId;
-            string hi = lo == startGrabId ? endGrabId : startGrabId;
-
-            // grabId → camId → hasFail
-            var grabCamFail = new Dictionary<string, Dictionary<int, bool>>(StringComparer.Ordinal);
-
-            // M5: 跨 CSV 檔保留 captureHmV（按日期排序）
-            float captureHmV = ctx?.CurrentHmV ?? 0f;
-            var csvFiles = Directory.GetFiles(captureRootPath, "*.csv", SearchOption.AllDirectories);
-            Array.Sort(csvFiles, StringComparer.Ordinal);
-            foreach (string csvPath in csvFiles)
-            {
-                try
-                {
-                    using (var sr = InspectionCsvReader.OpenShared(csvPath))
-                    {
-                        string line;
-                        while ((line = sr.ReadLine()) != null)
-                        {
-                            if (InspectionCsvReader.TryUpdateHmFromConfig(line, ref captureHmV)) continue;
-                            if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
-
-                            if (StringComparer.Ordinal.Compare(record.GrabId, lo) < 0 ||
-                                StringComparer.Ordinal.Compare(record.GrabId, hi) > 0) continue;
-
-                            if (!InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId)) continue;
-
-                            if (!grabCamFail.TryGetValue(record.GrabId, out var camMap))
-                                grabCamFail[record.GrabId] = camMap = new Dictionary<int, bool>();
-
-                            bool thisFail = ctx != null
-                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
-                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
-                            if (!camMap.TryGetValue(camId, out bool prev))
-                                camMap[camId] = thisFail;
-                            else if (thisFail)
-                                camMap[camId] = true; // 一票否決
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Trace.WriteLine($"[InspectionStatisticsService.ComputeByGrabIdRange] {csvPath}: {ex.GetType().Name}: {ex.Message}");
-                }
-            }
-
-            // 彙總：每個 (grabId, camId) 算一次 Pass 或 Fail
-            foreach (var grabKv in grabCamFail)
-            {
-                foreach (var camKv in grabKv.Value)
-                {
-                    if (!stats.TryGetValue(camKv.Key, out var s)) continue;
-                    if (camKv.Value) s.Fail++;
-                    else             s.Pass++;
-                }
-            }
-
-            return stats;
+            return ComputeStatsFromDetails(ComputeDetailedByGrabIdRange(
+                captureRootPath, startGrabId, endGrabId, ctx));
         }
 
         // ── 逐序號詳細結果 ───────────────────────────────────────────────
@@ -405,6 +499,8 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             // grabId → GrabDetail（字串排序 = 時間排序）
             var dict = new SortedDictionary<string, GrabDetail>(StringComparer.Ordinal);
+            var columnSummaries =
+                new Dictionary<string, ColumnCurveSummaryRecord>(StringComparer.Ordinal);
 
             if (string.IsNullOrWhiteSpace(captureRootPath) || !Directory.Exists(captureRootPath))
                 return new List<GrabDetail>();
@@ -425,6 +521,17 @@ namespace AniloxRoll.Monitor.Core.Services
                         string line;
                         while ((line = sr.ReadLine()) != null)
                         {
+                            if (InspectionCsvReader.TryParseColumnCurveSummary(
+                                line, out ColumnCurveSummaryRecord columnSummary))
+                            {
+                                if (StringComparer.Ordinal.Compare(columnSummary.GrabId, lo) >= 0 &&
+                                    StringComparer.Ordinal.Compare(columnSummary.GrabId, hi) <= 0)
+                                {
+                                    columnSummaries[ColumnSummaryKey(
+                                        columnSummary.GrabId, columnSummary.CameraId)] = columnSummary;
+                                }
+                                continue;
+                            }
                             if (InspectionCsvReader.TryUpdateHmFromConfig(line, ref captureHmV)) continue;
                             if (!InspectionCsvReader.TryParseRecord(line, out var record)) continue;
 
@@ -461,9 +568,32 @@ namespace AniloxRoll.Monitor.Core.Services
 
             // 明細列表顯示序：新→舊（dict 為字串升冪＝舊→新，反轉成降冪）。
             // 處理迴圈仍走升冪（captureHmV 跨 CSV carry 依賴日期順序），只反轉輸出。
+            ApplyColumnCurveSummaries(dict, columnSummaries, ctx);
+
             var ordered = new List<GrabDetail>(dict.Values);
             ordered.Reverse();
             return ordered;
+        }
+
+        private static string ColumnSummaryKey(string grabId, int cameraId) =>
+            grabId + "|" + cameraId.ToString(CultureInfo.InvariantCulture);
+
+        private static void ApplyColumnCurveSummaries(
+            IDictionary<string, GrabDetail> details,
+            IDictionary<string, ColumnCurveSummaryRecord> summaries,
+            ThresholdContext ctx)
+        {
+            if (details == null || summaries == null || ctx == null) return;
+
+            foreach (ColumnCurveSummaryRecord summary in summaries.Values)
+            {
+                if (summary == null || summary.CameraId < 1 || summary.CameraId > 7 ||
+                    !details.TryGetValue(summary.GrabId, out GrabDetail detail))
+                    continue;
+
+                detail.CamResult[summary.CameraId - 1] = ctx.IsFail(
+                    summary.MeanPeak, summary.MaxPeak, summary.CaptureHmV);
+            }
         }
 
         private static void MergeRowResult(GrabDetail detail, bool? failed)

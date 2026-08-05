@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms.DataVisualization.Charting;
 using TanukiCv.Controls;
@@ -49,6 +50,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
     /// </summary>
     public class ReviewStitchCoordinator
     {
+        private const int ReviewCurveMinimumCycleMs = 80;
         private readonly ReviewStitchContext _ctx;
 
         private readonly ReviewDisplayContent _content = new ReviewDisplayContent();
@@ -70,9 +72,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private readonly ReviewPeriodDataLoader _periodDataLoader;
         private readonly ReviewPeriodImagePresenter _periodImages;
         private readonly ReviewImageLoadGate _imageLoads = new ReviewImageLoadGate();
-        private readonly object _preparedPlanGate = new object();
-        private ReviewImageLoadPlan _preparedPlan;
-        private string _preparedPlanKey;
+        private readonly ReviewAsyncLruCache<ReviewImageLoadPlan> _planCache =
+            new ReviewAsyncLruCache<ReviewImageLoadPlan>(32, 32, plan => 1);
+        private readonly ReviewAsyncLruCache<ReviewThumbnailSnapshot> _thumbnailCache =
+            new ReviewAsyncLruCache<ReviewThumbnailSnapshot>(24, 96L * 1024 * 1024,
+                thumbnail => thumbnail.EstimatedBytes);
+        private int _prefetchGeneration;
+        private int _disposed;
         private readonly object _sharedCurveGate = new object();
         private string _sharedCurveRoot;
         private string _sharedCurveGrabId;
@@ -90,6 +96,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// </summary>
         public void InvalidateSettledImageLoad()
         {
+            CancelAdjacentPrefetch();
             if (_imageLoads.Invalidate())
             {
                 _ctx.BusyUi.SetBusy(false);
@@ -98,11 +105,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>
-        /// Invalidates both preview and full-resolution image lanes when leaving the current
+        /// Invalidates curve, preview, and full-resolution image lanes when leaving the current
         /// single-grab display context.
         /// </summary>
         public void InvalidateImageLoad()
         {
+            _curveLoads.Invalidate();
             _thumbnailLoads.Invalidate();
             InvalidateSettledImageLoad();
         }
@@ -110,6 +118,82 @@ namespace AniloxRoll.Monitor.UI.Presenters
         public Task LoadGrabThumbnailAsync(
             string grabId, DateTime hintFrom, DateTime hintTo)
             => _thumbnailLoads.Enqueue(grabId, hintFrom, hintTo);
+
+        public void CancelAdjacentPrefetch()
+            => Interlocked.Increment(ref _prefetchGeneration);
+
+        public void BeginAdjacentPrefetch(
+            IList<GrabIdInfo> items, int currentIndex, int direction)
+        {
+            if (Volatile.Read(ref _disposed) != 0) return;
+            GrabIdInfo[] neighbors = ReviewAdjacentPrefetchPolicy.Select(
+                items, currentIndex, direction);
+            if (neighbors.Length == 0) return;
+
+            int generation = Interlocked.Increment(ref _prefetchGeneration);
+            string center = items[currentIndex].GrabId;
+            _ = PrefetchAdjacentCoreAsync(center, neighbors, generation);
+        }
+
+        private async Task PrefetchAdjacentCoreAsync(
+            string centerGrabId, GrabIdInfo[] neighbors, int generation)
+        {
+            string root = !string.IsNullOrWhiteSpace(
+                UI.State.UserSessionState.LastDataPath)
+                ? UI.State.UserSessionState.LastDataPath
+                : _ctx.DataStatsPresenter.StatsDataRootPath;
+            if (string.IsNullOrWhiteSpace(root)) return;
+
+            int cameraCount = _ctx.CameraCount;
+            bool enableProcess = LastReviewProcessedMode;
+            string ridgeDirection = ActiveRidgeDirection;
+            FlowTrace.Dvt(
+                $"RV prefetch begin center={centerGrabId} neighbors=" +
+                string.Join("|", Array.ConvertAll(neighbors, item => item.GrabId)));
+
+            for (int i = 0; i < neighbors.Length; i++)
+            {
+                if (Volatile.Read(ref _disposed) != 0) return;
+                if (generation != Volatile.Read(ref _prefetchGeneration)) return;
+                GrabIdInfo info = neighbors[i];
+                var watch = Stopwatch.StartNew();
+                try
+                {
+                    ReviewImageLoadPlan plan = await GetOrPreparePlanAsync(
+                        root, info.GrabId, info.Earliest, info.Latest,
+                        cameraCount, enableProcess, ridgeDirection, logPaths: false);
+                    if (generation != Volatile.Read(ref _prefetchGeneration)) return;
+
+                    await _curveDataLoader.PrefetchAsync(root, info, cameraCount);
+                    if (generation != Volatile.Read(ref _prefetchGeneration)) return;
+
+                    ReviewCacheAccess thumbnailAccess;
+                    ReviewThumbnailSnapshot thumbnail = await GetOrLoadThumbnailAsync(
+                        root, info.GrabId, plan, cameraCount,
+                        enableProcess, ridgeDirection, out thumbnailAccess);
+                    if (thumbnail == null)
+                    {
+                        FlowTrace.Dvt(
+                            $"RV prefetch unavailable center={centerGrabId} " +
+                            $"neighbor={info.GrabId} error=no-preview");
+                        continue;
+                    }
+                    FlowTrace.Dvt(
+                        $"RV prefetch ready center={centerGrabId} neighbor={info.GrabId} " +
+                        $"thumbnail={CacheAccessText(thumbnailAccess)} " +
+                        $"total={watch.ElapsedMilliseconds}ms");
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine(
+                        $"[ReviewPrefetch] {info.GrabId}: " +
+                        $"{ex.GetType().Name}: {ex.Message}");
+                    FlowTrace.Dvt(
+                        $"RV prefetch unavailable center={centerGrabId} " +
+                        $"neighbor={info.GrabId} error={ex.GetType().Name}");
+                }
+            }
+        }
 
         private async Task LoadGrabThumbnailCoreAsync(SingleGrabLoadRequest request)
         {
@@ -130,23 +214,25 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     "minCycleMs=33");
             }
             Core.Services.FlowTrace.Log($"RV thumbnail begin {grabId}");
-            ReviewImageData loaded = null;
             try
             {
                 int cameraCount = _ctx.CameraCount;
                 bool enableProcess = LastReviewProcessedMode;
                 string ridgeDirection = ActiveRidgeDirection;
-                ReviewImageLoadPlan plan;
-                if (!TryGetPreparedPlan(
-                    root, grabId, enableProcess, ridgeDirection, out plan))
+                ReviewImageLoadPlan plan = await GetOrPreparePlanAsync(
+                    root, grabId, hintFrom, hintTo, cameraCount,
+                    enableProcess, ridgeDirection, logPaths: false);
+                ReviewCacheAccess cacheAccess;
+                ReviewThumbnailSnapshot loaded = await GetOrLoadThumbnailAsync(
+                    root, grabId, plan, cameraCount,
+                    enableProcess, ridgeDirection, out cacheAccess);
+
+                if (loaded == null)
                 {
-                    plan = await Task.Run(() => _imageDataLoader.Prepare(
-                        root, grabId, hintFrom, hintTo, cameraCount,
-                        enableProcess, ridgeDirection, logPaths: false));
+                    Core.Services.FlowTrace.Log(
+                        $"RV thumbnail unavailable {grabId} ({watch.ElapsedMilliseconds}ms)");
+                    return;
                 }
-                loaded = await Task.Run(() => _imageDataLoader.Load(
-                    plan, cameraCount, enableProcess, ridgeDirection,
-                    includeCurves: false, useThumbnail: true));
 
                 if (!_thumbnailLoads.CanApplyStarted(request))
                 {
@@ -155,15 +241,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     return;
                 }
 
-                int imageCount = 0;
-                for (int i = 0; i < loaded.GrayFrames.Length; i++)
-                    if (loaded.GrayFrames[i] != null) imageCount++;
-                if (imageCount == 0 || loaded.PixelScaleRatio <= 1.0)
-                {
-                    Core.Services.FlowTrace.Log(
-                        $"RV thumbnail unavailable {grabId} ({watch.ElapsedMilliseconds}ms)");
-                    return;
-                }
+                int imageCount = loaded.ImageCount;
 
                 double[] ops = plan.Config?.CamOps ??
                     _ctx.Settings.GetCameraOpsUmArray();
@@ -179,8 +257,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     feedScale, loaded.PixelScaleRatio);
                 Core.Services.FlowTrace.Log(
                     $"RV thumbnail done {grabId} total={watch.ElapsedMilliseconds}ms " +
-                    $"decode={loaded.StitchMs}ms images={imageCount} " +
+                    $"decode={loaded.DecodeMs}ms images={imageCount} " +
                     $"ratio={loaded.PixelScaleRatio:F2} source={loaded.PreviewSource} " +
+                    $"cache={CacheAccessText(cacheAccess)} " +
                     $"atlas={(loaded.PreviewSource == "atlas" ? loaded.PreviewWidth + "x" + loaded.PreviewHeight : "none")}");
             }
             catch (Exception ex)
@@ -190,10 +269,6 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 Core.Services.FlowTrace.Log(
                     $"RV thumbnail unavailable {grabId} " +
                     $"({watch.ElapsedMilliseconds}ms; {ex.GetType().Name})");
-            }
-            finally
-            {
-                loaded?.DisposeImages();
             }
         }
 
@@ -212,26 +287,31 @@ namespace AniloxRoll.Monitor.UI.Presenters
             string ridgeDir = ActiveRidgeDirection;
             try
             {
-                ReviewImageLoadPlan layoutPlan = null;
-                SingleGrabCurveData loaded = await Task.Run(() =>
+                ReviewImageLoadPlan preparedPlan;
+                bool planReady = TryGetPreparedPlan(
+                    root, grabId, enableProcess, ridgeDir, out preparedPlan);
+                Task<ReviewImageLoadPlan> layoutTask = GetOrPreparePlanAsync(
+                    root, grabId, hintFrom, hintTo, camCount,
+                    enableProcess, ridgeDir, logPaths: false);
+                // Geometry and curve data may load in parallel, but neither is presented until
+                // both are ready. The thumbnail lane shares the same geometry task.
+                Task<SingleGrabCurveData> curveTask = Task.Run(() =>
                 {
-                    // Geometry is intentionally prepared before curve presentation. The image
-                    // decode remains debounced, but charts must never render the new record with
-                    // the previous record's viewport.
-                    layoutPlan = _imageDataLoader.Prepare(
-                        root, grabId, hintFrom, hintTo, camCount,
-                        enableProcess, ridgeDir, logPaths: false);
                     SingleGrabCurveData data = _curveDataLoader.Load(
-                        root, grabId, hintFrom, hintTo, camCount);
-                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={data.ImageCount} cams={data.MatchedCameraCount} cfg={(data.Config != null ? "yes" : "no")} align={data.AlignmentMode} source={data.StorageSource}");
+                        root, grabId, hintFrom, hintTo, camCount,
+                        planReady ? preparedPlan.Config : null);
+                    Core.Services.FlowTrace.Log($"RV curves paths {grabId} root={root} images={data.ImageCount} cams={data.MatchedCameraCount} cfg={(data.Config != null ? "yes" : "no")} align={data.AlignmentMode} source={data.StorageSource} coalesced={request.CoalescedCount}");
                     return data;
                 });
-                if (!_curveLoads.IsCurrent(request))
+                await Task.WhenAll(layoutTask, curveTask);
+                ReviewImageLoadPlan layoutPlan = layoutTask.Result;
+                SingleGrabCurveData loaded = curveTask.Result;
+                bool isLatest = _curveLoads.IsCurrent(request);
+                if (!_curveLoads.CanApplyStarted(request))
                 {
                     Core.Services.FlowTrace.Log($"RV curves stale-drop {grabId}");
                     return;
                 }
-                CachePreparedPlan(root, grabId, enableProcess, ridgeDir, layoutPlan);
                 PublishPreparedLayout(grabId, layoutPlan);
                 Core.Services.FlowTrace.Dvt(
                     $"RV layout intent {grabId} images={layoutPlan.TotalImageCount} " +
@@ -245,7 +325,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _charts.ApplyRowPhysicalScale(loaded.Config);
                 UpdateStitchedOverviewChart();
                 _charts.UpdateGlobalRowChart();
-                Core.Services.FlowTrace.Log($"RV curves {grabId}（{sw.ElapsedMilliseconds}ms）");
+                Core.Services.FlowTrace.Log(
+                    $"RV curves {grabId}（{sw.ElapsedMilliseconds}ms） " +
+                    $"presentation={(isLatest ? "latest" : "progressive")}");
             }
             catch (Exception ex) { Trace.WriteLine($"[CurvesOnly] {grabId}: {ex.GetType().Name}: {ex.Message}"); }
         }
@@ -300,9 +382,13 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _charts.CurvesUpdated += (mean, max, ops, positions, errorMean, errorMax) =>
                 StitchedCurveUpdated?.Invoke(
                     mean, max, ops, positions, errorMean, errorMax);
-            _curveLoads = new LatestGrabLoadCoordinator(LoadGrabCurvesCoreAsync);
+            _curveLoads = new LatestGrabLoadCoordinator(
+                LoadGrabCurvesCoreAsync,
+                minimumCycleMs: ReviewCurveMinimumCycleMs);
             _thumbnailLoads = new LatestGrabLoadCoordinator(
                 LoadGrabThumbnailCoreAsync, minimumCycleMs: 33);
+            Core.Services.FlowTrace.Log(
+                $"RV curve load policy latest-only minCycleMs={ReviewCurveMinimumCycleMs}");
         }
 
         /// <summary>延遲注入 DataStatsPresenter（初始化順序：coordinator 先於 presenter 建立）。</summary>
@@ -366,16 +452,18 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 string ridgeDir = ActiveRidgeDirection;
                 int camCount = _ctx.CameraCount;
-                ReviewImageLoadPlan plan;
-                if (TryGetPreparedPlan(root, grabId, enableProcess, ridgeDir, out plan))
+                ReviewImageLoadPlan cachedPlan;
+                bool planWasCached = TryGetPreparedPlan(
+                    root, grabId, enableProcess, ridgeDir, out cachedPlan);
+                ReviewImageLoadPlan plan = planWasCached
+                    ? cachedPlan
+                    : await GetOrPreparePlanAsync(
+                        root, grabId, hintFrom, hintTo, camCount,
+                        enableProcess, ridgeDir, logPaths: true);
+                if (planWasCached)
                 {
                     LogImagePlan(grabId, root, plan);
                     Core.Services.FlowTrace.Log($"RV loadGrab plan reuse {grabId}");
-                }
-                else
-                {
-                    plan = await Task.Run(() => _imageDataLoader.Prepare(
-                        root, grabId, hintFrom, hintTo, camCount, enableProcess, ridgeDir));
                 }
                 if (!_imageLoads.IsCurrent(myLoad))
                 {
@@ -516,16 +604,25 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 ops, positions, _ctx.Settings.StitchMode == StitchMode.Global);
         }
 
-        private void CachePreparedPlan(
-            string root, string grabId, bool enableProcess, string ridgeDirection,
-            ReviewImageLoadPlan plan)
+        private async Task<ReviewImageLoadPlan> GetOrPreparePlanAsync(
+            string root, string grabId, DateTime hintFrom, DateTime hintTo,
+            int cameraCount, bool enableProcess, string ridgeDirection,
+            bool logPaths)
         {
-            lock (_preparedPlanGate)
-            {
-                _preparedPlanKey = BuildPreparedPlanKey(
-                    root, grabId, enableProcess, ridgeDirection);
-                _preparedPlan = plan;
-            }
+            string key = BuildPreparedPlanKey(
+                root, grabId, enableProcess, ridgeDirection);
+            ReviewCacheAccess access;
+            ReviewImageLoadPlan plan = await _planCache.GetOrLoadAsync(
+                key,
+                () => _imageDataLoader.Prepare(
+                    root, grabId, hintFrom, hintTo, cameraCount,
+                    enableProcess, ridgeDirection, logPaths),
+                out access);
+            if (access == ReviewCacheAccess.Joined)
+                FlowTrace.Dvt($"RV plan prepare reuse-inflight {grabId}");
+            else if (access == ReviewCacheAccess.Cold)
+                FlowTrace.Dvt($"RV plan prepare begin {grabId}");
+            return plan;
         }
 
         private bool TryGetPreparedPlan(
@@ -533,16 +630,55 @@ namespace AniloxRoll.Monitor.UI.Presenters
             out ReviewImageLoadPlan plan)
         {
             string key = BuildPreparedPlanKey(root, grabId, enableProcess, ridgeDirection);
-            lock (_preparedPlanGate)
-            {
-                if (string.Equals(_preparedPlanKey, key, StringComparison.Ordinal))
+            return _planCache.TryGet(key, out plan);
+        }
+
+        private Task<ReviewThumbnailSnapshot> GetOrLoadThumbnailAsync(
+            string root, string grabId, ReviewImageLoadPlan plan,
+            int cameraCount, bool enableProcess, string ridgeDirection,
+            out ReviewCacheAccess access)
+        {
+            string key = BuildPreparedPlanKey(
+                root, grabId, enableProcess, ridgeDirection);
+            return _thumbnailCache.GetOrLoadAsync(
+                key,
+                () =>
                 {
-                    plan = _preparedPlan;
-                    return plan != null;
-                }
+                    ReviewImageData loaded = null;
+                    try
+                    {
+                        loaded = _imageDataLoader.Load(
+                            plan, cameraCount, enableProcess, ridgeDirection,
+                            includeCurves: false, useThumbnail: true);
+                        var snapshot = new ReviewThumbnailSnapshot
+                        {
+                            GrayFrames = loaded.GrayFrames,
+                            GrayWidths = loaded.GrayWidths,
+                            GrayHeights = loaded.GrayHeights,
+                            DecodeMs = loaded.StitchMs,
+                            PixelScaleRatio = loaded.PixelScaleRatio,
+                            PreviewSource = loaded.PreviewSource,
+                            PreviewWidth = loaded.PreviewWidth,
+                            PreviewHeight = loaded.PreviewHeight
+                        };
+                        return snapshot.IsUsable ? snapshot : null;
+                    }
+                    finally
+                    {
+                        loaded?.DisposeImages();
+                    }
+                },
+                out access);
+        }
+
+        private static string CacheAccessText(ReviewCacheAccess access)
+        {
+            switch (access)
+            {
+                case ReviewCacheAccess.Hit: return "hit";
+                case ReviewCacheAccess.Joined: return "join";
+                default: return "cold";
             }
-            plan = null;
-            return false;
         }
 
         private static string BuildPreparedPlanKey(
@@ -562,13 +698,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         public void Dispose()
         {
+            if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
+            CancelAdjacentPrefetch();
             _curveDataLoader.Dispose();
+            _planCache.Dispose();
+            _thumbnailCache.Dispose();
             _content.ClearAll();
-            lock (_preparedPlanGate)
-            {
-                _preparedPlan = null;
-                _preparedPlanKey = null;
-            }
         }
 
         public void UpdateStitchedOverviewChart(bool notifyData = true)

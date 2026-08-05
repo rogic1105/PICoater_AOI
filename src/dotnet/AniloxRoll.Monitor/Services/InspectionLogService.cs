@@ -236,6 +236,59 @@ namespace AniloxRoll.Monitor.Core.Services
             }
         }
 
+        public void AppendColumnCurveSummary(
+            string grabId,
+            DateTime captureDate,
+            float captureHmV,
+            float[][] meanCurves,
+            float[][] maxCurves)
+        {
+            if (string.IsNullOrWhiteSpace(grabId) || meanCurves == null || maxCurves == null)
+                return;
+
+            try
+            {
+                string root = _getCaptureRoot();
+                if (string.IsNullOrWhiteSpace(root)) return;
+
+                string csvPath = CaptureStoragePaths.DailyCsv(root, captureDate);
+                Directory.CreateDirectory(Path.GetDirectoryName(csvPath));
+                int cameraCount = Math.Min(meanCurves.Length, maxCurves.Length);
+                int written = 0;
+
+                lock (_csvLock)
+                {
+                    using (var fs = new FileStream(
+                        csvPath, FileMode.Append, FileAccess.Write, FileShare.ReadWrite))
+                    using (var sw = new StreamWriter(fs, new UTF8Encoding(false)))
+                    {
+                        for (int i = 0; i < cameraCount; i++)
+                        {
+                            float meanPeak = ThresholdContext.FindPeakNormalized(meanCurves[i]);
+                            float maxPeak = ThresholdContext.FindPeakNormalized(maxCurves[i]);
+                            if (float.IsNaN(meanPeak) && float.IsNaN(maxPeak)) continue;
+
+                            sw.WriteLine(string.Format(CultureInfo.InvariantCulture,
+                                "#CURVE-C,1,{0},{1},{2:R},{3:R},{4:R}",
+                                grabId, i + 1, captureHmV, meanPeak, maxPeak));
+                            written++;
+                        }
+                    }
+                }
+
+                FlowTrace.Log(
+                    $"capture csv curveSummary grab={grabId} cams={written} " +
+                    $"hm={captureHmV:F4} source=merged-saved-frames path={csvPath}");
+                WriteSucceeded?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                string error = ex.GetType().Name + ": " + ex.Message;
+                Trace.WriteLine("[InspectionLogService.AppendColumnCurveSummary] " + error);
+                WriteFailed?.Invoke(error);
+            }
+        }
+
         /// <summary>
         /// 抓圖進行中設定變更時呼叫，立刻在當日 CSV 插入一行 #CFG（不伴隨資料列）。
         /// </summary>

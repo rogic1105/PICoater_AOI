@@ -77,6 +77,7 @@ namespace AniloxRoll.Monitor.Tests
         {
             var settings = new InspectionSettings();
             settings.RidgeSigma = 12.5f;
+            settings.ColumnCurveMode = ColumnCurveDisplayMode.Max;
             settings.ImageView.WaterfallTotalHeight = 42000;
             settings.ImageView.WaterfallFullMode = WaterfallFullMode.Ring;
 
@@ -84,6 +85,7 @@ namespace AniloxRoll.Monitor.Tests
             var loaded = InspectionSettingsStore.Load();
 
             Assert.That(loaded.RidgeSigma, Is.EqualTo(12.5f).Within(0.001f));
+            Assert.That(loaded.ColumnCurveMode, Is.EqualTo(ColumnCurveDisplayMode.Max));
             Assert.That(loaded.ImageView.WaterfallTotalHeight, Is.EqualTo(42000));
             Assert.That(loaded.ImageView.WaterfallFullMode, Is.EqualTo(WaterfallFullMode.Ring));
         }

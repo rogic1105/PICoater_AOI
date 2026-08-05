@@ -2,6 +2,8 @@ using System.Drawing;
 using System.Linq;
 using System.Threading;
 using System.Windows.Forms.DataVisualization.Charting;
+using AniloxRoll.Monitor.Core.Data;
+using AniloxRoll.Monitor.Core.Services;
 using NUnit.Framework;
 using TanukiCv.Controls;
 
@@ -58,6 +60,29 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(helper.DisplayPointCount, Is.LessThanOrEqualTo(400));
                 Assert.That(chart.Series["Mean"].Points.Count, Is.EqualTo(helper.DisplayPointCount));
                 Assert.That(chart.Series["Max"].Points.Max(p => p.YValues[0]), Is.EqualTo(1.0));
+            }
+        }
+
+        [Test]
+        public void SingleMeanPeak_BelowThreshold_RemainsVisibleAndPassesVerdict()
+        {
+            using (var chart = new Chart { Size = new Size(200, 100) })
+            {
+                var helper = new ColumnCurveChartHelper(chart);
+                var mean = new float[1024];
+                mean[511] = 178.5f; // 0.70 after /255; one narrow point in a display bucket.
+
+                helper.UpdateData(mean, null, 0);
+                var threshold = new ThresholdContext(
+                    1f, 0.80f, 2f,
+                    1f, 0.20f, 0.60f,
+                    ColumnCurveDisplayMode.Mean);
+                ColumnVerdictEvaluation verdict = threshold.EvaluateColumn(
+                    (float)helper.DisplayMeanPeak, float.NaN, 1f);
+
+                Assert.That(helper.DisplayPointCount, Is.LessThan(mean.Length));
+                Assert.That(helper.DisplayMeanPeak, Is.EqualTo(0.70).Within(0.0001));
+                Assert.That(verdict.IsFail, Is.False);
             }
         }
 

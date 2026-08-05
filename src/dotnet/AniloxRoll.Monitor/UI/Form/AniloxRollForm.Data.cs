@@ -195,6 +195,7 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.dc_HessianMaxFactorV):
                 case nameof(InspectionSettings.dd_HessianMaxFactorH):
                 case nameof(InspectionSettings.eb_RidgeDir):
+                case nameof(InspectionSettings.eca_ColumnCurveMode):
                 case nameof(InspectionSettings.ec_ErrorValueMeanV):
                 case nameof(InspectionSettings.ed_ErrorValueMaxV):
                 case nameof(InspectionSettings.ee_ErrorValueMeanH):
@@ -336,14 +337,19 @@ namespace AniloxRoll.Monitor.Forms
         // 快速滾序號的載入 debounce（250ms）：滾動中只送 latest-only 曲線；
         // 停頓才同步日期/時間、載入最後一張圖片、儲存 session、同步 Data tab。
         private Timer _reviewLoadDebounce;
-        private (string grabId, DateTime earliest, DateTime latest, int idx, int sequence) _pendingReviewLoad;
+        private (string grabId, DateTime earliest, DateTime latest, int idx, int sequence, int direction) _pendingReviewLoad;
         private int _reviewSelectionSeq;
+        private int _lastReviewSelectionIndex = -1;
 
         private void OnReviewGrabIdSelected(string grabId, DateTime earliest, DateTime latest, int idx)
         {
             try
             {
                 int selectionSeq = ++_reviewSelectionSeq;
+                int direction = _lastReviewSelectionIndex < 0
+                    ? 0
+                    : Math.Sign(idx - _lastReviewSelectionIndex);
+                _lastReviewSelectionIndex = idx;
                 // Keep the serialized thumbnail lane alive: while it is busy, intermediate
                 // selections collapse into its latest pending request. Only the debounced
                 // full-resolution load must be invalidated immediately.
@@ -353,7 +359,8 @@ namespace AniloxRoll.Monitor.Forms
                 _ = _stitchCoordinator.LoadGrabCurvesOnlyAsync(grabId, earliest, latest);
                 _ = _stitchCoordinator.LoadGrabThumbnailAsync(grabId, earliest, latest);
 
-                _pendingReviewLoad = (grabId, earliest, latest, idx, selectionSeq);
+                _pendingReviewLoad = (
+                    grabId, earliest, latest, idx, selectionSeq, direction);
                 if (_reviewLoadDebounce == null)
                 {
                     _reviewLoadDebounce = new Timer { Interval = 250 };
@@ -371,15 +378,21 @@ namespace AniloxRoll.Monitor.Forms
                         try
                         {
                             await LoadGrabStitchedViewGuardRowRangeAsync(p.grabId, p.earliest, p.latest);
-                            if (p.sequence != _reviewSelectionSeq) return;
+                            if (IsDisposed || Disposing ||
+                                p.sequence != _reviewSelectionSeq) return;
                             _reviewDirty = false;
+                            _stitchCoordinator.BeginAdjacentPrefetch(
+                                _dataStatsPresenter.GrabIdInfos,
+                                p.idx,
+                                p.direction);
                         }
                         catch (Exception ex) { Trace.WriteLine($"[ReviewLoadDebounce] {ex}"); }
                         // Data tab 同步排在影像之後：統計全重算（掃目錄+CSV 解析+Mura 圖 bin IO）
                         // 是 UI 執行緒重活——settle 才做一次，且使用者先看到影像。
                         // （原在每格序號 inline 跑、註解自稱「便宜」→ 快撥 18 格＝18 輪重算
                         //   ＝UiStall 5.7s＋曲線快路全餓死，2026-07-10 log 定罪）
-                        if (p.sequence == _reviewSelectionSeq)
+                        if (!IsDisposed && !Disposing &&
+                            p.sequence == _reviewSelectionSeq)
                             SyncDataTabFromReviewSettled(p.idx);
                     };
                 }
@@ -394,6 +407,7 @@ namespace AniloxRoll.Monitor.Forms
         {
             try
             {
+                if (IsDisposed || Disposing) return;
                 if (_dataStatsPresenter.GrabIdCrossGuard.IsSet) return;
                 if (idx < 0 || idx >= _dataStatsPresenter.GrabIdInfos.Count) return;
                 var info = _dataStatsPresenter.GrabIdInfos[idx];
@@ -409,7 +423,15 @@ namespace AniloxRoll.Monitor.Forms
                 // 同步 Review tab：先載入 ImageRepository + Navigator，再走共用 reset + 主畫面載入。
                 UserSessionState.SetLastDataPath(path);
                 UserSessionState.Save();
-                _reviewFolderCoordinator.LoadDirectoryAndInitNavigator(path);
+                _reviewBusyUi?.SetBusy(true);
+                try
+                {
+                    await _reviewFolderCoordinator.LoadDirectoryAndInitNavigatorAsync(path);
+                }
+                finally
+                {
+                    _reviewBusyUi?.SetBusy(false);
+                }
                 _presenter.UpdatePeriodNavigationState();
                 // DataPresenter 已透過 LoadDataFolder 同步 _grabIdInfos，skip SyncFromReviewFolder
                 await ResetAndLoadReviewAfterFolderChanged(dataPresenterAlreadySynced: true);

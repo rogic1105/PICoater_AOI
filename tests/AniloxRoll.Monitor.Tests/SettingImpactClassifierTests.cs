@@ -53,6 +53,11 @@ namespace AniloxRoll.Monitor.Tests
                 SettingImpact.ColumnThresholds |
                 SettingImpact.ReviewCurves);
             yield return Route(
+                nameof(InspectionSettings.eca_ColumnCurveMode),
+                SettingFeatureOwner.DataStats,
+                SettingImpact.ColumnThresholds |
+                SettingImpact.ReviewCurves);
+            yield return Route(
                 nameof(InspectionSettings.ee_ErrorValueMeanH),
                 SettingFeatureOwner.DataStats,
                 SettingImpact.RowThresholds |

@@ -49,6 +49,7 @@ class SettingsFlowValidator:
         self._check_live_enhance(session, settings, report)
         self._check_enhance_heatmap(session, settings, report)
         self._check_display_crop(session, settings, report)
+        self._check_live_layout(session, settings, report)
         self._check_direction_refresh(session, settings, report)
         return report
 
@@ -677,6 +678,123 @@ class SettingsFlowValidator:
             f"changes={len(changes)} deferredGrabs={len(deferred)} "
             f"failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_live_layout(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        ops_names = (
+            "ab_OpsCam1", "ac_OpsCam2", "ad_OpsCam3", "ae_OpsCam4",
+            "af_OpsCam5", "ag_OpsCam6", "ah_OpsCam7",
+        )
+        start_names = (
+            "bb_StartCam1", "bc_StartCam2", "bd_StartCam3", "be_StartCam4",
+            "bf_StartCam5", "bg_StartCam6", "bh_StartCam7",
+        )
+        name_to_slot = {
+            name: ("ops", index) for index, name in enumerate(ops_names)
+        }
+        name_to_slot.update(
+            {name: ("start", index) for index, name in enumerate(start_names)}
+        )
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") in name_to_slot
+        ]
+        if not changes:
+            report.add(
+                self.domain,
+                "S7.live-layout",
+                CheckStatus.NOT_COVERED,
+                "No OPS/Start setting change in this session.",
+            )
+            return
+        if not session.dvt_enabled:
+            report.add(
+                self.domain,
+                "S7.live-layout",
+                CheckStatus.NOT_COVERED,
+                "OPS/Start state snapshots require DVT logging.",
+            )
+            return
+
+        state_pattern = re.compile(
+            r"^displayLayout applied setting=(?P<setting>\S+) "
+            r"refGrid=cam1 ops=(?P<ops>\S+) start=(?P<start>\S+) "
+            r"speed=\S+ head=\S+ tail=\S+ "
+            r"scope=main\+column-chart source=unchanged$"
+        )
+        setting_indices = [item[0] for item in settings]
+        failures = []
+        for index, line, match in changes:
+            name = match.group("name")
+            next_change = next(
+                (
+                    setting_index
+                    for setting_index in setting_indices
+                    if setting_index > index
+                ),
+                len(session.lines),
+            )
+            state_line = next(
+                (
+                    item
+                    for item in session.lines[index + 2:next_change]
+                    if item.message.startswith("displayLayout applied ")
+                ),
+                None,
+            )
+            state_match = state_pattern.match(state_line.message) if state_line else None
+            if state_match is None:
+                failures.append(f"{line.timestamp} {name} missing displayLayout state")
+                continue
+            if state_match.group("setting") != name:
+                failures.append(
+                    f"{line.timestamp} {name} paired with {state_match.group('setting')}"
+                )
+                continue
+
+            try:
+                ops = [float(value) for value in state_match.group("ops").split("|")]
+                starts = [float(value) for value in state_match.group("start").split("|")]
+                expected = float(
+                    (match.group("value") or match.group("arrow")).strip()
+                )
+            except ValueError:
+                failures.append(f"{line.timestamp} {name} has invalid numeric state")
+                continue
+            if len(ops) != 7 or len(starts) != 7 or any(value <= 0 for value in ops):
+                failures.append(f"{state_line.timestamp} invalid seven-camera layout")
+                continue
+
+            field, slot = name_to_slot[name]
+            actual = ops[slot] if field == "ops" else starts[slot]
+            if abs(actual - expected) > 0.00011:
+                failures.append(
+                    f"{line.timestamp} {name} expected={expected:g} applied={actual:g}"
+                )
+
+            pending_line = next(
+                (
+                    item
+                    for item in session.lines[index + 2:next_change]
+                    if item.message.startswith("capture layout pending ")
+                ),
+                None,
+            )
+            if pending_line is not None and (
+                f"setting={name}" not in pending_line.message
+                or "apply=display-now+stop-final" not in pending_line.message
+            ):
+                failures.append(f"{pending_line.timestamp} {name} was deferred during Grab")
+
+        report.add(
+            self.domain,
+            "S7.live-layout",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(changes)} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
         )
 
     def _check_direction_refresh(

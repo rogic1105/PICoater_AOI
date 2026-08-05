@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
@@ -32,15 +33,17 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
         public void NavigateToDateTime(DateTime value) => _timeNavigator.NavigateTo(value);
 
-        public void LoadDirectoryAndInitNavigator(string path)
+        public async Task LoadDirectoryAndInitNavigatorAsync(string path)
         {
-            _imageRepository.LoadDirectory(path);
-            FlowTrace.Log($"RV repo scan root={path} files={_imageRepository.FileCount}");
+            FlowTrace.Log($"RV repo scan begin root={path}");
+            ImageRepositoryLoadResult result =
+                await _imageRepository.LoadDirectoryAsync(path);
+            LogScanResult(path, result);
             if (_imageRepository.FileCount > 0)
                 _timeNavigator.Initialize(UserSessionState.LastYear);
         }
 
-        public void SelectAndLoadFolder()
+        public async Task<bool> SelectAndLoadFolderAsync()
         {
             using (var dialog = new FolderBrowserDialog())
             {
@@ -67,7 +70,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 if (Directory.Exists(preferredPath))
                     dialog.SelectedPath = preferredPath;
 
-                if (dialog.ShowDialog() != DialogResult.OK) return;
+                if (dialog.ShowDialog() != DialogResult.OK) return false;
 
                 string selectedPath = CaptureStoragePaths.ResolveSelectedDataRoot(
                     dialog.SelectedPath,
@@ -83,16 +86,30 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 UserSessionState.Save();
 
                 FlowTrace.Log($"RV folder selected root={selectedPath}");
-                _imageRepository.LoadDirectory(selectedPath);
-                FlowTrace.Log($"RV repo scan root={selectedPath} files={_imageRepository.FileCount}");
+                FlowTrace.Log($"RV repo scan begin root={selectedPath}");
+                ImageRepositoryLoadResult result =
+                    await _imageRepository.LoadDirectoryAsync(selectedPath);
+                LogScanResult(selectedPath, result);
                 if (_imageRepository.FileCount == 0)
                 {
                     MessageBox.Show(_dialogOwner, "該路徑下無符合格式的圖片！");
-                    return;
+                    return false;
                 }
 
                 _timeNavigator.Initialize(UserSessionState.LastYear);
+                return true;
             }
+        }
+
+        private static void LogScanResult(
+            string path, ImageRepositoryLoadResult result)
+        {
+            FlowTrace.Log(
+                $"RV repo scan root={path} files={result.FileCount} " +
+                $"csvRecords={result.CsvRecordCount} " +
+                $"csvArchives={result.CsvBackedArchiveCount} " +
+                $"archiveFallback={result.ArchiveFallbackCount} " +
+                $"legacy={result.LegacyFileCount} ms={result.ElapsedMilliseconds}");
         }
 
         private static bool HasYearSubdir(string path)

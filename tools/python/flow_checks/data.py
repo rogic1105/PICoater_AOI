@@ -35,6 +35,10 @@ class DataFlowValidator:
             return report
 
         self._check_statistics_snapshot(session, report)
+        self._check_column_verdict_index(session, report)
+        self._check_column_verdicts(session, report)
+        self._check_column_chart_verdict_alignment(session, report)
+        self._check_column_verdict_clicks(session, report)
         self._check_single_selection(session, report)
         self._check_single_curve_policy(session, report)
         self._check_single_curve(session, report)
@@ -43,6 +47,7 @@ class DataFlowValidator:
         self._check_curve_summary_writes(session, report)
         self._check_single_row_curve(session, report)
         self._check_list_ownership(session, report)
+        self._check_virtual_list(session, report)
         self._check_range_policy(session, report)
         self._check_range_debounce(session, report)
         self._check_range_list_preview(session, report)
@@ -51,6 +56,287 @@ class DataFlowValidator:
         self._check_fail_filter(session, report)
         self._check_ui_stall(session, report)
         return report
+
+    def _check_column_verdict_index(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^DT verdict index apply=ok gen=(\d+) summaries=(\d+) bins=(\d+) "
+            r"missing=(\d+)/(\d+) cams=(\d+) verdicts=(\d+) ms=(\d+)$"
+        )
+        candidates = [
+            line.message for line in session.lines
+            if line.message.startswith("DT verdict index apply=")
+        ]
+        if not candidates:
+            report.add(
+                self.domain, "D1.verdict-index", CheckStatus.NOT_COVERED,
+                "No full-list column verdict index evidence",
+            )
+            return
+
+        invalid = []
+        for message in candidates:
+            match = pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+            _, summaries, bins, missing, requested, cameras, verdicts, _ = map(
+                int, match.groups()
+            )
+            if summaries + bins + missing != requested or verdicts != cameras:
+                invalid.append(message)
+
+        report.add(
+            self.domain,
+            "D1.verdict-index",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"runs={len(candidates)} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    def _check_column_verdicts(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^DT verdict (?P<grab>\d{6}-\d{6}) cam=(?P<cam>\d+) "
+            r"(?:mode=(?P<mode>mean|max|both) )?"
+            r"mean=(?P<mean>\d+(?:\.\d+)?)/(?P<mean_threshold>\d+(?:\.\d+)?) "
+            r"(?:enabled=(?P<mean_enabled>[01]) )?"
+            r"max=(?P<max>\d+(?:\.\d+)?)/(?P<max_threshold>\d+(?:\.\d+)?) "
+            r"(?:enabled=(?P<max_enabled>[01]) )?"
+            r"result=(?P<result>pass|fail) "
+            r"cause=(?P<cause>none|mean|max|both) "
+            r"source=(?:visible-merged-curve|merged-curve)$"
+        )
+        candidates = [
+            line.message for line in session.lines
+            if line.message.startswith("DT verdict ")
+            and not line.message.startswith(("DT verdict index ", "DT verdict click "))
+        ]
+        if not candidates:
+            report.add(
+                self.domain, "D1.verdict", CheckStatus.NOT_COVERED,
+                "No selected column verdict evidence",
+            )
+            return
+
+        invalid = []
+        causes = {"none": 0, "mean": 0, "max": 0, "both": 0}
+        for message in candidates:
+            match = pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+
+            mode = match.group("mode") or "both"
+            mean_enabled = match.group("mean_enabled") != "0"
+            max_enabled = match.group("max_enabled") != "0"
+            expected_flags = {
+                "mean": (True, False),
+                "max": (False, True),
+                "both": (True, True),
+            }[mode]
+            mean_failed = mean_enabled and float(match.group("mean")) > float(
+                match.group("mean_threshold"))
+            max_failed = max_enabled and float(match.group("max")) > float(
+                match.group("max_threshold"))
+            expected_cause = (
+                "both" if mean_failed and max_failed else
+                "mean" if mean_failed else
+                "max" if max_failed else
+                "none"
+            )
+            expected_result = "fail" if mean_failed or max_failed else "pass"
+            actual_cause = match.group("cause")
+            causes[actual_cause] += 1
+            if ((mean_enabled, max_enabled) != expected_flags or
+                    match.group("result") != expected_result or
+                    actual_cause != expected_cause):
+                invalid.append(message)
+
+        report.add(
+            self.domain,
+            "D1.verdict",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"rows={len(candidates)} causes="
+            f"none:{causes['none']}/mean:{causes['mean']}/"
+            f"max:{causes['max']}/both:{causes['both']} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    def _check_column_chart_verdict_alignment(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        display_pattern = re.compile(
+            r"^DT curve display (?P<grab>\d{6}-\d{6}) "
+            r"mode=(?P<mode>mean|max|both) "
+            r"mean=(?P<mean>\d+(?:\.\d+)?)/(?P<mean_threshold>\d+(?:\.\d+)?) "
+            r"max=(?P<max>\d+(?:\.\d+)?)/(?P<max_threshold>\d+(?:\.\d+)?) "
+            r"scale=(?P<scale>\d+(?:\.\d+)?) points=(?P<points>\d+)$"
+        )
+        verdict_pattern = re.compile(
+            r"^DT verdict (?P<grab>\d{6}-\d{6}) cam=\d+ "
+            r"mode=(?P<mode>mean|max|both) "
+            r"mean=(?P<mean>\d+(?:\.\d+)?)/\d+(?:\.\d+)? enabled=[01] "
+            r"max=(?P<max>\d+(?:\.\d+)?)/\d+(?:\.\d+)? enabled=[01] "
+        )
+        messages = [line.message for line in session.lines]
+        display_indices = [
+            index for index, message in enumerate(messages)
+            if message.startswith("DT curve display ")
+        ]
+        if not display_indices:
+            report.add(
+                self.domain, "D1.chart-verdict", CheckStatus.NOT_COVERED,
+                "No chart display peak evidence",
+            )
+            return
+
+        invalid = []
+        compared = 0
+        for position, start in enumerate(display_indices):
+            end = display_indices[position + 1] if position + 1 < len(display_indices) else len(messages)
+            display = display_pattern.match(messages[start])
+            if not display:
+                invalid.append(messages[start])
+                continue
+            rows = []
+            for message in messages[start + 1:end]:
+                match = verdict_pattern.match(message)
+                if match and match.group("grab") == display.group("grab"):
+                    rows.append(match)
+            if not rows:
+                continue
+
+            compared += 1
+            chart_mean = float(display.group("mean"))
+            chart_max = float(display.group("max"))
+            verdict_mean = max(float(row.group("mean")) for row in rows)
+            verdict_max = max(float(row.group("max")) for row in rows)
+            if (display.group("mode") != rows[0].group("mode") or
+                    abs(chart_mean - verdict_mean) > 0.0002 or
+                    abs(chart_max - verdict_max) > 0.0002):
+                invalid.append(
+                    f"{display.group('grab')} chart={chart_mean:.4f}/{chart_max:.4f} "
+                    f"verdict={verdict_mean:.4f}/{verdict_max:.4f}"
+                )
+
+        status = CheckStatus.PASS if compared > 0 and not invalid else (
+            CheckStatus.NOT_COVERED if compared == 0 and not invalid else CheckStatus.FAIL
+        )
+        report.add(
+            self.domain, "D1.chart-verdict", status,
+            f"compared={compared} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    def _check_column_verdict_clicks(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        row_pattern = re.compile(
+            r"^DT verdict click (?P<grab>\d{6}-\d{6}) cam=(?P<cam>\d+) "
+            r"mode=(?P<mode>mean|max|both) "
+            r"mean=(?P<mean>nan|\d+(?:\.\d+)?)/(?P<mean_threshold>\d+(?:\.\d+)?) "
+            r"enabled=(?P<mean_enabled>[01]) "
+            r"max=(?P<max>nan|\d+(?:\.\d+)?)/(?P<max_threshold>\d+(?:\.\d+)?) "
+            r"enabled=(?P<max_enabled>[01]) "
+            r"result=(?P<result>pass|fail|unknown) "
+            r"cause=(?P<cause>none|mean|max|both) "
+            r"list=(?P<list>pass|fail|unknown) "
+            r"source=(?P<source>visible-curve-index|curve-index|missing)$"
+        )
+        done_pattern = re.compile(
+            r"^DT verdict click done (?P<grab>\d{6}-\d{6}) cams=(?P<cams>\d+)$"
+        )
+        candidates = [
+            line.message for line in session.lines
+            if line.message.startswith("DT verdict click ")
+        ]
+        if not candidates:
+            report.add(
+                self.domain, "D1.verdict-click", CheckStatus.NOT_COVERED,
+                "No report-list column verdict audit evidence",
+            )
+            return
+
+        pending = {}
+        invalid = []
+        runs = 0
+        rows = 0
+        for message in candidates:
+            done = done_pattern.match(message)
+            if done:
+                grab = done.group("grab")
+                expected_cameras = int(done.group("cams"))
+                audited = pending.pop(grab, [])
+                runs += 1
+                if (len(audited) != expected_cameras or
+                        sorted(audited) != list(range(1, expected_cameras + 1))):
+                    invalid.append(message)
+                continue
+
+            match = row_pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+
+            rows += 1
+            grab = match.group("grab")
+            pending.setdefault(grab, []).append(int(match.group("cam")))
+            mode = match.group("mode")
+            mean_enabled = match.group("mean_enabled") == "1"
+            max_enabled = match.group("max_enabled") == "1"
+            expected_flags = {
+                "mean": (True, False),
+                "max": (False, True),
+                "both": (True, True),
+            }[mode]
+            if (mean_enabled, max_enabled) != expected_flags:
+                invalid.append(message)
+                continue
+
+            mean_value = match.group("mean")
+            max_value = match.group("max")
+            mean_failed = (
+                mean_enabled and mean_value != "nan" and
+                float(mean_value) > float(match.group("mean_threshold"))
+            )
+            max_failed = (
+                max_enabled and max_value != "nan" and
+                float(max_value) > float(match.group("max_threshold"))
+            )
+            has_data = (
+                (mean_enabled and mean_value != "nan") or
+                (max_enabled and max_value != "nan")
+            )
+            expected_cause = (
+                "both" if mean_failed and max_failed else
+                "mean" if mean_failed else
+                "max" if max_failed else
+                "none"
+            )
+            expected_result = (
+                "unknown" if not has_data else
+                "fail" if mean_failed or max_failed else "pass"
+            )
+            list_matches = (
+                expected_result == "unknown" or
+                match.group("list") == expected_result
+            )
+            if (match.group("result") != expected_result or
+                    match.group("cause") != expected_cause or
+                    not list_matches):
+                invalid.append(message)
+
+        invalid.extend(f"missing done: {grab}" for grab in pending)
+        report.add(
+            self.domain,
+            "D1.verdict-click",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"runs={runs} rows={rows} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
 
     def _check_cross_tab_curve_reuse(
         self, session: FlowSession, report: CheckReport
@@ -769,6 +1055,19 @@ class DataFlowValidator:
             assessment.detail(limit_ms),
         )
 
+    def _check_virtual_list(self, session: FlowSession, report: CheckReport) -> None:
+        fallbacks = [
+            line for line in session.lines
+            if line.message.startswith("DT list virtual fallback ")
+        ]
+        report.add(
+            self.domain,
+            "D2.virtual-list",
+            CheckStatus.PASS if not fallbacks else CheckStatus.FAIL,
+            f"fallbacks={len(fallbacks)}"
+            + (f" first={fallbacks[0].timestamp} {fallbacks[0].message}" if fallbacks else ""),
+        )
+
     def _check_range_debounce(self, session: FlowSession, report: CheckReport) -> None:
         range_intents = 0
         settles = 0
@@ -836,6 +1135,7 @@ class DataFlowValidator:
             r"loadMs=(\d+) drawMs=(\d+) meanRows=(\d+) maxRows=(\d+) "
             r"method=(top-maxcmean|mixed|even) coverage=(\d+)/(\d+) rankedCams=(\d+)/(\d+)"
             r" index=(\d+)/(\d+) cache=(\d+)/(\d+) "
+            r"hmCoverage=(\d+)/(\d+) hmCurrent=([0-9]+(?:\.[0-9]+)?) "
             r"sampleLimit=(\d+)$"
         )
         applies = []
@@ -848,10 +1148,16 @@ class DataFlowValidator:
                     continue
                 generation = int(match.group(1))
                 latest = int(match.group(2))
-                sample_limit = int(match.group(18))
-                if generation > latest or sample_limit != 50:
+                hm_rows = int(match.group(18))
+                total_rows = int(match.group(19))
+                current_hm = float(match.group(20))
+                sample_limit = int(match.group(21))
+                if (generation > latest or sample_limit != 50 or
+                        hm_rows > total_rows or current_hm <= 0):
                     invalid.append(
-                        f"{line.timestamp} gen={generation} latest={latest} sampleLimit={sample_limit}"
+                        f"{line.timestamp} gen={generation} latest={latest} "
+                        f"hm={hm_rows}/{total_rows} current={current_hm} "
+                        f"sampleLimit={sample_limit}"
                     )
                 applies.append((generation, latest, sample_limit))
             elif line.message.startswith("DT range preview stale-drop"):
@@ -880,8 +1186,18 @@ class DataFlowValidator:
             if match:
                 list_generations.append(int(match.group(1)))
         final_caught_up = not list_generations or generations[-1] >= list_generations[-1]
-        lagged_applies = sum(1 for generation, latest, _ in applies if generation < latest)
-        ok = not invalid and monotonic and final_caught_up
+        lagged_applies = sum(1 for generation, latest, _ in applies if generation != latest)
+        sustained_scroll = intents >= 100
+        backpressure_visible = (
+            not sustained_scroll or
+            (len(generations) >= 2 and
+             lagged_applies >= 1 and
+             len(generations) < intents)
+        )
+        ok = (
+            not invalid and monotonic and final_caught_up and
+            backpressure_visible
+        )
         report.add(
             self.domain,
             "D3.range-preview",
@@ -889,6 +1205,7 @@ class DataFlowValidator:
             f"intent={intents} apply={len(generations)} 跳讀上畫={lagged_applies} "
             f"generation={generations[0]}~{generations[-1]} "
             f"倒退上畫={0 if monotonic else 1} 最終追上={1 if final_caught_up else 0} "
+            f"大量滾動守門={1 if backpressure_visible else 0} "
             f"格式錯誤={len(invalid)}",
         )
 

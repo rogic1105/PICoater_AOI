@@ -1,5 +1,6 @@
 using System;
 using System.Threading;
+using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Widgets;
@@ -41,11 +42,12 @@ namespace AniloxRoll.Monitor.UI.Services
             string grabId,
             DateTime hintFrom,
             DateTime hintTo,
-            int cameraCount)
+            int cameraCount,
+            CsvConfigSnapshot preparedConfig = null)
         {
             SingleGrabCurveSummaryStore.NotifyReadActivity();
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            var config = InspectionConfigRepository.LoadForGrabId(
+            var config = preparedConfig ?? InspectionConfigRepository.LoadForGrabId(
                 root, grabId, hintFrom, hintTo);
             long configMs = sw.ElapsedMilliseconds;
             var info = new GrabIdInfo
@@ -79,6 +81,15 @@ namespace AniloxRoll.Monitor.UI.Services
                 MergeMs = profile.MergeMs,
                 SummaryMs = profile.SummaryMs
             };
+        }
+
+        public Task<SingleGrabCurveProfile> PrefetchAsync(
+            string root, GrabIdInfo info, int cameraCount)
+        {
+            if (info == null) throw new ArgumentNullException(nameof(info));
+            string cacheKey = SingleGrabCurveCache.BuildKey(root, info, cameraCount);
+            return _cache.GetOrLoadAsync(
+                cacheKey, () => LoadProfile(root, info, cameraCount));
         }
 
         private static SingleGrabCurveProfile LoadProfile(

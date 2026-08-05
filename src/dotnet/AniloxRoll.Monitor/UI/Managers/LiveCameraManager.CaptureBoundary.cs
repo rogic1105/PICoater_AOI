@@ -18,10 +18,30 @@ namespace AniloxRoll.Monitor.UI.Managers
             Verified
         }
 
+        // State + Event -> Next State + Action:
+        // Closed + Arm -> AwaitingHeadProbe + discard one boundary frame per camera.
+        // AwaitingHeadProbe + aligned complete probe -> AwaitingFirstSet + allow product frames.
+        // AwaitingHeadProbe + invalid complete probe -> Rejected + close gate and fail waiter.
+        // AwaitingFirstSet + aligned complete set -> Active + complete waiter.
+        // AwaitingFirstSet + invalid complete set -> Rejected + close gate and fail waiter.
+        // Any + Stop/rearm -> Closed/new AwaitingHeadProbe + invalidate the previous waiter.
+        private enum CaptureBoundaryAdmissionState
+        {
+            Closed,
+            AwaitingHeadProbe,
+            AwaitingFirstSet,
+            Active,
+            Rejected
+        }
+
         private const int IdleCapturePreparationRetryMs = 3000;
         private readonly object _captureBoundaryLock = new object();
         private CapturePhaseEligibility _capturePhaseEligibility =
             CapturePhaseEligibility.Invalid;
+        private CaptureBoundaryAdmissionState _captureBoundaryAdmissionState =
+            CaptureBoundaryAdmissionState.Closed;
+        private readonly Dictionary<int, long> _headBoundaryTicks =
+            new Dictionary<int, long>();
         private readonly Dictionary<int, long> _firstAcceptedTicks =
             new Dictionary<int, long>();
         private TaskCompletionSource<bool> _firstSetReadyCompletion;
@@ -236,19 +256,39 @@ namespace AniloxRoll.Monitor.UI.Managers
                 return false;
 
             bool headBoundaryDropped = false;
+            bool headProbeReady = false;
             bool firstSetReady = false;
             bool tailAccepted = false;
             lock (_captureBoundaryLock)
             {
+                if (_captureBoundaryAdmissionState ==
+                        CaptureBoundaryAdmissionState.Closed ||
+                    _captureBoundaryAdmissionState ==
+                        CaptureBoundaryAdmissionState.Rejected)
+                    return false;
+
                 // Hot standby keeps filling a line-scan frame while the light is off between
-                // captures. The first callback after gate-open can therefore contain rows from
-                // both sides of the IO boundary. Reject one callback per camera before admitting
-                // the first complete capture set.
-                if (_headBoundaryPendingCameraIds.Remove(cameraId))
+                // captures. Treat the first callback from every camera as a phase probe: it is
+                // always discarded, and no later callback is admitted until the complete probe
+                // set proves that the cameras are still aligned at the IO boundary.
+                if (_captureBoundaryAdmissionState ==
+                    CaptureBoundaryAdmissionState.AwaitingHeadProbe)
                 {
-                    headBoundaryDropped = true;
+                    if (_headBoundaryPendingCameraIds.Remove(cameraId))
+                    {
+                        _headBoundaryTicks[cameraId] = frameStartTicks;
+                        headBoundaryDropped = true;
+                        headProbeReady = _headBoundaryPendingCameraIds.Count == 0;
+                    }
+                    else
+                    {
+                        return false;
+                    }
                 }
-                else
+                else if (_captureBoundaryAdmissionState ==
+                             CaptureBoundaryAdmissionState.AwaitingFirstSet ||
+                         _captureBoundaryAdmissionState ==
+                             CaptureBoundaryAdmissionState.Active)
                 {
                     if (_tailDrainActive)
                     {
@@ -265,11 +305,17 @@ namespace AniloxRoll.Monitor.UI.Managers
                     }
 
                     _lastAcceptedTicks[cameraId] = frameStartTicks;
-                    if (_firstPendingCameraIds.Remove(cameraId))
+                    if (_captureBoundaryAdmissionState ==
+                            CaptureBoundaryAdmissionState.AwaitingFirstSet &&
+                        _firstPendingCameraIds.Remove(cameraId))
                     {
                         _firstAcceptedTicks[cameraId] = frameStartTicks;
                         firstSetReady = _firstPendingCameraIds.Count == 0;
                     }
+                }
+                else
+                {
+                    return false;
                 }
             }
 
@@ -278,6 +324,8 @@ namespace AniloxRoll.Monitor.UI.Managers
                 FlowTrace.Log(
                     $"capture head frame dropped cam{cameraId} tick={frameStartTicks} " +
                     "reason=cross-boundary");
+                if (headProbeReady)
+                    ValidateHeadBoundaryProbeSet();
                 return false;
             }
             if (tailAccepted)
@@ -286,11 +334,62 @@ namespace AniloxRoll.Monitor.UI.Managers
                     $"capture tail frame accepted cam{cameraId} tick={frameStartTicks}");
             }
             if (firstSetReady)
-                ValidateFirstAcceptedFrameSet();
+                return ValidateFirstAcceptedFrameSet();
             return true;
         }
 
-        private void ValidateFirstAcceptedFrameSet()
+        private void ValidateHeadBoundaryProbeSet()
+        {
+            Dictionary<int, long> ticks;
+            AniloxCamera[] targets;
+            TaskCompletionSource<bool> completion;
+            lock (_captureBoundaryLock)
+            {
+                if (_captureBoundaryAdmissionState !=
+                    CaptureBoundaryAdmissionState.AwaitingHeadProbe)
+                    return;
+                ticks = new Dictionary<int, long>(_headBoundaryTicks);
+                targets = _cameras
+                    .Where(cam => cam != null && ticks.ContainsKey(cam.CameraId))
+                    .ToArray();
+                completion = _firstSetReadyCompletion;
+            }
+
+            string reason;
+            bool aligned = TryValidateCapturePhase(
+                targets,
+                cam => ticks[cam.CameraId],
+                out reason,
+                true,
+                "capture head phase");
+            bool transitionApplied;
+            lock (_captureBoundaryLock)
+            {
+                transitionApplied = _captureBoundaryAdmissionState ==
+                    CaptureBoundaryAdmissionState.AwaitingHeadProbe;
+                if (transitionApplied)
+                {
+                    _captureBoundaryAdmissionState = aligned
+                        ? CaptureBoundaryAdmissionState.AwaitingFirstSet
+                        : CaptureBoundaryAdmissionState.Rejected;
+                }
+            }
+            if (!transitionApplied)
+                return;
+
+            FlowTrace.Log(
+                $"capture head guard path={_captureStartPath} " +
+                $"cams={string.Join(",", targets.Select(cam => cam.CameraId))} " +
+                $"aligned={aligned}");
+            if (aligned)
+                return;
+
+            _captureGateOpen = false;
+            completion?.TrySetResult(false);
+            InvalidateCapturePhase("head-probe-" + reason);
+        }
+
+        private bool ValidateFirstAcceptedFrameSet()
         {
             Dictionary<int, long> ticks;
             AniloxCamera[] targets;
@@ -311,13 +410,32 @@ namespace AniloxRoll.Monitor.UI.Managers
                 out reason,
                 true,
                 "capture first-set phase");
+            bool transitionApplied;
+            lock (_captureBoundaryLock)
+            {
+                transitionApplied = _captureBoundaryAdmissionState ==
+                    CaptureBoundaryAdmissionState.AwaitingFirstSet;
+                if (transitionApplied)
+                {
+                    _captureBoundaryAdmissionState = aligned
+                        ? CaptureBoundaryAdmissionState.Active
+                        : CaptureBoundaryAdmissionState.Rejected;
+                }
+            }
+            if (!transitionApplied)
+                return false;
+
             FlowTrace.Log(
                 $"capture first-set ready path={_captureStartPath} " +
                 $"cams={string.Join(",", targets.Select(cam => cam.CameraId))} " +
                 $"aligned={aligned}");
             completion?.TrySetResult(aligned);
             if (!aligned)
+            {
+                _captureGateOpen = false;
                 InvalidateCapturePhase("first-set-" + reason);
+            }
+            return aligned;
         }
 
         private bool ArmCaptureBoundary(IList<AniloxCamera> targets)
@@ -331,6 +449,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 previousFirstSet = _firstSetReadyCompletion;
                 _firstSetReadyCompletion = new TaskCompletionSource<bool>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
+                _captureBoundaryAdmissionState =
+                    CaptureBoundaryAdmissionState.AwaitingHeadProbe;
+                _headBoundaryTicks.Clear();
                 _firstAcceptedTicks.Clear();
                 _firstPendingCameraIds.Clear();
                 _headBoundaryPendingCameraIds.Clear();
@@ -362,6 +483,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 completion = _tailDrainCompletion;
                 firstSetCompletion = _firstSetReadyCompletion;
                 _firstSetReadyCompletion = null;
+                _captureBoundaryAdmissionState =
+                    CaptureBoundaryAdmissionState.Closed;
+                _headBoundaryTicks.Clear();
                 _firstAcceptedTicks.Clear();
                 _firstPendingCameraIds.Clear();
                 _headBoundaryPendingCameraIds.Clear();

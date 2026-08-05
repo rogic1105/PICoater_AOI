@@ -362,6 +362,45 @@ class ReviewFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.PASS, result(report, "R2.thumbnail").status)
 
+    def test_review_curve_backpressure_accepts_80ms_policy_and_coalescing(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【單片序號】→ 260804-080000",
+                "RV curve load policy latest-only minCycleMs=80",
+                "RV curves paths 260804-080000 root=D:\\Anilox\\Captures "
+                "images=20 cams=2 cfg=yes align=summary source=summary coalesced=3",
+                "RV curves 260804-080000（12ms） presentation=progressive",
+                "RV curves paths 260804-080010 root=D:\\Anilox\\Captures "
+                "images=20 cams=2 cfg=yes align=summary source=summary coalesced=0",
+                "RV curves 260804-080010（10ms） presentation=latest",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "R2.backpressure").status)
+
+    def test_review_curve_backpressure_rejects_unthrottled_policy(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【單片序號】→ 260804-080000",
+                "RV curve load policy latest-only minCycleMs=0",
+                "RV curves paths 260804-080000 root=D:\\Anilox\\Captures "
+                "images=20 cams=2 cfg=yes align=summary source=summary coalesced=0",
+                "RV curves 260804-080000（12ms） presentation=latest",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "R2.backpressure").status)
+
+    def test_review_curve_backpressure_rejects_coalescing_without_progressive_display(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "ui:【單片序號】→ 260804-080000",
+                "RV curve load policy latest-only minCycleMs=80",
+                "RV curves paths 260804-080000 root=D:\\Anilox\\Captures "
+                "images=20 cams=2 cfg=yes align=summary source=summary coalesced=3",
+                "RV curves 260804-080000（12ms） presentation=latest",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "R2.backpressure").status)
+
     def test_review_thumbnail_begin_for_non_latest_selection_fails(self):
         report = ReviewFlowValidator().validate(
             session(
@@ -385,6 +424,31 @@ class ReviewFlowValidatorTests(unittest.TestCase):
             )
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "R2.thumbnail").status)
+
+    def test_review_adjacent_prefetch_accepts_announced_neighbor_hit(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "RV prefetch begin center=260804-090000 "
+                "neighbors=260804-085959|260804-090001",
+                "RV prefetch ready center=260804-090000 "
+                "neighbor=260804-085959 thumbnail=cold total=40ms",
+                "RV thumbnail begin 260804-085959",
+                "RV thumbnail done 260804-085959 total=0ms decode=6ms "
+                "images=7 ratio=5.0 source=atlas cache=hit atlas=1920x1080",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "R2.prefetch").status)
+
+    def test_review_adjacent_prefetch_rejects_unannounced_ready(self):
+        report = ReviewFlowValidator().validate(
+            session(
+                "RV prefetch begin center=260804-090000 "
+                "neighbors=260804-085959",
+                "RV prefetch ready center=260804-090000 "
+                "neighbor=260804-090001 thumbnail=cold total=40ms",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "R2.prefetch").status)
 
     def test_review_assets_accept_archive_source(self):
         report = ReviewFlowValidator().validate(
@@ -427,7 +491,120 @@ class ReviewFlowValidatorTests(unittest.TestCase):
 
 
 class DataFlowValidatorTests(unittest.TestCase):
-    def test_range_preview_paints_running_then_skips_to_latest(self):
+    def test_column_chart_peak_matches_single_record_verdict(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT curve display 260804-135456 mode=mean "
+                "mean=0.7000/0.8000 max=0.7200/2.0000 scale=1.0000 points=128",
+                "DT verdict 260804-135456 cam=1 mode=mean "
+                "mean=0.7000/0.8000 enabled=1 max=0.7200/2.0000 enabled=0 "
+                "result=pass cause=none source=visible-merged-curve",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.chart-verdict").status
+        )
+
+    def test_column_chart_peak_rejects_hidden_verdict_peak(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT curve display 260804-135456 mode=mean "
+                "mean=0.6900/0.8000 max=0.7000/2.0000 scale=2.0000 points=500",
+                "DT verdict 260804-135456 cam=1 mode=mean "
+                "mean=1.3821/0.8000 enabled=1 max=1.4080/2.0000 enabled=0 "
+                "result=fail cause=mean source=visible-merged-curve",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "D1.chart-verdict").status
+        )
+
+    def test_column_verdict_uses_mean_and_max_thresholds_independently(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict 260804-135533 cam=1 mean=0.3341/0.2000 "
+                "max=0.3366/0.5000 result=fail cause=mean source=visible-merged-curve",
+                "DT verdict 260804-135533 cam=1 mean=0.3341/0.5000 "
+                "max=0.3366/0.5000 result=pass cause=none source=merged-curve",
+                "DT verdict 260804-135533 cam=1 mean=0.3341/0.5000 "
+                "max=0.3366/0.3000 result=fail cause=max source=merged-curve",
+                "DT verdict 260804-135533 cam=1 mean=0.3341/0.3000 "
+                "max=0.3366/0.3000 result=fail cause=both source=merged-curve",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D1.verdict").status)
+
+    def test_column_verdict_rejects_curve_max_compared_to_mean_threshold(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict 260804-135533 cam=1 mean=0.1000/0.2000 "
+                "max=0.4000/0.6000 result=fail cause=max source=merged-curve"
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D1.verdict").status)
+
+    def test_column_verdict_click_mean_mode_ignores_maximum(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict click 260804-135344 cam=1 mode=mean "
+                "mean=0.3000/0.4000 enabled=1 max=0.9000/0.5000 enabled=0 "
+                "result=pass cause=none list=pass source=curve-index",
+                "DT verdict click done 260804-135344 cams=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.verdict-click").status
+        )
+
+    def test_column_verdict_click_max_mode_ignores_mean(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict click 260804-135344 cam=1 mode=max "
+                "mean=1.5000/1.2000 enabled=0 max=1.8000/2.0000 enabled=1 "
+                "result=pass cause=none list=pass source=curve-index",
+                "DT verdict click done 260804-135344 cams=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.verdict-click").status
+        )
+
+    def test_column_verdict_click_rejects_list_result_mismatch(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict click 260804-135344 cam=1 mode=both "
+                "mean=0.3000/0.4000 enabled=1 max=0.4500/0.5000 enabled=1 "
+                "result=pass cause=none list=fail source=curve-index",
+                "DT verdict click done 260804-135344 cams=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "D1.verdict-click").status
+        )
+
+    def test_column_verdict_index_accounts_for_summary_bins_and_missing(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict index apply=ok gen=1 summaries=1388 bins=590 "
+                "missing=5/1983 cams=3956 verdicts=3956 ms=12000"
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.verdict-index").status
+        )
+
+    def test_column_verdict_index_rejects_unaccounted_grabs(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict index apply=ok gen=1 summaries=1388 bins=500 "
+                "missing=5/1983 cams=3900 verdicts=3900 ms=12000"
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "D1.verdict-index").status
+        )
+
+    def test_range_preview_finishes_running_then_jumps_to_latest(self):
         report = DataFlowValidator().validate(
             session(
                 "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic "
@@ -436,12 +613,12 @@ class DataFlowValidatorTests(unittest.TestCase):
                 "DT range list preview gen=1 range=260721-080000~260721-080010 rows=11 ms=1 source=index",
                 "ui:【序號範圍-結束】變更",
                 "DT range list preview gen=2 range=260721-080000~260721-080020 rows=21 ms=1 source=index",
-                "DT range preview apply gen=1 latest=2 range=260721-080000~260721-080010 "
-                "loadMs=120 drawMs=2 meanRows=50 maxRows=50 method=top-maxcmean "
-                "coverage=11/11 rankedCams=7/7 index=1/0 cache=0/100 sampleLimit=50",
+                "DT range preview apply gen=1 latest=2 range=260721-080000~260721-080010 loadMs=10 drawMs=2 "
+                "meanRows=11 maxRows=11 method=top-maxcmean coverage=11/11 rankedCams=7/7 "
+                "index=1/0 cache=0/100 hmCoverage=11/11 hmCurrent=0.3000 sampleLimit=50",
                 "DT range preview apply gen=2 latest=2 range=260721-080000~260721-080020 loadMs=10 drawMs=2 "
                 "meanRows=21 maxRows=21 method=top-maxcmean coverage=21/21 rankedCams=7/7 "
-                "index=1/0 cache=100/0 sampleLimit=50",
+                "index=1/0 cache=100/0 hmCoverage=21/21 hmCurrent=0.3000 sampleLimit=50",
                 "DT range settle → refresh",
             )
         )
@@ -457,11 +634,65 @@ class DataFlowValidatorTests(unittest.TestCase):
                 "DT range list preview gen=4 range=260721-080000~260721-080020 rows=21 ms=1 source=index",
                 "DT range preview apply gen=3 latest=4 range=260721-080000~260721-080010 loadMs=10 drawMs=2 "
                 "meanRows=50 maxRows=50 method=top-maxcmean coverage=11/11 rankedCams=7/7 "
-                "index=1/0 cache=0/100 sampleLimit=50",
+                "index=1/0 cache=0/100 hmCoverage=11/11 hmCurrent=0.3000 sampleLimit=50",
                 "DT range settle → refresh",
             )
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "D3.range-preview").status)
+
+    def test_sustained_range_scroll_requires_visible_jump_and_final_catch_up(self):
+        lines = [
+            "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic "
+            "curveSamples=50 curveCacheEntries=2048 curveCacheMB=256",
+        ]
+        for generation in range(1, 101):
+            lines.append("ui:【序號範圍-結束】變更")
+            lines.append(
+                "DT range list preview gen={} range=260721-080000~260721-080020 "
+                "rows=21 ms=1 source=index".format(generation)
+            )
+        lines.extend([
+            "DT range preview apply gen=20 latest=80 range=260721-080000~260721-080010 "
+            "loadMs=10 drawMs=2 meanRows=21 maxRows=21 method=top-maxcmean "
+            "coverage=21/21 rankedCams=7/7 index=1/0 cache=0/100 "
+            "hmCoverage=21/21 hmCurrent=0.3000 sampleLimit=50",
+            "DT range preview apply gen=100 latest=100 range=260721-080000~260721-080020 "
+            "loadMs=10 drawMs=2 meanRows=21 maxRows=21 method=top-maxcmean "
+            "coverage=21/21 rankedCams=7/7 index=1/0 cache=100/0 "
+            "hmCoverage=21/21 hmCurrent=0.3000 sampleLimit=50",
+            "DT range settle → refresh",
+        ])
+        report = DataFlowValidator().validate(session(*lines))
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.range-preview").status)
+
+    def test_sustained_range_scroll_rejects_final_only_curve(self):
+        lines = [
+            "DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic "
+            "curveSamples=50 curveCacheEntries=2048 curveCacheMB=256",
+        ]
+        for generation in range(1, 101):
+            lines.append("ui:【序號範圍-結束】變更")
+            lines.append(
+                "DT range list preview gen={} range=260721-080000~260721-080020 "
+                "rows=21 ms=1 source=index".format(generation)
+            )
+        lines.extend([
+            "DT range preview apply gen=100 latest=100 range=260721-080000~260721-080020 "
+            "loadMs=10 drawMs=2 meanRows=21 maxRows=21 method=top-maxcmean "
+            "coverage=21/21 rankedCams=7/7 index=1/0 cache=100/0 "
+            "hmCoverage=21/21 hmCurrent=0.3000 sampleLimit=50",
+            "DT range settle → refresh",
+        ])
+        report = DataFlowValidator().validate(session(*lines))
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.range-preview").status)
+
+    def test_virtual_list_fallback_is_contract_failure(self):
+        report = DataFlowValidator().validate(
+            session("DT list virtual fallback index=42 rows=0 native=43099 reason=stale-index")
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "D2.virtual-list").status
+        )
 
     def test_fail_filter_requires_range_option_evidence(self):
         report = DataFlowValidator().validate(
@@ -1168,6 +1399,78 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
                 "capture head frame dropped cam2 tick=102 reason=cross-boundary",
                 "capture first-set ready path=verified-standby "
                 "cams=1,2 aligned=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.head-guard").status
+        )
+
+    def test_head_phase_guard_allows_first_set_only_after_aligned_probe(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture head frame dropped cam2 tick=102 reason=cross-boundary",
+                "capture head guard path=verified-standby cams=1,2 aligned=True",
+                "capture first-set ready path=verified-standby "
+                "cams=1,2 aligned=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.head-guard").status
+        )
+
+    def test_head_phase_guard_rejection_stops_without_first_set(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture head frame dropped cam2 tick=120 reason=cross-boundary",
+                "capture head guard path=verified-standby cams=1,2 aligned=False",
+                "StopGrab",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.head-guard").status
+        )
+
+    def test_head_phase_guard_rejection_followed_by_first_set_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture head frame dropped cam2 tick=120 reason=cross-boundary",
+                "capture head guard path=verified-standby cams=1,2 aligned=False",
+                "capture first-set ready path=verified-standby "
+                "cams=1,2 aligned=True",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.head-guard").status
+        )
+
+    def test_head_phase_guard_rejection_without_stop_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture head frame dropped cam2 tick=120 reason=cross-boundary",
+                "capture head guard path=verified-standby cams=1,2 aligned=False",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "F2.head-guard").status
+        )
+
+    def test_head_phase_guard_rejection_followed_by_product_output_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "capture gate open cams=2 warm=True path=verified-standby",
+                "capture head frame dropped cam1 tick=100 reason=cross-boundary",
+                "capture head frame dropped cam2 tick=120 reason=cross-boundary",
+                "capture head guard path=verified-standby cams=1,2 aligned=False",
+                "firstFrame cam1 100x100 -> Waterfall",
+                "StopGrab",
             )
         )
         self.assertEqual(

@@ -328,6 +328,48 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void MuraProfileRepository_LoadRange_RescalesCurvesAndRankingToCurrentHm()
+        {
+            var svc = new InspectionLogService(() => _tempRoot);
+            var ts = new DateTime(2026, 3, 30, 12, 30, 0);
+            var captureHm1 = new CsvConfigSnapshot(
+                new double[7], new double[7], null, null, null,
+                1.0f, 1.0f, 0.5f, 0.8f, 0.5f, 0.8f, 0.0, 0.0, ts);
+            var captureHm2 = new CsvConfigSnapshot(
+                new double[7], new double[7], null, null, null,
+                2.0f, 1.0f, 0.5f, 0.8f, 0.5f, 0.8f, 0.0, 0.0, ts);
+            const string firstFile = "20260330_123000.000-1";
+            const string secondFile = "20260330_123000.100-1";
+
+            svc.AppendRecord("260330-123000", firstFile,
+                0.1f, 0.9f, 0.9f, 0.5f, 0.8f, 3001, 3001, 149, captureHm1, ts);
+            svc.AppendRecord("260330-123000", secondFile,
+                0.1f, 0.6f, 0.6f, 0.5f, 0.8f, 3001, 3001, 149, captureHm2, ts);
+
+            string imageDir = CaptureStoragePaths.DateImageDir(_tempRoot, ts);
+            Directory.CreateDirectory(imageDir);
+            WriteCurveBin(Path.Combine(imageDir, firstFile + CaptureFileNaming.MeanC), 100f);
+            WriteCurveBin(Path.Combine(imageDir, secondFile + CaptureFileNaming.MeanC), 100f);
+            WriteCurveBin(Path.Combine(imageDir, firstFile + CaptureFileNaming.MaxC), 100f);
+            WriteCurveBin(Path.Combine(imageDir, secondFile + CaptureFileNaming.MaxC), 100f);
+
+            var profiles = InspectionMuraProfileRepository.LoadRange(
+                _tempRoot,
+                new List<GrabIdInfo>
+                {
+                    new GrabIdInfo { GrabId = "260330-123000", Earliest = ts }
+                },
+                1,
+                currentHmV: 2.0f);
+
+            Assert.That(profiles.HmRows, Is.EqualTo(2));
+            Assert.That(profiles.Mean[1][0], Is.EqualTo(50f).Within(0.001f),
+                "Mean 候選是第一筆，HM 1→2 後應縮為一半");
+            Assert.That(profiles.Max[1][0], Is.EqualTo(100f).Within(0.001f),
+                "MaxCMean 也必先換算；第二筆換算後排名較高");
+        }
+
+        [Test]
         public void ComputeCurveMeanNormalized_ReturnsZeroToOneMean()
         {
             float value = CameraFrameSaver.ComputeCurveMeanNormalized(
@@ -357,6 +399,30 @@ namespace AniloxRoll.Monitor.Tests
 
             File.WriteAllText(current, "current");
             Assert.That(CaptureFileNaming.ResolveMaxC(basePath), Is.EqualTo(current));
+        }
+
+        [Test]
+        public void AppendColumnCurveSummary_WritesMergedPeaksForEachCamera()
+        {
+            var service = new InspectionLogService(() => _tempRoot);
+            var captureDate = new DateTime(2026, 8, 4, 8, 55, 59);
+
+            service.AppendColumnCurveSummary(
+                "260804-085559",
+                captureDate,
+                0.5f,
+                new[] { new[] { 12.75f, 38.25f }, new[] { 25.5f } },
+                new[] { new[] { 76.5f, 127.5f }, new[] { 153f } });
+
+            string csvPath = Path.Combine(
+                _tempRoot, "2026", "202608", "20260804.csv");
+            string[] lines = File.ReadAllLines(csvPath);
+
+            Assert.That(lines, Has.Length.EqualTo(2));
+            Assert.That(lines[0], Is.EqualTo(
+                "#CURVE-C,1,260804-085559,1,0.5,0.15,0.5"));
+            Assert.That(lines[1], Is.EqualTo(
+                "#CURVE-C,1,260804-085559,2,0.5,0.1,0.6"));
         }
 
         private static void WriteCurveBin(string path, params float[] values)

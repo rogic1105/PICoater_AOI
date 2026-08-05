@@ -33,6 +33,7 @@ namespace AniloxRoll.Monitor.Core.Services
             public int CameraId;
             public string BasePath;
             public float MaxCMean;
+            public float CaptureHmV;
         }
 
         private sealed class CachedDailyRecords
@@ -159,18 +160,21 @@ namespace AniloxRoll.Monitor.Core.Services
             int IndexHits,
             int IndexBuilds,
             int CurveCacheHits,
-            int CurveCacheMisses)
+            int CurveCacheMisses,
+            int HmRows)
             LoadRange(string rootPath, IList<GrabIdInfo> rangeInfos, int limit,
-                CancellationToken cancellationToken = default(CancellationToken))
+                CancellationToken cancellationToken = default(CancellationToken),
+                float currentHmV = 0f)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var meanResult = new Dictionary<int, float[]>();
             var maxResult = new Dictionary<int, float[]>();
             int meanRows = 0, maxRows = 0, scoredRows = 0, totalRows = 0;
+            int hmRows = 0;
             int rankedCams = 0;
             if (string.IsNullOrWhiteSpace(rootPath) || rangeInfos == null ||
                 rangeInfos.Count == 0 || limit <= 0)
-                return (meanResult, maxResult, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                return (meanResult, maxResult, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
             var rangeIds = new HashSet<string>(StringComparer.Ordinal);
             var dates = new HashSet<DateTime>();
@@ -206,6 +210,8 @@ namespace AniloxRoll.Monitor.Core.Services
                         if (!float.IsNaN(indexedRecord.MaxCMean) &&
                             !float.IsInfinity(indexedRecord.MaxCMean))
                             scoredRows++;
+                        if (indexedRecord.CaptureHmV > 0f)
+                            hmRows++;
                     }
                 }
             }
@@ -226,7 +232,9 @@ namespace AniloxRoll.Monitor.Core.Services
                 List<MuraCurveRecord> maxCandidates;
                 if (scored.Count == records.Count && scored.Count > 0)
                 {
-                    scored.Sort((left, right) => right.MaxCMean.CompareTo(left.MaxCMean));
+                    scored.Sort((left, right) =>
+                        ScaleScore(right, currentHmV).CompareTo(
+                            ScaleScore(left, currentHmV)));
                     maxCandidates = scored.GetRange(0, Math.Min(limit, scored.Count));
                 }
                 else
@@ -236,10 +244,10 @@ namespace AniloxRoll.Monitor.Core.Services
 
                 int localCacheHits = 0, localCacheMisses = 0;
                 float[] mean = Aggregate(
-                    meanCandidates, true, cancellationToken,
+                    meanCandidates, true, currentHmV, cancellationToken,
                     ref localCacheHits, ref localCacheMisses);
                 float[] max = Aggregate(
-                    maxCandidates, false, cancellationToken,
+                    maxCandidates, false, currentHmV, cancellationToken,
                     ref localCacheHits, ref localCacheMisses);
                 lock (resultLock)
                 {
@@ -256,7 +264,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
             return (meanResult, maxResult, meanRows, maxRows, scoredRows, totalRows,
                 rankedCams, recordsByCam.Count, indexHits, indexBuilds,
-                curveCacheHits, curveCacheMisses);
+                curveCacheHits, curveCacheMisses, hmRows);
         }
 
         private static CachedDailyRecords GetDailyRecords(
@@ -288,9 +296,12 @@ namespace AniloxRoll.Monitor.Core.Services
             {
                 using (var reader = InspectionCsvReader.OpenShared(csvPath))
                 {
+                    float captureHmV = 0f;
                     string line;
                     while ((line = reader.ReadLine()) != null)
                     {
+                        if (InspectionCsvReader.TryUpdateHmFromConfig(line, ref captureHmV))
+                            continue;
                         if (!InspectionCsvReader.TryParseRecord(line, out var record) ||
                             !InspectionCsvReader.TryExtractCameraId(record.FileName, out int camId) ||
                             !InspectionCsvReader.TryParseTimestamp(record.FileName, out DateTime timestamp))
@@ -313,7 +324,8 @@ namespace AniloxRoll.Monitor.Core.Services
                         {
                             CameraId = camId,
                             BasePath = basePath,
-                            MaxCMean = record.MaxCMean
+                            MaxCMean = record.MaxCMean,
+                            CaptureHmV = captureHmV
                         });
                         recordCount++;
                     }
@@ -391,7 +403,8 @@ namespace AniloxRoll.Monitor.Core.Services
         }
 
         private static float[] Aggregate(
-            List<MuraCurveRecord> records, bool mean, CancellationToken cancellationToken,
+            List<MuraCurveRecord> records, bool mean, float currentHmV,
+            CancellationToken cancellationToken,
             ref int curveCacheHits, ref int curveCacheMisses)
         {
             float[] result = null;
@@ -407,12 +420,15 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (curve == null || curve.Length == 0) continue;
                 if (result == null) result = new float[curve.Length];
                 if (result.Length != curve.Length) continue;
+                float valueScale = HessianRescaleHelper.Ratio(
+                    record.CaptureHmV, currentHmV);
 
                 for (int i = 0; i < curve.Length; i++)
                 {
                     if ((i & 1023) == 0) cancellationToken.ThrowIfCancellationRequested();
-                    if (mean) result[i] += curve[i];
-                    else if (curve[i] > result[i]) result[i] = curve[i];
+                    float value = curve[i] * valueScale;
+                    if (mean) result[i] += value;
+                    else if (value > result[i]) result[i] = value;
                 }
                 loaded++;
             }
@@ -424,6 +440,12 @@ namespace AniloxRoll.Monitor.Core.Services
                     result[i] /= loaded;
                 }
             return result;
+        }
+
+        private static float ScaleScore(MuraCurveRecord record, float currentHmV)
+        {
+            return record.MaxCMean * HessianRescaleHelper.Ratio(
+                record.CaptureHmV, currentHmV);
         }
 
         private static float[] LoadRangeCurve(

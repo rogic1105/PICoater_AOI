@@ -129,7 +129,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             }
             catch (OperationCanceledException)
             {
-                // A newer range selection or teardown owns cancellation.
+                // Leaving range mode or teardown owns cancellation.
             }
             finally
             {

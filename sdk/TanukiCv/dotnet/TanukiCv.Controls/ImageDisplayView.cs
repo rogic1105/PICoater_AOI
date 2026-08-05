@@ -250,7 +250,7 @@ namespace TanukiCv.Controls
                 regions.Add(new RectangleF(
                     placement.DestX / (float)k,
                     0,
-                    Math.Max(1, placement.SrcWidth / (float)k),
+                    Math.Max(1, placement.DestWidth / (float)k),
                     Math.Max(1, height / (float)k)));
             }
             return regions;
@@ -304,7 +304,7 @@ namespace TanukiCv.Controls
             foreach (var p in placements)
             {
                 if (p.CameraId != camId) continue;
-                double centerPx = (p.DestX + p.SrcWidth / 2.0) / k;   // 顯示（capped）座標
+                double centerPx = (p.DestX + p.DestWidth / 2.0) / k;   // 顯示（capped）座標
                 float zoom = _canvas.Zoom;
                 if (zoom <= 0) return;
                 float newPanX = _canvas.Width / 2.0f - (float)(centerPx * zoom);
@@ -610,7 +610,7 @@ namespace TanukiCv.Controls
             int bestCam = 0; double bestDist = double.MaxValue;
             foreach (var p in _mergePlacements)
             {
-                double c = (p.DestX + p.SrcWidth / 2.0) / k;
+                double c = (p.DestX + p.DestWidth / 2.0) / k;
                 double d = Math.Abs(viewCenterPx - c);
                 if (d < bestDist) { bestDist = d; bestCam = p.CameraId; }
             }
@@ -810,8 +810,13 @@ namespace TanukiCv.Controls
                 for (int pi = 0; pi < placements.Count; pi++)
                 {
                     var p = placements[pi];
-                    if (vx >= p.DestX && vx < p.DestX + p.SrcWidth)
-                    { f = _latest[p.CameraId - 1]; srcX = p.SrcLeft + (vx - p.DestX); break; }
+                    int destWidth = p.DestWidth;
+                    if (destWidth > 0 && vx >= p.DestX && vx < p.DestX + destWidth)
+                    {
+                        f = _latest[p.CameraId - 1];
+                        srcX = p.SrcLeft + (int)((long)(vx - p.DestX) * p.SrcWidth / destWidth);
+                        break;
+                    }
                 }
                 if (f == null || srcX < 0 || srcX >= f.W) continue; // 無畫面/越界 → 留黑
                 byte[] fb = f.Bytes; int fwid = f.W, fhei = f.H;
@@ -922,7 +927,9 @@ namespace TanukiCv.Controls
                 {
                     CameraId = i + 1,
                     StartMm = start,
-                    WidthPx = effectiveWidth
+                    WidthPx = effectiveWidth,
+                    DisplayWidthPx = Math.Max(1, (int)Math.Round(
+                        effectiveWidth * GetOpsMm(opsUm, i, refOpsMm) / refOpsMm))
                 });
             }
             if (geoms.Count == 0 || maxHeight <= 0) return false;
@@ -931,6 +938,13 @@ namespace TanukiCv.Controls
                 geoms, minStart, refOpsMm, Math.Max(1, feedScale),
                 mergeStrategy, out totalWidth);
             return totalWidth > 0;
+        }
+
+        private static double GetOpsMm(double[] opsUm, int cameraIndex, double fallbackMm)
+        {
+            if (opsUm != null && cameraIndex >= 0 && cameraIndex < opsUm.Length && opsUm[cameraIndex] > 0)
+                return opsUm[cameraIndex] / 1000.0;
+            return fallbackMm;
         }
 
         private Bitmap BuildMerge()
@@ -953,9 +967,9 @@ namespace TanukiCv.Controls
                 foreach (var p in placements)
                 {
                     Frame f = _latest[p.CameraId - 1];
-                    if (f == null || p.SrcWidth <= 0) continue;
+                    if (f == null || p.SrcWidth <= 0 || p.DestWidth <= 0) continue;
                     int dx = (int)Math.Round(p.DestX / (double)k);
-                    int dw = Math.Max(1, (int)Math.Round(p.SrcWidth / (double)k));
+                    int dw = Math.Max(1, (int)Math.Round(p.DestWidth / (double)k));
                     int dh = Math.Max(1, (int)Math.Round(f.H / (double)k));
                     int dy = _flip ? Math.Max(0, mh - dh) : 0;
                     using (var cam = GrayBitmap.From(f.Bytes, f.W, f.H, _flip, _mainColorMap))
@@ -1092,9 +1106,9 @@ namespace TanukiCv.Controls
                         foreach (var p in _mergePlacements)
                         {
                             Frame f = (p.CameraId - 1 >= 0 && p.CameraId - 1 < _latest.Length) ? _latest[p.CameraId - 1] : null;
-                            if (f == null || p.SrcWidth <= 0) continue;
+                            if (f == null || p.SrcWidth <= 0 || p.DestWidth <= 0) continue;
                             int dx0 = (int)Math.Round(p.DestX / (double)k);
-                            int dw  = Math.Max(1, (int)Math.Round(p.SrcWidth / (double)k));
+                            int dw  = Math.Max(1, (int)Math.Round(p.DestWidth / (double)k));
                             // 游標 Y 對應本相機 source 列（含上下翻轉，與 BuildMerge 的 _flip 一致）
                             int fy = cy * k; if (fy >= f.H) fy = f.H - 1;
                             int rowBase = (_flip ? (f.H - 1 - fy) : fy) * f.W;

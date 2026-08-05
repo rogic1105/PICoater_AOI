@@ -18,6 +18,10 @@ namespace AniloxRoll.Monitor
         private const string SingleInstanceMutexName = @"Global\PICoater.AOI.AniloxRoll.Monitor";
         private static string _runtimeLogDirectory = Path.GetTempPath();
         private static Mutex _singleInstanceMutex;
+        private static readonly object FatalLogSync = new object();
+        private static string _lastFatalFingerprint;
+        private static DateTime _lastFatalWriteUtc;
+        private static int _suppressedFatalCount;
 
         [STAThread]
         static void Main()
@@ -140,17 +144,37 @@ namespace AniloxRoll.Monitor
         /// <summary>Writes an unhandled exception to Trace and the managed runtime log directory.</summary>
         private static void LogFatal(string source, Exception ex)
         {
-            string msg = $"[FATAL][{source}] {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\r\n" +
-                         (ex?.ToString() ?? "(null exception object)") + "\r\n" +
-                         new string('-', 80) + "\r\n";
-            System.Diagnostics.Trace.WriteLine(msg);
-            try
+            lock (FatalLogSync)
             {
-                Directory.CreateDirectory(_runtimeLogDirectory);
-                File.AppendAllText(
-                    Path.Combine(_runtimeLogDirectory, "AniloxRoll-crash.log"), msg);
+                DateTime nowUtc = DateTime.UtcNow;
+                string fingerprint = source + "|" + ex?.GetType().FullName + "|" + ex?.Message;
+                if (string.Equals(fingerprint, _lastFatalFingerprint, StringComparison.Ordinal) &&
+                    nowUtc - _lastFatalWriteUtc < TimeSpan.FromSeconds(5))
+                {
+                    _suppressedFatalCount++;
+                    return;
+                }
+
+                string suppressed = _suppressedFatalCount > 0
+                    ? $"[FATAL] suppressed repeats={_suppressedFatalCount}\r\n"
+                    : string.Empty;
+                _lastFatalFingerprint = fingerprint;
+                _lastFatalWriteUtc = nowUtc;
+                _suppressedFatalCount = 0;
+
+                string msg = suppressed +
+                             $"[FATAL][{source}] {DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}\r\n" +
+                             (ex?.ToString() ?? "(null exception object)") + "\r\n" +
+                             new string('-', 80) + "\r\n";
+                System.Diagnostics.Trace.WriteLine(msg);
+                try
+                {
+                    Directory.CreateDirectory(_runtimeLogDirectory);
+                    File.AppendAllText(
+                        Path.Combine(_runtimeLogDirectory, "AniloxRoll-crash.log"), msg);
+                }
+                catch { /* Logging failure must not throw another unhandled exception. */ }
             }
-            catch { /* Logging failure must not throw another unhandled exception. */ }
         }
 
         /// <summary>

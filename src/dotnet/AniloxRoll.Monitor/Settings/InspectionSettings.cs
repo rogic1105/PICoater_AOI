@@ -122,30 +122,36 @@ namespace AniloxRoll.Monitor.Core.Data
         public float dd_HessianMaxFactorH { get => Recipe.HessianMaxFactorH; set => Recipe.HessianMaxFactorH = value; }
         [Category(CategoryInspection)][DisplayName("細線濾除")][PropertyOrder(8)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float de_RidgeSigma { get => Recipe.RidgeSigma; set => Recipe.RidgeSigma = value; }
-        [Category(CategoryInspection)][DisplayName("欄平均閾值")][PropertyOrder(9)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("欄曲線判定")][PropertyOrder(9)]
+        [Description("同時決定欄圖表顯示哪些曲線，以及報表 O/X 使用哪些門檻。")]
+        public ColumnCurveDisplayMode eca_ColumnCurveMode { get => Recipe.ColumnCurveMode; set => Recipe.ColumnCurveMode = value; }
+        [Category(CategoryInspection)][DisplayName("欄平均閾值")][PropertyOrder(10)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ec_ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
-        [Category(CategoryInspection)][DisplayName("欄最大閾值")][PropertyOrder(10)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("欄最大閾值")][PropertyOrder(11)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ed_ErrorValueMaxV  { get => Recipe.ErrorValueMaxV;  set => Recipe.ErrorValueMaxV  = value; }
-        [Category(CategoryInspection)][DisplayName("列平均閾值")][PropertyOrder(11)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("列平均閾值")][PropertyOrder(12)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ee_ErrorValueMeanH { get => Recipe.ErrorValueMeanH; set => Recipe.ErrorValueMeanH = value; }
-        [Category(CategoryInspection)][DisplayName("列最大閾值")][PropertyOrder(12)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("列最大閾值")][PropertyOrder(13)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ef_ErrorValueMaxH  { get => Recipe.ErrorValueMaxH;  set => Recipe.ErrorValueMaxH  = value; }
 
-        [Category(CategoryInspection)][DisplayName("─ 畫布設定 ─")][ReadOnly(true)][PropertyOrder(13)]
+        [Category(CategoryInspection)][DisplayName("─ 畫布設定 ─")][ReadOnly(true)][PropertyOrder(14)]
         public string fa_CanvasHeader => "";
-        [Category(CategoryInspection)][DisplayName("停止條件")][PropertyOrder(14)]
+        [Category(CategoryInspection)][DisplayName("停止條件")][PropertyOrder(15)]
         [Description("IO：由 IO High/Low 控制；時間或高度：IO High 啟動後，達到設定值才停止。")]
         public CaptureStopCondition fb_CaptureStopCondition { get => Recipe.CaptureStopCondition; set => Recipe.CaptureStopCondition = value; }
-        [Category(CategoryInspection)][DisplayName("總時間(秒)")][PropertyOrder(15)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        [Category(CategoryInspection)][DisplayName("總時間(秒)")][PropertyOrder(16)][TypeConverter(typeof(LeftAlignNumericConverter))]
         [Description("正式監控單次抓取的最長時間，單位為秒；到時走共用停止流程。")]
         public int fc_GrabLimitSeconds { get => Recipe.GrabLimitSeconds; set => Recipe.GrabLimitSeconds = value; }
-        [Category(CategoryInspection)][DisplayName("總高度")][PropertyOrder(16)]
+        [Category(CategoryInspection)][DisplayName("總高度")][PropertyOrder(17)]
         [Description("單位為 px。作為瀑布畫布總高度；停止條件為高度時，也作為七台相機共同完成列數的停止值。")]
         public int hg_WaterfallTotalHeight { get => ImageView.WaterfallTotalHeight; set => ImageView.WaterfallTotalHeight = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
         [Browsable(false)] public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
+        [Browsable(false)] public ColumnCurveDisplayMode ColumnCurveMode { get => Recipe.ColumnCurveMode; set => Recipe.ColumnCurveMode = value; }
+        [Browsable(false)] public bool ShowColumnMean => ColumnCurveMode != ColumnCurveDisplayMode.Max;
+        [Browsable(false)] public bool ShowColumnMax => ColumnCurveMode != ColumnCurveDisplayMode.Mean;
         [Browsable(false)] public float  HessianMaxFactorV      { get => Recipe.HessianMaxFactorV;      set => Recipe.HessianMaxFactorV      = value; }
         [Browsable(false)] public float  HessianMaxFactorH      { get => Recipe.HessianMaxFactorH;      set => Recipe.HessianMaxFactorH      = value; }
         [Browsable(false)] public float  RidgeSigma             { get => Recipe.RidgeSigma;             set => Recipe.RidgeSigma             = value; }

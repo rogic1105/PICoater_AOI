@@ -105,6 +105,72 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void ComputeDetailedByGrabIdRange_ColumnSummaryOverridesFrameVeto()
+        {
+            string csv =
+                "#CFG,2026-08-04T08:55:59.000,HessianMaxFactorV=0.5000\n" +
+                "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs\n" +
+                "260804-085559,20260804_085559.000-1,0,1,0.47,0.49,3000,3000.0,50.0\n" +
+                "#CURVE-C,1,260804-085559,1,0.5,0.15,0.49\n";
+            WriteCsv("20260804", csv);
+
+            var threshold = new ThresholdContext(0.5f, 0.2f, 0.6f);
+            List<GrabDetail> details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                _tempRoot, "260804-085559", "260804-085559", threshold);
+
+            Assert.That(details, Has.Count.EqualTo(1));
+            Assert.That(details[0].CamResult[0], Is.False,
+                "Merged CurveMean is below the mean threshold and merged CurveMax is below the max threshold");
+        }
+
+        [Test]
+        public void ComputeDetailedByGrabIdRange_ColumnSummaryUsesMaxThresholdForCurveMax()
+        {
+            string csv =
+                "#CFG,2026-08-04T08:55:59.000,HessianMaxFactorV=0.5000\n" +
+                "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs\n" +
+                "260804-085559,20260804_085559.000-1,0,0,0.10,0.30,3000,3000.0,50.0\n" +
+                "#CURVE-C,1,260804-085559,1,0.5,0.15,0.61\n";
+            WriteCsv("20260804", csv);
+
+            var threshold = new ThresholdContext(0.5f, 0.2f, 0.6f);
+            List<GrabDetail> details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                _tempRoot, "260804-085559", "260804-085559", threshold);
+
+            Assert.That(details[0].CamResult[0], Is.True,
+                "Merged CurveMax must cross the max threshold, not the mean threshold");
+        }
+
+        [Test]
+        public void IsColumnCurveFail_UsesSeparateMeanAndMaxThresholds()
+        {
+            var threshold = new ThresholdContext(0.5f, 0.2f, 0.6f);
+
+            bool? failed = threshold.IsColumnCurveFail(
+                new[] { 25.5f }, new[] { 127.5f }, 0.5f,
+                out float meanPeak, out float maxPeak);
+
+            Assert.That(failed, Is.False);
+            Assert.That(meanPeak, Is.EqualTo(0.1f).Within(0.0001f));
+            Assert.That(maxPeak, Is.EqualTo(0.5f).Within(0.0001f));
+        }
+
+        [TestCase(0.21f, 0.50f, ColumnFailureCause.Mean)]
+        [TestCase(0.10f, 0.61f, ColumnFailureCause.Max)]
+        [TestCase(0.21f, 0.61f, ColumnFailureCause.Both)]
+        [TestCase(0.20f, 0.60f, ColumnFailureCause.None)]
+        public void GetColumnFailureCause_IdentifiesTheThresholdThatWasCrossed(
+            float meanPeak, float maxPeak, ColumnFailureCause expected)
+        {
+            var threshold = new ThresholdContext(0.5f, 0.2f, 0.6f);
+
+            ColumnFailureCause actual = threshold.GetColumnFailureCause(
+                meanPeak, maxPeak, 0.5f);
+
+            Assert.That(actual, Is.EqualTo(expected));
+        }
+
+        [Test]
         public void LoadGrabIdInfos_ReturnsSortedByGrabId()
         {
             string csv =

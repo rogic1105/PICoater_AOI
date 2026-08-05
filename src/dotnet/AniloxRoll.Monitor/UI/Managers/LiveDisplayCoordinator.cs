@@ -368,7 +368,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (_waterfallView == null) return;
             if (_globalMerge.IsActive && _globalMerge.Merger != null && _globalMerge.Merger.SlotStartsMm != null)
             {
-                _waterfallView.SetLayout(_globalMerge.Merger.SlotStartsMm, null, _globalMerge.Merger.RefOpsMm);
+                var activeSettings = _getSettings();
+                _waterfallView.SetLayout(
+                    _globalMerge.Merger.SlotStartsMm,
+                    activeSettings?.GetCameraOpsUmArray(),
+                    _globalMerge.Merger.RefOpsMm);
                 return;
             }
 
@@ -377,7 +381,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             var startMm = settings.GetCameraStartPositionMmArray();
             var opsUm = settings.GetCameraOpsUmArray();
             double refOps = (opsUm != null && opsUm.Length > 0 && opsUm[0] > 0) ? opsUm[0] / 1000.0 : 0.024;
-            _waterfallView.SetLayout(startMm, null, refOps);
+            _waterfallView.SetLayout(startMm, opsUm, refOps);
         }
 
         /// <summary>放掉相機時呼叫：瀑布訂閱的是各 cam.OnWaterfallFrame，相機被 Free 後這些訂閱指向死物件，

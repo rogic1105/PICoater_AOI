@@ -137,6 +137,7 @@
     <Compile Include="Services\InspectionLogService.cs" />
     <Compile Include="Services\IoGrabController.cs" />
     <Compile Include="Services\IoState.cs" />
+    <Compile Include="Services\ColumnCurvePeakIndex.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
     <Compile Include="Services\InspectionCsvReader.cs" />
     <Compile Include="Services\InspectionConfigRepository.cs" />
@@ -223,6 +224,7 @@
     <Compile Include="UI\Services\ImageCacheService.cs" />
     <Compile Include="UI\Services\BitmapGrayConverter.cs" />
     <Compile Include="UI\Services\ReviewImageDataLoader.cs" />
+    <Compile Include="UI\Services\ReviewAdjacentPrefetchCache.cs" />
     <Compile Include="UI\Services\ReviewPeriodDataLoader.cs" />
     <Compile Include="UI\Services\SingleGrabCurveDataLoader.cs" />
     <Compile Include="UI\Services\SingleGrabCurveCache.cs" />

@@ -418,6 +418,10 @@ class LiveFlowValidator:
     def _check_capture_head_guard(
         self, session: FlowSession, report: CheckReport
     ) -> None:
+        has_phase_guard = any(
+            line.message.startswith("capture head guard ")
+            for line in session.lines
+        )
         contract_enabled = any(
             line.message == "experiment build=mil-edge-coverage-v8"
             for line in session.lines
@@ -437,15 +441,25 @@ class LiveFlowValidator:
 
         expected = None
         dropped = set()
+        head_approved = None
         opens = 0
         completed = 0
+        rejected = 0
+        rejection_pending_stop = False
         failures = []
 
         for line in session.lines:
             gate_match = re.match(r"capture gate open cams=(\d+)\b", line.message)
             if gate_match:
+                if rejection_pending_stop:
+                    failures.append(
+                        f"new gate opened before rejected capture stopped "
+                        f"at {line.timestamp}"
+                    )
                 expected = int(gate_match.group(1))
                 dropped = set()
+                head_approved = None
+                rejection_pending_stop = False
                 opens += 1
                 continue
 
@@ -467,6 +481,46 @@ class LiveFlowValidator:
                     )
                 else:
                     dropped.add(camera_id)
+                continue
+
+            guard_match = re.match(
+                r"capture head guard path=\S+ cams=([\d,]+) "
+                r"aligned=(True|False)$",
+                line.message,
+            )
+            if guard_match:
+                guard_cameras = {
+                    int(value) for value in guard_match.group(1).split(",")
+                }
+                aligned = guard_match.group(2) == "True"
+                if expected is None:
+                    failures.append(
+                        f"head phase guard without open gate at {line.timestamp}"
+                    )
+                elif len(dropped) != expected:
+                    failures.append(
+                        f"head phase guard before all probes were dropped "
+                        f"at {line.timestamp}: dropped={len(dropped)}/{expected}"
+                    )
+                elif dropped != guard_cameras:
+                    failures.append(
+                        f"head-drop cameras {sorted(dropped)} differ from phase probe "
+                        f"{sorted(guard_cameras)} at {line.timestamp}"
+                    )
+                head_approved = aligned
+                if not aligned:
+                    rejected += 1
+                    rejection_pending_stop = True
+                continue
+
+            if rejection_pending_stop and (
+                "firstFrame " in line.message
+                or line.message.startswith("capture csv ")
+            ):
+                failures.append(
+                    f"product output after rejected head phase "
+                    f"at {line.timestamp}: {line.message}"
+                )
                 continue
 
             first_set_match = re.match(
@@ -492,17 +546,28 @@ class LiveFlowValidator:
                         f"head-drop cameras {sorted(dropped)} differ from first set "
                         f"{sorted(first_set_cameras)} at {line.timestamp}"
                     )
+                elif has_phase_guard and head_approved is not True:
+                    failures.append(
+                        f"first accepted set before aligned head phase guard "
+                        f"at {line.timestamp}"
+                    )
                 else:
                     completed += 1
                 expected = None
                 dropped = set()
+                head_approved = None
                 continue
 
             if line.message == "StopGrab":
+                rejection_pending_stop = False
                 expected = None
                 dropped = set()
+                head_approved = None
 
-        if completed == 0 and not failures:
+        if rejection_pending_stop:
+            failures.append("rejected head phase was not followed by StopGrab")
+
+        if completed == 0 and rejected == 0 and not failures:
             report.add(
                 self.domain,
                 "F2.head-guard",
@@ -515,7 +580,8 @@ class LiveFlowValidator:
             self.domain,
             "F2.head-guard",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
-            f"gateOpens={opens} completed={completed} failures={len(failures)}"
+            f"gateOpens={opens} completed={completed} rejected={rejected} "
+            f"failures={len(failures)}"
             + (f"; first={failures[0]}" if failures else ""),
         )
 

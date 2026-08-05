@@ -58,6 +58,14 @@ namespace AniloxRoll.Monitor.Core.Data
     }
 
     [TypeConverter(typeof(EnumDescriptionConverter))]
+    public enum ColumnCurveDisplayMode
+    {
+        [Description("顯示平均")] Mean,
+        [Description("顯示最大")] Max,
+        [Description("顯示兩者")] Both
+    }
+
+    [TypeConverter(typeof(EnumDescriptionConverter))]
     public enum CaptureStopCondition
     {
         [Description("IO")]   IoSignal,
@@ -70,6 +78,7 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         [DisplayName("去背演算法")]    public BackgroundAlgorithm Algorithm { get; set; } = InspectionDefaults.Algorithm;
         [DisplayName("Ridge 方向")]    public RidgeDirection RidgeDir { get; set; } = InspectionDefaults.RidgeDir;
+        [DisplayName("欄曲線判定")] public ColumnCurveDisplayMode ColumnCurveMode { get; set; } = InspectionDefaults.ColumnCurveMode;
         [DisplayName("Hessian Max Factor V")] public float HessianMaxFactorV { get; set; } = InspectionDefaults.HessianMaxFactorV;
         [DisplayName("Hessian Max Factor H")] public float HessianMaxFactorH { get; set; } = InspectionDefaults.HessianMaxFactorH;
 
@@ -93,6 +102,8 @@ namespace AniloxRoll.Monitor.Core.Data
 
         public void Validate()
         {
+            if (!Enum.IsDefined(typeof(ColumnCurveDisplayMode), ColumnCurveMode))
+                ColumnCurveMode = InspectionDefaults.ColumnCurveMode;
             if (HessianMaxFactorV <= 0) HessianMaxFactorV = InspectionDefaults.HessianMaxFactorV;
             if (HessianMaxFactorH <= 0) HessianMaxFactorH = InspectionDefaults.HessianMaxFactorH;
             if (RidgeSigma < 1f) RidgeSigma = InspectionEngineConfig.DefaultRidgeSigma;   // 過小=近乎不模糊；過大 ksize 爆

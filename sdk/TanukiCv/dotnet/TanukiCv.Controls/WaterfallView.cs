@@ -53,9 +53,11 @@ namespace TanukiCv.Controls
         private double _rowPitchMm;
 
         // 三種顯示共用同一套時間軸與寫頭；各層分塊 lazy 配置，切換只換讀取層，不清歷史。
-        // _layerChunks[layer][ci] = byte[_fullW * ChunkRows]（null=黑）。
+        // _cameraLayerChunks[layer][camera][chunk] stores native camera pixels; layout is applied when reading.
         // _fullW 永遠是未裁切的完整資料寬；Crop 只改 _visibleW/_displaySourceLeftPx。
-        private byte[][][] _layerChunks;
+        // Preserve native pixels per camera. The current layout is composed only when LOD reads.
+        private byte[][][][] _cameraLayerChunks;
+        private readonly int[] _historyCameraWidths;
         private WaterfallFrameLayer _displayLayer = WaterfallFrameLayer.Raw;
         private int _fullW;
         private int _visibleW;
@@ -111,19 +113,24 @@ namespace TanukiCv.Controls
         private bool _clearVisibleTileOnNextRefresh;
         private sealed class BandJob
         {
-            public int Generation, FullW, BandH, BandStartRow;
+            public int Generation, BandH, BandStartRow;
             public bool Ring;
             public List<Span> Spans;
         }
         private struct Span
         {
             public byte[] Raw, Column, Row;
-            public int Sw, Sh, DestX, SrcLeft, SrcWidth;
+            public int CameraIndex, Sw, Sh;
+        }
+        private struct ColumnSample
+        {
+            public int CameraIndex, SourceX;
         }
 
         private int _defaultFrameW = 16384;           // 尚無幀的槽位用此寬度排佈局 → 7 槽寬度穩定
         private readonly int[] _cameraWidths;
         private double[] _startMm;
+        private double[] _opsUm;
         private double _refOpsMm = 0.024;
         private double _trimHeadMm, _trimTailMm;
         private double _displayStartMm;
@@ -134,6 +141,10 @@ namespace TanukiCv.Controls
         private volatile bool _virtualSet;
         private volatile bool _lodContentDirty;
         private long _awaitedLodGeneration;
+        private long _layoutRemapStartedMs;
+        private long _layoutRemapGeneration;
+        private int _layoutRemapHistoryRows;
+        private int _layoutRemapVisibleWidth;
 
         public event Action<int> SelectRequested;
         public event Action<double, double, double, double> ViewRangeMmChanged;
@@ -172,6 +183,8 @@ namespace TanukiCv.Controls
             _perCamLastWall = new long[_camCount];
             _perCamSeq = new long[_camCount];
             _cameraWidths = new int[_camCount];
+            _historyCameraWidths = new int[_camCount];
+            _cameraLayerChunks = CreateCameraLayerChunks();
             for (int i = 0; i < _camCount; i++) _perCamSeq[i] = -1;
 
             _canvas = new ImageCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
@@ -224,47 +237,59 @@ namespace TanukiCv.Controls
         /// 在首幀前即建立由設定決定的黑底座標畫布，使 grab 前後使用同一組視野。</summary>
         public void SetLayout(double[] startMm, double[] opsUm, double refOpsMm)
         {
+            var watch = Stopwatch.StartNew();
             int visibleW;
-            bool storageSizeChanged;
             bool visibleSizeChanged;
             double calibrationOps;
+            int historyRows;
+            string slots;
             lock (_lock)
             {
-                _startMm = startMm;
+                if (startMm != null) _startMm = (double[])startMm.Clone();
+                if (opsUm != null) _opsUm = (double[])opsUm.Clone();
                 if (refOpsMm > 0) _refOpsMm = refOpsMm;
                 calibrationOps = _refOpsMm;
                 int previousVisibleW = _visibleW;
                 visibleW = RebuildCameraPlacementsLocked(out int storageW);
-                storageSizeChanged =
-                    storageW > 0 && (_layerChunks == null || _fullW != storageW);
                 visibleSizeChanged = visibleW > 0 && previousVisibleW != visibleW;
-                if (storageSizeChanged)
-                {
-                    _fullW = storageW;
-                    _layerChunks = CreateLayerChunks();
-                    _writeRow = 0;
-                }
+                _fullW = storageW;
                 _visibleW = visibleW;
+                historyRows = _writeRow;
+                slots = BuildLayoutSlotTextLocked();
             }
 
             if (_screenMmPerPx > 0 && calibrationOps > 0)
                 try { _canvas.SetPhysicalCalibration(calibrationOps, _screenMmPerPx); } catch { }
             if (visibleW <= 0) return;
 
+            lock (_lock)
+            {
+                _layoutRemapStartedMs = _clock.ElapsedMilliseconds;
+                _layoutRemapGeneration = _canvas.LodContentGeneration + 1;
+                _layoutRemapHistoryRows = historyRows;
+                _layoutRemapVisibleWidth = visibleW;
+            }
+
             if (!_virtualSet || !_canvas.LodActive)
             {
                 _virtualSet = true;
                 _canvas.EnableLod(visibleW, _totalHeight, ProvideRegion);
             }
-            else if (storageSizeChanged || visibleSizeChanged)
+            else if (visibleSizeChanged)
             {
                 _canvas.UpdateLodVirtualSize(visibleW, _totalHeight);
             }
             else
             {
-                // START/OPS may change without changing the pixel width; republish the same view with new physical coordinates.
+                // The virtual size can stay constant while Start moves a slot. Re-render the tile too.
+                _canvas.RefreshLod(clearCurrentTile: true);
                 _canvas.SetView(_canvas.Zoom, _canvas.PanOffset);
             }
+
+            watch.Stop();
+            FlowLog?.Invoke(
+                $"layout remap storage=per-camera historyRows={historyRows} " +
+                $"virtual={visibleW}x{_totalHeight} slots={slots} ms={watch.ElapsedMilliseconds}");
         }
 
         /// <summary>
@@ -305,7 +330,7 @@ namespace TanukiCv.Controls
                     regions.Add(new RectangleF(
                         placement.DestX,
                         0,
-                        Math.Max(1, placement.SrcWidth),
+                        Math.Max(1, placement.DestWidth),
                         _totalHeight));
                 }
                 return regions;
@@ -391,7 +416,7 @@ namespace TanukiCv.Controls
             if (!found) return;
             float zoom = _canvas.Zoom;
             if (zoom <= 0) return;
-            float centerX = hit.DestX + Math.Max(1, hit.SrcWidth) / 2f;
+            float centerX = hit.DestX + Math.Max(1, hit.DestWidth) / 2f;
             _canvas.SetView(zoom, new PointF(_canvas.Width / 2f - centerX * zoom, _canvas.PanOffset.Y));
             RefireViewRange();
         }
@@ -423,7 +448,7 @@ namespace TanukiCv.Controls
                 writerWasRunning = _writerRunning;
                 _contentGeneration++;
                 generation = _contentGeneration;
-                ClearLayerChunksLocked();
+                ClearCameraLayerChunksLocked();
                 _writeRow = 0;
                 _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear();
                 _seenCams.Clear();
@@ -469,7 +494,11 @@ namespace TanukiCv.Controls
                 if (_cameraWidths[ci] != w)
                 {
                     _cameraWidths[ci] = w;
-                    _visibleW = RebuildCameraPlacementsLocked(out _);
+                    int previousVisibleW = _visibleW;
+                    _visibleW = RebuildCameraPlacementsLocked(out _fullW);
+                    if (_visibleW != previousVisibleW)
+                        _virtualSet = false;
+                    _lodContentDirty = true;
                 }
 
                 long lastTick = _perCamLastTick[ci];
@@ -610,56 +639,53 @@ namespace TanukiCv.Controls
             if (bandH == 0) return null;
 
             // 7 槽全排：所有配置相機進佈局（沒幀的槽用學到的寬或 _defaultFrameW）→ fullW = 完整 7 台寬
-            double minStart = double.MaxValue;
-            for (int i = 0; i < _camCount; i++)
+            bool historyWidthChanged = false;
+            foreach (var pair in slot.Frames)
             {
-                double sm = i < _startMm.Length ? _startMm[i] : 0;
-                if (sm < minStart) minStart = sm;
+                int cameraIndex = pair.Key - 1;
+                if (cameraIndex < 0 || cameraIndex >= _camCount) continue;
+                int previousWidth = _historyCameraWidths[cameraIndex];
+                if (previousWidth > 0 && previousWidth != pair.Value.W)
+                    historyWidthChanged = true;
             }
-            if (minStart == double.MaxValue) return null;
+            if (historyWidthChanged && _writeRow > 0)
+            {
+                _contentGeneration++;
+                ClearCameraLayerChunksLocked();
+                _writeQueue.Clear();
+                _writeRow = 0;
+                FlowLog?.Invoke($"history reset reason=camera-width generation={_contentGeneration}");
+            }
 
-            var cams = new List<MergeLayout.CamGeom>(_camCount);
-            for (int i = 0; i < _camCount; i++)
+            foreach (var pair in slot.Frames)
             {
-                int wpx = slot.Frames.TryGetValue(i + 1, out var f)
-                    ? f.W
-                    : (_cameraWidths[i] > 0 ? _cameraWidths[i] : _defaultFrameW);
-                cams.Add(new MergeLayout.CamGeom { CameraId = i + 1, StartMm = i < _startMm.Length ? _startMm[i] : 0, WidthPx = wpx });
-            }
-            var places = MergeLayout.Compute(
-                cams, minStart, _refOpsMm, 1, MergeOverlap.Midline, out int fullW);
-            if (fullW <= 0) return null;
-            if (_layerChunks == null || _fullW != fullW)
-            {
-                _fullW = fullW;
-                _layerChunks = CreateLayerChunks();
-                _writeRow = 0; _virtualSet = false;
+                int cameraIndex = pair.Key - 1;
+                if (cameraIndex >= 0 && cameraIndex < _camCount)
+                    _historyCameraWidths[cameraIndex] = pair.Value.W;
             }
 
             bool ring = _fullMode == WaterfallFullMode.Ring;
             if (!ring && _writeRow + bandH > _totalHeight)
             {
-                ClearLayerChunksLocked(); // Restart：滿 → 三層黑幕一起重來
+                ClearCameraLayerChunksLocked(); // Restart: clear every camera layer together.
                 _writeRow = 0;
             }
             int bandStart = _writeRow;
 
             var spans = new List<Span>();
-            foreach (var p in places)
+            foreach (var pair in slot.Frames)
             {
-                int i = p.CameraId - 1;
-                if (i < 0 || i >= _camCount || p.SrcWidth <= 0) continue;
-                if (!slot.Frames.TryGetValue(p.CameraId, out var f)) continue; // 沒幀的槽不放 → 補黑
+                int i = pair.Key - 1;
+                if (i < 0 || i >= _camCount) continue;
+                Frame f = pair.Value;
                 spans.Add(new Span
                 {
                     Raw = f.Raw,
                     Column = f.Column,
                     Row = f.Row,
+                    CameraIndex = i,
                     Sw = f.W,
-                    Sh = f.H,
-                    DestX = p.DestX,
-                    SrcLeft = p.SrcLeft,
-                    SrcWidth = p.SrcWidth
+                    Sh = f.H
                 });
             }
 
@@ -684,7 +710,6 @@ namespace TanukiCv.Controls
             return new BandJob
             {
                 Generation = _contentGeneration,
-                FullW = fullW,
                 BandH = bandH,
                 BandStartRow = bandStart,
                 Ring = ring,
@@ -722,10 +747,9 @@ namespace TanukiCv.Controls
             });
         }
 
-        // 背景：把 band 逐行寫進分塊儲存（每行短持鎖，讓 PushFrame/provider 能交錯）。
+        // Background writer: store each camera in native pixels. Layout is applied by ProvideRegion.
         private void WriteBand(BandJob job)
         {
-            int fullW = job.FullW;
             for (int y = 0; y < job.BandH; y++)
             {
                 if (_disposed) return;
@@ -735,26 +759,33 @@ namespace TanukiCv.Controls
                 lock (_lock)
                 {
                     if (job.Generation != _contentGeneration) return;
-                    if (_layerChunks == null || _fullW != fullW) return; // 佈局已換 → 放棄這份 job
-                    int rowBase = off * fullW;
-                    for (int layerIndex = 0; layerIndex < _layerChunks.Length; layerIndex++)
+                    if (_cameraLayerChunks == null) return;
+                    for (int layerIndex = 0; layerIndex < _cameraLayerChunks.Length; layerIndex++)
                     {
-                        byte[][] layerChunks = _layerChunks[layerIndex];
-                        var chunk = layerChunks[ci];
-                        if (chunk == null) { chunk = new byte[fullW * ChunkRows]; layerChunks[ci] = chunk; }
-                        Array.Clear(chunk, rowBase, fullW); // 黑底（補黑 + 槽間空隙 + Ring 覆蓋舊內容）
+                        // Ring reuse and incomplete camera sets must clear the row for every known camera.
+                        for (int cameraIndex = 0; cameraIndex < _camCount; cameraIndex++)
+                        {
+                            int width = _historyCameraWidths[cameraIndex];
+                            if (width <= 0) continue;
+                            byte[][] chunks = _cameraLayerChunks[layerIndex][cameraIndex];
+                            byte[] existing = chunks[ci];
+                            if (existing != null)
+                                Array.Clear(existing, off * width, width);
+                        }
+
                         foreach (var s in job.Spans)
                         {
                             if (y >= s.Sh) continue;
                             byte[] source = GetSpanSource(s, layerIndex);
                             if (source == null) continue;
-                            int sx = s.SrcLeft, dx = s.DestX, cw = s.SrcWidth;
-                            if (sx < 0) { dx -= sx; cw += sx; sx = 0; }
-                            if (dx < 0) { sx -= dx; cw += dx; dx = 0; }
-                            if (sx + cw > s.Sw) cw = s.Sw - sx;
-                            if (dx + cw > fullW) cw = fullW - dx;
-                            if (cw <= 0) continue;
-                            Array.Copy(source, y * s.Sw + sx, chunk, rowBase + dx, cw);
+                            byte[][] chunks = _cameraLayerChunks[layerIndex][s.CameraIndex];
+                            byte[] chunk = chunks[ci];
+                            if (chunk == null)
+                            {
+                                chunk = new byte[s.Sw * ChunkRows];
+                                chunks[ci] = chunk;
+                            }
+                            Array.Copy(source, y * s.Sw, chunk, off * s.Sw, s.Sw);
                         }
                     }
                 }
@@ -788,6 +819,26 @@ namespace TanukiCv.Controls
 
         private void OnLodTileApplied(long contentGeneration)
         {
+            long layoutStartMs = 0;
+            int layoutHistoryRows = 0;
+            int layoutVisibleWidth = 0;
+            lock (_lock)
+            {
+                if (_layoutRemapGeneration > 0 && contentGeneration >= _layoutRemapGeneration)
+                {
+                    layoutStartMs = _layoutRemapStartedMs;
+                    layoutHistoryRows = _layoutRemapHistoryRows;
+                    layoutVisibleWidth = _layoutRemapVisibleWidth;
+                    _layoutRemapGeneration = 0;
+                }
+            }
+            if (layoutStartMs > 0)
+            {
+                long latencyMs = Math.Max(0, _clock.ElapsedMilliseconds - layoutStartMs);
+                FlowLog?.Invoke(
+                    $"layout presented storage=per-camera historyRows={layoutHistoryRows} " +
+                    $"virtual={layoutVisibleWidth}x{_totalHeight} latency={latencyMs}ms");
+            }
             if (_awaitedLodGeneration <= 0 || contentGeneration < _awaitedLodGeneration)
                 return;
             _awaitedLodGeneration = 0;
@@ -809,25 +860,29 @@ namespace TanukiCv.Controls
             int seamDestY = -1;
             lock (_lock)
             {
-                if (_layerChunks == null || _fullW <= 0) return null;
-                byte[][] chunks = _layerChunks[(int)_displayLayer];
+                if (_cameraLayerChunks == null || _fullW <= 0) return null;
+                ColumnSample[] samples = BuildColumnSamplesLocked(r.X, rw, dw);
                 outp = new byte[dw * dh]; // 黑底
                 for (int dy = 0; dy < dh; dy++)
                 {
                     long sy = r.Y + (long)dy * rh / dh;
                     if (_flipVertical) sy = _totalHeight - 1 - sy;
                     if (sy < 0 || sy >= _totalHeight) continue;
-                    int ci = (int)(sy / ChunkRows), off = (int)(sy % ChunkRows);
-                    if (ci < 0 || ci >= chunks.Length) continue;
-                    var chunk = chunks[ci];
-                    if (chunk == null) continue;
-                    int rowBase = off * _fullW;
+                    int chunkIndex = (int)(sy / ChunkRows);
+                    int rowOffset = (int)(sy % ChunkRows);
                     int orow = dy * dw;
                     for (int dx = 0; dx < dw; dx++)
                     {
-                        long sx = _displaySourceLeftPx + r.X + (long)dx * rw / dw;
-                        if (sx < 0 || sx >= _fullW) continue;
-                        outp[orow + dx] = chunk[rowBase + (int)sx];
+                        ColumnSample sample = samples[dx];
+                        if (sample.CameraIndex < 0) continue;
+                        int sourceWidth = _historyCameraWidths[sample.CameraIndex];
+                        if (sourceWidth <= 0 || sample.SourceX < 0 || sample.SourceX >= sourceWidth)
+                            continue;
+                        byte[][] chunks = _cameraLayerChunks[(int)_displayLayer][sample.CameraIndex];
+                        if (chunkIndex < 0 || chunkIndex >= chunks.Length) continue;
+                        byte[] chunk = chunks[chunkIndex];
+                        if (chunk == null) continue;
+                        outp[orow + dx] = chunk[rowOffset * sourceWidth + sample.SourceX];
                     }
                 }
                 if (_fullMode == WaterfallFullMode.Ring)   // Ring 接縫：寫頭畫亮掃描線 → 一看就知道在循環
@@ -844,18 +899,52 @@ namespace TanukiCv.Controls
             return GrayBitmap.From(outp, dw, dh, false, _colorMap);
         }
 
-        private byte[][][] CreateLayerChunks()
+        private ColumnSample[] BuildColumnSamplesLocked(int sourceX, int sourceWidth, int outputWidth)
         {
-            int nChunks = (_totalHeight + ChunkRows - 1) / ChunkRows;
-            return new[] { new byte[nChunks][], new byte[nChunks][], new byte[nChunks][] };
+            var samples = new ColumnSample[outputWidth];
+            for (int i = 0; i < samples.Length; i++)
+                samples[i].CameraIndex = -1;
+
+            for (int dx = 0; dx < outputWidth; dx++)
+            {
+                int displayX = sourceX + (int)((long)dx * sourceWidth / outputWidth);
+                foreach (CameraPlacement placement in _cameraPlacements)
+                {
+                    int relativeX = displayX - placement.DestX;
+                    if (relativeX < 0 || relativeX >= placement.DestWidth || placement.SrcWidth <= 0)
+                        continue;
+                    samples[dx] = new ColumnSample
+                    {
+                        CameraIndex = placement.CameraId - 1,
+                        SourceX = placement.SrcLeft +
+                            (int)((long)relativeX * placement.SrcWidth / placement.DestWidth)
+                    };
+                    break;
+                }
+            }
+            return samples;
         }
 
-        private void ClearLayerChunksLocked()
+        private byte[][][][] CreateCameraLayerChunks()
         {
-            if (_layerChunks == null) return;
-            for (int layer = 0; layer < _layerChunks.Length; layer++)
-                for (int i = 0; i < _layerChunks[layer].Length; i++)
-                    _layerChunks[layer][i] = null;
+            int nChunks = (_totalHeight + ChunkRows - 1) / ChunkRows;
+            var layers = new byte[3][][][];
+            for (int layer = 0; layer < layers.Length; layer++)
+            {
+                layers[layer] = new byte[_camCount][][];
+                for (int camera = 0; camera < _camCount; camera++)
+                    layers[layer][camera] = new byte[nChunks][];
+            }
+            return layers;
+        }
+
+        private void ClearCameraLayerChunksLocked()
+        {
+            if (_cameraLayerChunks == null) return;
+            for (int layer = 0; layer < _cameraLayerChunks.Length; layer++)
+                for (int camera = 0; camera < _cameraLayerChunks[layer].Length; camera++)
+                    for (int chunk = 0; chunk < _cameraLayerChunks[layer][camera].Length; chunk++)
+                        _cameraLayerChunks[layer][camera][chunk] = null;
         }
 
         private static byte[] GetSpanSource(Span span, int layerIndex)
@@ -863,6 +952,22 @@ namespace TanukiCv.Controls
             if (layerIndex == (int)WaterfallFrameLayer.Column) return span.Column ?? span.Raw;
             if (layerIndex == (int)WaterfallFrameLayer.Row) return span.Row ?? span.Raw;
             return span.Raw;
+        }
+
+        private MergeLayout.CamGeom CreateCameraGeometryLocked(int cameraIndex, int sourceWidth)
+        {
+            double cameraOpsMm = _refOpsMm;
+            if (_opsUm != null && cameraIndex >= 0 && cameraIndex < _opsUm.Length && _opsUm[cameraIndex] > 0)
+                cameraOpsMm = _opsUm[cameraIndex] / 1000.0;
+
+            return new MergeLayout.CamGeom
+            {
+                CameraId = cameraIndex + 1,
+                StartMm = cameraIndex < _startMm.Length ? _startMm[cameraIndex] : 0,
+                WidthPx = sourceWidth,
+                DisplayWidthPx = Math.Max(1, (int)Math.Round(
+                    sourceWidth * cameraOpsMm / _refOpsMm))
+            };
         }
 
         private int RebuildCameraPlacementsLocked(out int storageWidth)
@@ -882,12 +987,9 @@ namespace TanukiCv.Controls
             var cams = new List<MergeLayout.CamGeom>(_camCount);
             for (int i = 0; i < _camCount; i++)
             {
-                cams.Add(new MergeLayout.CamGeom
-                {
-                    CameraId = i + 1,
-                    StartMm = i < _startMm.Length ? _startMm[i] : 0,
-                    WidthPx = _cameraWidths[i] > 0 ? _cameraWidths[i] : _defaultFrameW
-                });
+                cams.Add(CreateCameraGeometryLocked(
+                    i,
+                    _cameraWidths[i] > 0 ? _cameraWidths[i] : _defaultFrameW));
             }
 
             List<CameraPlacement> placements = MergeLayout.Compute(
@@ -899,6 +1001,21 @@ namespace TanukiCv.Controls
             _displaySourceLeftPx = crop.SourceLeftPx;
             _displayStartMm = crop.VisibleStartMm;
             return crop.VisibleWidthPx;
+        }
+
+        private string BuildLayoutSlotTextLocked()
+        {
+            var parts = new List<string>(_cameraPlacements.Count);
+            foreach (CameraPlacement placement in _cameraPlacements)
+            {
+                int cameraIndex = placement.CameraId - 1;
+                int sourceWidth = cameraIndex >= 0 && cameraIndex < _cameraWidths.Length
+                    ? (_cameraWidths[cameraIndex] > 0 ? _cameraWidths[cameraIndex] : _defaultFrameW)
+                    : 0;
+                parts.Add(
+                    $"{placement.CameraId}:{sourceWidth}@{placement.DestX}+{placement.DestWidth}");
+            }
+            return string.Join("|", parts);
         }
 
         private void OnCanvasStatus(CanvasInfo info)
@@ -944,7 +1061,7 @@ namespace TanukiCv.Controls
             foreach (var p in _cameraPlacements)
             {
                 int left = p.DestX;
-                int right = p.DestX + Math.Max(1, p.SrcWidth);
+                int right = p.DestX + Math.Max(1, p.DestWidth);
                 if (imageX >= left && imageX < right)
                     return p.CameraId;
             }
@@ -953,7 +1070,7 @@ namespace TanukiCv.Controls
             int nearestDist = int.MaxValue;
             foreach (var p in _cameraPlacements)
             {
-                int center = p.DestX + Math.Max(1, p.SrcWidth) / 2;
+                int center = p.DestX + Math.Max(1, p.DestWidth) / 2;
                 int dist = Math.Abs(imageX - center);
                 if (dist < nearestDist)
                 {
@@ -1045,7 +1162,7 @@ namespace TanukiCv.Controls
             catch { }
             try { _canvas.DisableLod(); } catch { }
             try { if (_canvas.Parent != null) _canvas.Parent.Controls.Remove(_canvas); _canvas.Dispose(); } catch { }
-            lock (_lock) { _layerChunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }
+            lock (_lock) { _cameraLayerChunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }
         }
     }
 }

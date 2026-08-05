@@ -50,23 +50,35 @@ namespace TanukiCv.Core
             {
                 CameraPlacement placement = source[i];
                 int sourceDestLeft = placement.DestX;
-                int sourceDestRight = sourceDestLeft + placement.SrcWidth;
+                int sourceDestWidth = placement.DestWidth;
+                int sourceDestRight = sourceDestLeft + sourceDestWidth;
                 int clippedLeft = Math.Max(sourceDestLeft, cropLeft);
                 int clippedRight = Math.Min(sourceDestRight, cropRight);
                 if (clippedRight <= clippedLeft) continue;
 
-                int clippedSourceLeft =
-                    placement.SrcLeft + clippedLeft - sourceDestLeft;
+                int clippedSourceLeft = placement.SrcLeft + ScaleCoordinate(
+                    clippedLeft - sourceDestLeft, sourceDestWidth, placement.SrcWidth);
+                int clippedSourceRight = placement.SrcLeft + ScaleCoordinate(
+                    clippedRight - sourceDestLeft, sourceDestWidth, placement.SrcWidth);
                 int shiftedDestLeft = clippedLeft - cropLeft;
                 result.Add(new CameraPlacement
                 {
                     CameraId = placement.CameraId,
                     SrcLeft = clippedSourceLeft,
-                    SrcWidth = clippedRight - clippedLeft,
-                    XOffset = shiftedDestLeft - clippedSourceLeft
+                    SrcWidth = Math.Max(0, clippedSourceRight - clippedSourceLeft),
+                    XOffset = shiftedDestLeft,
+                    DisplayLeft = 0,
+                    DisplayWidth = clippedRight - clippedLeft
                 });
             }
             return result;
+        }
+
+        private static int ScaleCoordinate(int value, int fromWidth, int toWidth)
+        {
+            if (value <= 0 || fromWidth <= 0 || toWidth <= 0) return 0;
+            if (value >= fromWidth) return toWidth;
+            return (int)Math.Round(value * (double)toWidth / fromWidth);
         }
     }
 }

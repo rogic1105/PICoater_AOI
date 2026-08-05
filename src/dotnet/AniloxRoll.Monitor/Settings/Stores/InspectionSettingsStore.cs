@@ -82,6 +82,7 @@ namespace AniloxRoll.Monitor.Core.Data
             sb.AppendLine("  \"Recipe\": {");
             sb.AppendLine($"    \"Algorithm\": \"{R.Algorithm}\",");
             sb.AppendLine($"    \"RidgeDir\": \"{R.RidgeDir}\",");
+            sb.AppendLine($"    \"ColumnCurveMode\": \"{R.ColumnCurveMode}\",");
             sb.AppendLine($"    \"HessianMaxFactorV\": {F(R.HessianMaxFactorV)},");
             sb.AppendLine($"    \"HessianMaxFactorH\": {F(R.HessianMaxFactorH)},");
             sb.AppendLine($"    \"RidgeSigma\": {F(R.RidgeSigma)},");
@@ -223,6 +224,12 @@ namespace AniloxRoll.Monitor.Core.Data
             if (!System.Enum.TryParse(ridgeDirStr, true, out ridgeDir))
                 ridgeDir = RidgeDirection.Vertical;
 
+            ColumnCurveDisplayMode columnCurveMode = InspectionDefaults.ColumnCurveMode;
+            string columnCurveModeText = SettingsStoreHelper.GetString(
+                obj, "ColumnCurveMode", InspectionDefaults.ColumnCurveMode.ToString());
+            if (!System.Enum.TryParse(columnCurveModeText, true, out columnCurveMode))
+                columnCurveMode = InspectionDefaults.ColumnCurveMode;
+
             CaptureStopCondition captureStopCondition;
             string captureStopConditionStr = SettingsStoreHelper.GetString(
                 obj,
@@ -235,6 +242,7 @@ namespace AniloxRoll.Monitor.Core.Data
             {
                 Algorithm        = algo,
                 RidgeDir         = ridgeDir,
+                ColumnCurveMode  = columnCurveMode,
                 HessianMaxFactorV = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorV", InspectionDefaults.HessianMaxFactorV),
                 HessianMaxFactorH = SettingsStoreHelper.GetFloat(obj, "HessianMaxFactorH", InspectionDefaults.HessianMaxFactorH),
                 RidgeSigma       = SettingsStoreHelper.GetFloat(obj, "RidgeSigma", InspectionEngineConfig.DefaultRidgeSigma),

@@ -593,6 +593,7 @@
             // 
             // cbReviewDate
             // 
+            this.cbReviewDate.AccessibleName = "回顧日期";
             this.cbReviewDate.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbReviewDate.FormattingEnabled = true;
             this.cbReviewDate.Location = new System.Drawing.Point(6, 17);
@@ -602,6 +603,7 @@
             // 
             // cbReviewTime
             // 
+            this.cbReviewTime.AccessibleName = "回顧時間";
             this.cbReviewTime.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbReviewTime.FormattingEnabled = true;
             this.cbReviewTime.Location = new System.Drawing.Point(6, 46);
@@ -689,6 +691,7 @@
             // 
             // cbReviewId
             // 
+            this.cbReviewId.AccessibleName = "回顧序號";
             this.cbReviewId.FormattingEnabled = true;
             this.cbReviewId.Location = new System.Drawing.Point(7, 18);
             this.cbReviewId.Name = "cbReviewId";
@@ -700,6 +703,7 @@
             this.camReviewMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
+            this.camReviewMain.AccessibleName = "camReviewMain";
             this.camReviewMain.BackColor = System.Drawing.Color.Black;
             this.camReviewMain.Location = new System.Drawing.Point(6, 190);
             this.camReviewMain.Name = "camReviewMain";
@@ -813,6 +817,7 @@
             // 
             // cbDataId
             // 
+            this.cbDataId.AccessibleName = "報表序號";
             this.cbDataId.FormattingEnabled = true;
             this.cbDataId.Location = new System.Drawing.Point(7, 18);
             this.cbDataId.Name = "cbDataId";
@@ -831,6 +836,7 @@
             // cbDataYieldYear
             // 
             this.cbDataYieldYear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.cbDataYieldYear.AccessibleName = "報表年";
             this.cbDataYieldYear.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbDataYieldYear.Location = new System.Drawing.Point(572, 195);
             this.cbDataYieldYear.Name = "cbDataYieldYear";
@@ -840,6 +846,7 @@
             // cbDataYieldMonth
             // 
             this.cbDataYieldMonth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.cbDataYieldMonth.AccessibleName = "報表月";
             this.cbDataYieldMonth.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbDataYieldMonth.Location = new System.Drawing.Point(572, 325);
             this.cbDataYieldMonth.Name = "cbDataYieldMonth";
@@ -858,6 +865,7 @@
             // cbDataYieldDay
             // 
             this.cbDataYieldDay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
+            this.cbDataYieldDay.AccessibleName = "報表日";
             this.cbDataYieldDay.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.cbDataYieldDay.Location = new System.Drawing.Point(572, 455);
             this.cbDataYieldDay.Name = "cbDataYieldDay";
@@ -932,6 +940,7 @@
             // 
             // cbDataIdStart
             // 
+            this.cbDataIdStart.AccessibleName = "報表範圍起始";
             this.cbDataIdStart.FormattingEnabled = true;
             this.cbDataIdStart.Location = new System.Drawing.Point(6, 46);
             this.cbDataIdStart.Name = "cbDataIdStart";
@@ -940,6 +949,7 @@
             // 
             // cbDataIdEnd
             // 
+            this.cbDataIdEnd.AccessibleName = "報表範圍結束";
             this.cbDataIdEnd.FormattingEnabled = true;
             this.cbDataIdEnd.Location = new System.Drawing.Point(6, 17);
             this.cbDataIdEnd.Name = "cbDataIdEnd";
