@@ -5,6 +5,12 @@ description: Add or reorganize automated tests in the PICoater AOI repository. U
 
 # add-test
 
+## Verification platform command vocabulary
+
+Use [`references/verification-platform.md`](references/verification-platform.md) as the SSoT for
+the short commands `功能測試`, `完整驗證`, `壓力測試`, and `耐久測試`. Do not use the ambiguous
+terms `外掛` or `內掛` for test infrastructure.
+
 新增測試時遵循的分類 + 模板。
 
 ## 使用時機
