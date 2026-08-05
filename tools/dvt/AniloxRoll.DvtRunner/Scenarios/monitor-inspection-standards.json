@@ -11,6 +11,15 @@
       "TimeoutSeconds": 30
     },
     {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
       "Id": "log-mode",
       "Contract": "DVT.LogMode",
       "Title": "切換為流程驗證記錄",
