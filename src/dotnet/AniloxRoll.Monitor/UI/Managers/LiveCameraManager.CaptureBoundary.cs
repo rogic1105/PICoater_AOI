@@ -35,6 +35,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         private const int IdleCapturePreparationRetryMs = 3000;
+        private const int IdleCaptureVerificationIntervalMs = 5000;
         private readonly object _captureBoundaryLock = new object();
         private CapturePhaseEligibility _capturePhaseEligibility =
             CapturePhaseEligibility.Invalid;
@@ -65,6 +66,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         private string _captureStartPath = "none";
         private int _idleCapturePreparationInFlight;
         private long _idleCapturePreparationNotBeforeTimestamp;
+        private long _idleCaptureVerificationNotBeforeTimestamp;
 
         public bool IsCaptureTailDrainActive
         {
@@ -536,6 +538,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 previous = _capturePhaseEligibility;
                 _capturePhaseEligibility = CapturePhaseEligibility.Invalid;
             }
+            Interlocked.Exchange(ref _idleCaptureVerificationNotBeforeTimestamp, 0);
             if (previous != CapturePhaseEligibility.Invalid)
             {
                 FlowTrace.Log(
@@ -704,6 +707,17 @@ namespace AniloxRoll.Monitor.UI.Managers
                 ref _idleCapturePreparationNotBeforeTimestamp);
             if (notBefore > 0 && now < notBefore)
                 return;
+
+            long verificationNotBefore = Interlocked.Read(
+                ref _idleCaptureVerificationNotBeforeTimestamp);
+            if (verificationNotBefore > 0 && now < verificationNotBefore)
+                return;
+
+            long verificationTicks = (long)Math.Ceiling(
+                Stopwatch.Frequency * IdleCaptureVerificationIntervalMs / 1000.0);
+            Interlocked.Exchange(
+                ref _idleCaptureVerificationNotBeforeTimestamp,
+                now + Math.Max(1, verificationTicks));
 
             AniloxCamera[] targets = snapshot
                 .Where(cam => cam != null && cam.IsConnected)

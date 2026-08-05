@@ -9,8 +9,9 @@ using System.Threading.Tasks;
 namespace IoBridge.Core
 {
     /// <summary>
-    /// Serialized Modbus TCP client for ICP DAS ET-series modules. A timed-out
-    /// transport is closed immediately and any late task failure is observed.
+    /// Serialized Modbus TCP client for ICP DAS ET-series modules. Poll traffic
+    /// uses blocking socket I/O on a worker task so .NET Framework does not
+    /// allocate an overlapped Event for every short Modbus request.
     /// </summary>
     public class IcpDasModbusTcpClient : IModbusTcpClient
     {
@@ -66,7 +67,14 @@ namespace IoBridge.Core
                     bool pending = tempClient.ConnectAsync(connectArgs);
                     if (!pending) connectTcs.TrySetResult(connectArgs.SocketError);
                     Task<SocketError> connectTask = connectTcs.Task;
-                    var completedTask = await Task.WhenAny(connectTask, Task.Delay(timeoutMs)).ConfigureAwait(false);
+                    Task completedTask;
+                    using (var timeoutCts = new CancellationTokenSource())
+                    {
+                        Task timeoutTask = Task.Delay(timeoutMs, timeoutCts.Token);
+                        completedTask = await Task.WhenAny(connectTask, timeoutTask).ConfigureAwait(false);
+                        if (completedTask == connectTask)
+                            timeoutCts.Cancel();
+                    }
 
                     if (completedTask != connectTask && !connectTask.IsCompleted)
                     {
@@ -164,39 +172,16 @@ namespace IoBridge.Core
                 byte[] send = CreateHeader(func, addr, value);
 
                 // 取得鎖後再次確認連線（可能在等鎖期間被其他執行緒 Dispose）
-                NetworkStream stream;
-                lock (_transportSync) stream = _stream;
-                if (stream == null) throw new InvalidOperationException("Not connected");
+                Socket client;
+                lock (_transportSync) client = _client;
+                if (client == null) throw new InvalidOperationException("Not connected");
 
-                var writeTask = stream.WriteAsync(send, 0, send.Length);
-                if (await Task.WhenAny(writeTask, Task.Delay(timeoutMs)).ConfigureAwait(false) != writeTask)
-                {
-                    ObserveLateFault(writeTask);
-                    Dispose();
-                    throw new TimeoutException("Write timeout");
-                }
-                await writeTask.ConfigureAwait(false);
-
-                byte[] res = new byte[expected];
-                int totalRead = 0;
-                while (totalRead < expected)
-                {
-                    var readTask = stream.ReadAsync(res, totalRead, expected - totalRead);
-                    if (await Task.WhenAny(readTask, Task.Delay(timeoutMs)).ConfigureAwait(false) != readTask)
-                    {
-                        ObserveLateFault(readTask);
-                        Dispose();
-                        throw new TimeoutException("Read timeout");
-                    }
-                    int read = await readTask.ConfigureAwait(false);
-                    if (read <= 0)
-                    {
-                        Dispose();
-                        throw new InvalidOperationException("Connection closed by peer");
-                    }
-                    totalRead += read;
-                }
-                return res;
+                return await Task.Run(
+                    () => SendAndReceiveBlocking(
+                        client,
+                        send,
+                        expected,
+                        timeoutMs)).ConfigureAwait(false);
             }
             catch (SocketException)
             {
@@ -211,6 +196,59 @@ namespace IoBridge.Core
             finally
             {
                 _txLock.Release();
+            }
+        }
+
+        private static byte[] SendAndReceiveBlocking(
+            Socket client,
+            byte[] send,
+            int expected,
+            int timeoutMs,
+            string operation = null)
+        {
+            client.SendTimeout = timeoutMs;
+            client.ReceiveTimeout = timeoutMs;
+
+            try
+            {
+                int totalSent = 0;
+                while (totalSent < send.Length)
+                {
+                    int sent = client.Send(
+                        send,
+                        totalSent,
+                        send.Length - totalSent,
+                        SocketFlags.None);
+                    if (sent <= 0)
+                        throw new InvalidOperationException(
+                            "Connection closed during write");
+                    totalSent += sent;
+                }
+
+                var response = new byte[expected];
+                int totalRead = 0;
+                while (totalRead < expected)
+                {
+                    int read = client.Receive(
+                        response,
+                        totalRead,
+                        expected - totalRead,
+                        SocketFlags.None);
+                    if (read <= 0)
+                        throw new InvalidOperationException(
+                            "Connection closed by peer");
+                    totalRead += read;
+                }
+
+                return response;
+            }
+            catch (SocketException ex)
+                when (ex.SocketErrorCode == SocketError.TimedOut ||
+                      ex.SocketErrorCode == SocketError.WouldBlock)
+            {
+                throw new TimeoutException(
+                    (operation ?? "Read/write") + " timeout",
+                    ex);
             }
         }
 
@@ -261,16 +299,5 @@ namespace IoBridge.Core
             try { args.Dispose(); } catch { }
         }
 
-        private static void ObserveLateFault(Task task)
-        {
-            // NetworkStream async APIs on .NET Framework have no usable cancellation
-            // token. Closing the socket aborts them; this continuation
-            // consumes the resulting late exception before the finalizer reports it.
-            _ = task.ContinueWith(
-                t => { _ = t.Exception; },
-                CancellationToken.None,
-                TaskContinuationOptions.OnlyOnFaulted | TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-        }
     }
 }

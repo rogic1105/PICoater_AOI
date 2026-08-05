@@ -121,6 +121,84 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
 
+    def test_fixed_target_low_edge_pairs_with_time_or_height_request(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO grab request stopCondition=Time stopOnLow=False",
+                "IO START edge=Low stopOnLow=False action=continue-fixed-target",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H4.io-stop-policy").status)
+
+    def test_fixed_target_low_edge_without_fixed_request_fails(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO grab request stopCondition=IoSignal stopOnLow=True",
+                "IO START edge=Low stopOnLow=False action=continue-fixed-target",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
+
+    def test_io_poll_health_requires_equal_advancing_counters(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO controller start generation=1 endpoint=192.168.255.1:502",
+                "IO poll state attempts=60 successes=60 snapshots=60 connected=True state=Idle",
+                "IO poll state attempts=120 successes=120 snapshots=120 connected=True state=Idle",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H1.io-poll").status)
+
+    def test_io_poll_health_rejects_stalled_or_divergent_counters(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO poll state attempts=60 successes=59 snapshots=59 connected=True state=Idle",
+                "IO poll state attempts=60 successes=59 snapshots=59 connected=False state=Idle",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "H1.io-poll").status)
+
+    def test_remote_copy_backlog_recovery_passes_in_order(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "[RemoteCopy] remote share unavailable: TCP 445 unavailable.",
+                "[RemoteCopy] pending queued added=2 queue=2 bytes=2048",
+                "[RemoteCopy] remote share accepted (write verified)",
+                "[RemoteCopy] backlog drained: copied=2 bytes=2048",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "H1.remote-copy-recovery").status,
+        )
+
+    def test_remote_copy_backlog_without_drain_fails(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "[RemoteCopy] remote share unavailable: TCP 445 unavailable.",
+                "[RemoteCopy] pending queued added=1 queue=1 bytes=1024",
+                "[RemoteCopy] remote share accepted (write verified)",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "H1.remote-copy-recovery").status,
+        )
+
+    def test_remote_copy_legacy_retry_evidence_still_passes(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "[RemoteCopy] remote share unavailable: TCP 445 unavailable.",
+                "[RemoteCopy] retry pending attempt=1 queue=1 file=a.acap error=IOException",
+                "[RemoteCopy] remote share accepted (write verified)",
+                "[RemoteCopy] backlog drained: copied=1 bytes=1024",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "H1.remote-copy-recovery").status,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

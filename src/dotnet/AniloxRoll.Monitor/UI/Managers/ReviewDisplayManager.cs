@@ -19,6 +19,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         private ImageDisplayView _view;
         private bool _disposed;
         private bool _suppressViewRangeEvents;
+        private bool _recordTransitionPending;
+        private bool _recordTransitionDropLogged;
+        private string _recordTransitionGrabId;
         private IntensityColorMap _mainColorMap = IntensityColorMap.Grayscale;
         private CanvasOverlayMode _overlayMode = CanvasOverlayMode.Coordinates;
         private bool _applyingOverlayMode;
@@ -67,8 +70,18 @@ namespace AniloxRoll.Monitor.UI.Managers
             _view.EnableLod(GrayResizeCpu.Resize);     // 回顧白賺 LOD；CPU provider＝無 GPU 機也跑
             _view.ViewRangeMmChanged += (l, r, tp, bt) =>
             {
-                if (!_suppressViewRangeEvents)
-                    ViewRangeMmChanged?.Invoke(l, r, tp, bt);
+                if (_suppressViewRangeEvents) return;
+                if (_recordTransitionPending)
+                {
+                    if (!_recordTransitionDropLogged)
+                    {
+                        _recordTransitionDropLogged = true;
+                        Core.Services.FlowTrace.Dvt(
+                            $"RV staleView drop {_recordTransitionGrabId}");
+                    }
+                    return;
+                }
+                ViewRangeMmChanged?.Invoke(l, r, tp, bt);
             };
             // 互動流跡（RV 前綴）：autoFit 原因/lodRebind/clearFrame/wheelZoom 與監控同一套 sdk 掛勾
             _view.FlowLog = s => Core.Services.FlowTrace.Display("RV", s);
@@ -79,13 +92,26 @@ namespace AniloxRoll.Monitor.UI.Managers
         /// 餵一組回顧灰階幀（RSC 解碼段已轉好的不可變 bytes；null 槽=間空黑占位）+ CFG 座標。
         /// 純推幀零轉換 → UI 執行緒無負擔、與 Bitmap 生命週期零 race。
         /// </summary>
+        /// <summary>
+        /// A new record already owns the charts, but its pixels are still loading. View events from
+        /// the previously displayed record must not overwrite the prepared fit range.
+        /// </summary>
+        public void BeginRecordTransition(string grabId)
+        {
+            _recordTransitionPending = true;
+            _recordTransitionDropLogged = false;
+            _recordTransitionGrabId = grabId ?? "";
+        }
+
         public void PushFrames(byte[][] gray, int[] w, int[] h, double[] opsUm, double[] posMm,
             bool mergeMode, double screenMmPerPx, int feedScale, double rowPitchMm, bool flipVertical,
             double trimHeadMm, double trimTailMm, bool preserveChartView = false)
         {
             if (_disposed || gray == null) return;
             EnsureCreated(screenMmPerPx);
-            _suppressViewRangeEvents = preserveChartView;
+            bool publishRecordView = !preserveChartView;
+            bool fittedRecord = false;
+            _suppressViewRangeEvents = true;
             try
             {
                 _view.FlipVertical = flipVertical;
@@ -105,11 +131,14 @@ namespace AniloxRoll.Monitor.UI.Managers
                 }
                 _view.ClearFramesExcept(present);
                 _view.RefreshNow();
-                // A new record may have different geometry and must publish its fitted range.
-                // An image variant has identical geometry; publishing again would redraw charts
-                // and briefly replace the user's current view with the fit range.
-                if (!preserveChartView)
-                    _view.RefireViewRange();
+                if (publishRecordView)
+                {
+                    // A new record always starts fitted. Equal-sized records do not rebind LOD,
+                    // so relying on lodRebind would retain the previous record's pan/zoom.
+                    _view.ResetViewToFit();
+                    Core.Services.FlowTrace.Display("RV", "fit(record-change)");
+                    fittedRecord = true;
+                }
                 Core.Services.FlowTrace.Log(
                     $"RV pushFrames {pushed}/{count}（merge={mergeMode}, feedScale={feedScale}, " +
                     $"chartView={(preserveChartView ? "keep" : "publish")}）");
@@ -117,6 +146,14 @@ namespace AniloxRoll.Monitor.UI.Managers
             finally
             {
                 _suppressViewRangeEvents = false;
+            }
+
+            if (fittedRecord)
+            {
+                _recordTransitionPending = false;
+                _recordTransitionDropLogged = false;
+                _recordTransitionGrabId = null;
+                _view.RefireViewRange();
             }
         }
 

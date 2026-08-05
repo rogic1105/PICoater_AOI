@@ -11,10 +11,11 @@ namespace AniloxRoll.Monitor.Tests
     public class ReviewPeriodLoadCoordinatorTests
     {
         [Test]
-        public async Task Enqueue_BurstOfDistinctPeriods_RunsSeriallyAndDeduplicates()
+        public async Task Enqueue_BurstOfDistinctPeriods_RunsCurrentThenLatest()
         {
             var firstRelease = NewSignal();
             var started = new List<DateTime>();
+            var applied = new List<DateTime>();
             int active = 0;
             int maxActive = 0;
             DateTime p1 = new DateTime(2026, 7, 13, 10, 0, 1);
@@ -27,18 +28,23 @@ namespace AniloxRoll.Monitor.Tests
                 maxActive = Math.Max(maxActive, current);
                 lock (started) started.Add(request.Period);
                 if (request.Period == p1) await firstRelease.Task;
+                if (canApply())
+                {
+                    lock (applied) applied.Add(request.Period);
+                }
                 Interlocked.Decrement(ref active);
             });
 
             Task drain = coordinator.Enqueue(p1, false);
             _ = coordinator.Enqueue(p1, false); // running duplicate
             _ = coordinator.Enqueue(p2, false);
-            _ = coordinator.Enqueue(p2, false); // queued duplicate
+            _ = coordinator.Enqueue(p2, false); // pending, then replaced by p3
             _ = coordinator.Enqueue(p3, false);
             firstRelease.SetResult(true);
             await drain;
 
-            Assert.That(started, Is.EqualTo(new[] { p1, p2, p3 }));
+            Assert.That(started, Is.EqualTo(new[] { p1, p3 }));
+            Assert.That(applied, Is.EqualTo(new[] { p3 }));
             Assert.That(maxActive, Is.EqualTo(1));
         }
 

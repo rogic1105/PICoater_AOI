@@ -700,6 +700,7 @@
             // 
             // camReviewMain
             // 
+            this.camReviewMain.AccessibleName = "camReviewMain";
             this.camReviewMain.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
             | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
@@ -835,6 +836,7 @@
             // 
             // cbDataYieldYear
             // 
+            this.cbDataYieldYear.AccessibleName = "報表年";
             this.cbDataYieldYear.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldYear.AccessibleName = "報表年";
             this.cbDataYieldYear.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
@@ -845,6 +847,7 @@
             // 
             // cbDataYieldMonth
             // 
+            this.cbDataYieldMonth.AccessibleName = "報表月";
             this.cbDataYieldMonth.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldMonth.AccessibleName = "報表月";
             this.cbDataYieldMonth.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
@@ -864,6 +867,7 @@
             // 
             // cbDataYieldDay
             // 
+            this.cbDataYieldDay.AccessibleName = "報表日";
             this.cbDataYieldDay.Anchor = ((System.Windows.Forms.AnchorStyles)((System.Windows.Forms.AnchorStyles.Bottom | System.Windows.Forms.AnchorStyles.Left)));
             this.cbDataYieldDay.AccessibleName = "報表日";
             this.cbDataYieldDay.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;

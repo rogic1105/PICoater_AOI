@@ -39,6 +39,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
+    <Compile Include="AutomatedCycleRunner.cs" />
     <Compile Include="MainForm.cs" />
     <Compile Include="ModbusTcpServer.cs" />
   </ItemGroup>

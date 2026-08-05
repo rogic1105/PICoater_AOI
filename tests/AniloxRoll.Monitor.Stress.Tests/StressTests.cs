@@ -34,23 +34,18 @@ namespace AniloxRoll.Monitor.Tests
             }
         }
 
-        /// <summary>
-        /// 根據每分鐘基準 cycle 數，按總時間等分給每個測試。
-        /// cyclesPerMinute: 該測試每分鐘可跑的 cycle 數（實測校準）。
-        /// </summary>
-        private static int Scale(int cyclesPerMinute) =>
-            Math.Max(100, (int)(cyclesPerMinute * StressMinutes / NumStressTests));
+        private static TimeSpan PerTestBudget =>
+            TimeSpan.FromMinutes(
+                Math.Max(0.01, StressMinutes / NumStressTests));
 
         /// <summary>
-        /// 印出測試開始資訊：名稱、cycle 數、預估時間、開始時間。
+        /// 印出測試開始資訊：名稱、牆鐘預算、開始時間。
         /// </summary>
-        private static Stopwatch LogStart(string testName, int cycles, int cyclesPerMinute)
+        private static Stopwatch LogStart(string testName)
         {
-            double estMinutes = (double)cycles / cyclesPerMinute;
-            string estStr = estMinutes < 1
-                ? $"{estMinutes * 60:F0}s"
-                : $"{estMinutes:F1}min";
-            TestContext.Progress.WriteLine($"[{DateTime.Now:HH:mm:ss}] ▶ {testName}  cycles={cycles:N0}  est={estStr}");
+            TestContext.Progress.WriteLine(
+                $"[{DateTime.Now:HH:mm:ss}] ▶ {testName}  " +
+                $"budget={PerTestBudget.TotalMinutes:F2}min");
             return Stopwatch.StartNew();
         }
 
@@ -63,38 +58,40 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         /// <summary>
-        /// 每 10% 印一次進度。回傳下一個要報告的門檻。
+        /// 每分鐘印一次實際循環量，避免使用會隨硬體和實作過時的固定速率估算。
         /// </summary>
-        private static int LogProgress(string testName, int i, int total, int nextThreshold)
+        private static DateTime LogProgress(
+            string testName,
+            int completed,
+            Stopwatch stopwatch,
+            DateTime nextLog)
         {
-            if (i >= nextThreshold)
+            if (DateTime.UtcNow >= nextLog)
             {
-                int pct = (int)((long)i * 100 / total);
-                TestContext.Progress.WriteLine($"  [{DateTime.Now:HH:mm:ss}]   {testName}  {pct}%  ({i:N0}/{total:N0})");
-                return nextThreshold + total / 10;
+                TestContext.Progress.WriteLine(
+                    $"  [{DateTime.Now:HH:mm:ss}]   {testName}  " +
+                    $"elapsed={stopwatch.Elapsed.TotalMinutes:F1}min  " +
+                    $"cycles={completed:N0}");
+                return DateTime.UtcNow.AddMinutes(1);
             }
-            return nextThreshold;
+            return nextLog;
         }
 
-        // =====================================================================
-        //  每分鐘基準 cycle 數（STRESS_MINUTES=10 實測校準）：
-        //    PLC FSM:     16,000 /min
-        //    PLC Fault:   17,000 /min
-        //    CSV Write:   670,000 /min
-        //    Settings RW: 15,600 /min
-        //    CsvConfig:   2,070,000 /min
-        //    Statistics:  2,500,000 /min (真實場景：每日14K筆CSV生成+Compute)
-        // =====================================================================
+        private static bool HasBudget(
+            Stopwatch stopwatch,
+            int completed)
+        {
+            return completed < 100 || stopwatch.Elapsed < PerTestBudget;
+        }
 
         // ── PLC FSM 循環壓力測試 ──
 
         [Test]
         public async Task PlcFsm_1000000Cycles_NoStateCorruption()
         {
-            const int Rate = 16_000;
-            int Cycles = Scale(Rate);
-            var sw = LogStart("PlcFsm", Cycles, Rate);
-            int nextLog = Cycles / 10;
+            var sw = LogStart("PlcFsm");
+            int cycles = 0;
+            DateTime nextLog = DateTime.UtcNow.AddMinutes(1);
 
             var mockPlc = new Mock<IModbusTcpClient>();
             mockPlc.SetupProperty(p => p.ReadWriteTimeoutMs, 2000);
@@ -102,6 +99,8 @@ namespace AniloxRoll.Monitor.Tests
             mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
+            mockPlc.Setup(p => p.ReadDiStatuses())
+                .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
 
             using (var ctrl = new IoGrabController(mockPlc.Object) { AutoBackgroundLoop = false })
             {
@@ -112,27 +111,31 @@ namespace AniloxRoll.Monitor.Tests
                 await ctrl.StartAsync("192.168.255.1");
                 Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Idle));
 
-                for (int i = 0; i < Cycles; i++)
+                while (HasBudget(sw, cycles))
                 {
                     // Rising edge → Running
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { true, true, false, false, false, false, false, false });
                     await ctrl.PollTick();
                     Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Running),
-                        $"Cycle {i}: expected Running after rising edge");
+                        $"Cycle {cycles}: expected Running after rising edge");
 
                     // Falling edge → Idle
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
                     await ctrl.PollTick();
                     Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Idle),
-                        $"Cycle {i}: expected Idle after falling edge");
+                        $"Cycle {cycles}: expected Idle after falling edge");
 
-                    nextLog = LogProgress("PlcFsm", i, Cycles, nextLog);
+                    cycles++;
+                    nextLog = LogProgress(
+                        "PlcFsm", cycles, sw, nextLog);
                 }
 
-                Assert.That(startCount, Is.EqualTo(Cycles), $"Expected {Cycles} start events");
-                Assert.That(stopCount, Is.EqualTo(Cycles), $"Expected {Cycles} stop events");
+                Assert.That(startCount, Is.EqualTo(cycles),
+                    $"Expected {cycles} start events");
+                Assert.That(stopCount, Is.EqualTo(cycles),
+                    $"Expected {cycles} stop events");
             }
 
             LogEnd("PlcFsm", sw);
@@ -141,10 +144,9 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public async Task PlcFsm_FaultRecoveryCycles_500000_NoLeak()
         {
-            const int Rate = 17_000;
-            int Cycles = Scale(Rate);
-            var sw = LogStart("PlcFaultRecovery", Cycles, Rate);
-            int nextLog = Cycles / 10;
+            var sw = LogStart("PlcFaultRecovery");
+            int cycles = 0;
+            DateTime nextLog = DateTime.UtcNow.AddMinutes(1);
 
             var mockPlc = new Mock<IModbusTcpClient>();
             mockPlc.SetupProperty(p => p.ReadWriteTimeoutMs, 2000);
@@ -152,28 +154,32 @@ namespace AniloxRoll.Monitor.Tests
             mockPlc.Setup(p => p.ConnectAsync(It.IsAny<string>(), It.IsAny<int>(), It.IsAny<int>()))
                 .ReturnsAsync(true);
             mockPlc.Setup(p => p.IsConnected).Returns(true);
+            mockPlc.Setup(p => p.ReadDiStatuses())
+                .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
 
             using (var ctrl = new IoGrabController(mockPlc.Object) { AutoBackgroundLoop = false })
             {
                 await ctrl.StartAsync("192.168.255.1");
 
-                for (int i = 0; i < Cycles; i++)
+                while (HasBudget(sw, cycles))
                 {
                     // PLC ALIVE lost → Faulted
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { false, false, false, false, false, false, false, false });
                     await ctrl.PollTick();
                     Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Faulted),
-                        $"Cycle {i}: expected Faulted");
+                        $"Cycle {cycles}: expected Faulted");
 
                     // PLC ALIVE restored → Idle
                     mockPlc.Setup(p => p.ReadDiStatuses())
                         .ReturnsAsync(new bool[] { true, false, false, false, false, false, false, false });
                     await ctrl.PollTick();
                     Assert.That(ctrl.CurrentState, Is.EqualTo(IoState.Idle),
-                        $"Cycle {i}: expected Idle after recovery");
+                        $"Cycle {cycles}: expected Idle after recovery");
 
-                    nextLog = LogProgress("PlcFaultRecovery", i, Cycles, nextLog);
+                    cycles++;
+                    nextLog = LogProgress(
+                        "PlcFaultRecovery", cycles, sw, nextLog);
                 }
             }
 
@@ -185,10 +191,9 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void CsvWrite_500000Records_NoDataloss()
         {
-            const int Rate = 670_000;
-            int RecordCount = Scale(Rate);
-            var sw = LogStart("CsvWrite", RecordCount, Rate);
-            int nextLog = RecordCount / 10;
+            var sw = LogStart("CsvWrite");
+            int recordCount = 0;
+            DateTime nextLog = DateTime.UtcNow.AddMinutes(1);
 
             string tempRoot = Path.Combine(Path.GetTempPath(), "StressCsv_" + Guid.NewGuid().ToString("N"));
 
@@ -200,8 +205,9 @@ namespace AniloxRoll.Monitor.Tests
                 var config = new CsvConfigSnapshot(
                     new double[7], new double[7], null, null, null, 1.0f, 1.0f, 0.5f, 0.8f, 0.5f, 0.8f, 0.0, 0.0, ts);
 
-                for (int i = 0; i < RecordCount; i++)
+                while (HasBudget(sw, recordCount))
                 {
+                    int i = recordCount;
                     var grabTs = ts.AddSeconds(i);
                     string grabId = InspectionLogService.FormatGrabId(grabTs);
                     int camId = (i % 7) + 1;
@@ -212,7 +218,9 @@ namespace AniloxRoll.Monitor.Tests
                     svc.AppendRecord(grabId, fileName, meanPeak, maxPeak,
                         0.5f, 0.8f, 3001, 3001.0, 149.0, config, ts);
 
-                    nextLog = LogProgress("CsvWrite", i, RecordCount, nextLog);
+                    recordCount++;
+                    nextLog = LogProgress(
+                        "CsvWrite", recordCount, sw, nextLog);
                 }
 
                 // Verify: read back CSV and count data lines
@@ -220,15 +228,15 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(File.Exists(csvPath), Is.True);
 
                 int dataLines = 0;
-                foreach (string line in File.ReadAllLines(csvPath))
+                foreach (string line in File.ReadLines(csvPath))
                 {
                     if (!string.IsNullOrWhiteSpace(line) &&
                         !line.StartsWith("#") &&
                         !line.StartsWith("Id,"))
                         dataLines++;
                 }
-                Assert.That(dataLines, Is.EqualTo(RecordCount),
-                    $"Expected {RecordCount} data lines, got {dataLines}");
+                Assert.That(dataLines, Is.EqualTo(recordCount),
+                    $"Expected {recordCount} data lines, got {dataLines}");
             }
             finally
             {
@@ -243,10 +251,9 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void AcquisitionSettings_145000SaveLoadCycles_NoDataloss()
         {
-            const int Rate = 15_600;
-            int Cycles = Scale(Rate);
-            var sw = LogStart("SettingsRW", Cycles, Rate);
-            int nextLog = Cycles / 10;
+            var sw = LogStart("SettingsRW");
+            int cycles = 0;
+            DateTime nextLog = DateTime.UtcNow.AddMinutes(1);
 
             string tempDir = Path.Combine(Path.GetTempPath(), "StressAcq_" + Guid.NewGuid().ToString("N"));
             string configDir = Path.Combine(tempDir, "Config");
@@ -257,8 +264,9 @@ namespace AniloxRoll.Monitor.Tests
                 string jsonPath = Path.Combine(configDir, "acquisition-settings.json");
                 var rng = new Random(42);
 
-                for (int i = 0; i < Cycles; i++)
+                while (HasBudget(sw, cycles))
                 {
+                    int i = cycles;
                     var settings = new AcquisitionSettings();
                     for (int c = 0; c < 7; c++)
                     {
@@ -290,7 +298,9 @@ namespace AniloxRoll.Monitor.Tests
                             $"Cycle {i}, cam {c}: LineRateHz mismatch");
                     }
 
-                    nextLog = LogProgress("SettingsRW", i, Cycles, nextLog);
+                    cycles++;
+                    nextLog = LogProgress(
+                        "SettingsRW", cycles, sw, nextLog);
                 }
             }
             finally
@@ -306,15 +316,15 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void CsvConfigSnapshot_1000000RoundTrips_NoCorruption()
         {
-            const int Rate = 2_070_000;
-            int Cycles = Scale(Rate);
-            var sw = LogStart("CsvConfigRoundTrip", Cycles, Rate);
-            int nextLog = Cycles / 10;
+            var sw = LogStart("CsvConfigRoundTrip");
+            int cycles = 0;
+            DateTime nextLog = DateTime.UtcNow.AddMinutes(1);
 
             var rng = new Random(42);
 
-            for (int i = 0; i < Cycles; i++)
+            while (HasBudget(sw, cycles))
             {
+                int i = cycles;
                 var ops = new double[7];
                 var pos = new double[7];
                 for (int c = 0; c < 7; c++)
@@ -359,7 +369,9 @@ namespace AniloxRoll.Monitor.Tests
                         $"Cycle {i}, cam {c}: CamLineRateHz mismatch");
                 }
 
-                nextLog = LogProgress("CsvConfigRoundTrip", i, Cycles, nextLog);
+                cycles++;
+                nextLog = LogProgress(
+                    "CsvConfigRoundTrip", cycles, sw, nextLog);
             }
 
             LogEnd("CsvConfigRoundTrip", sw);
@@ -369,7 +381,7 @@ namespace AniloxRoll.Monitor.Tests
         //
         //  模擬真實場景：每天 2000 次 grab × 7 台相機 = 14,000 筆/天
         //  一個月 30 天 = 420,000 筆，分散在 30 個 CSV 檔案中。
-        //  Scale 控制月數：STRESS_MINUTES=6 → 1 個月，60 → 10 個月。
+        //  先建立固定一個月資料，再於牆鐘預算內反覆計算並驗證。
 
         [Test]
         public void Statistics_RealisticMonthly_MultiDayCsv()
@@ -377,15 +389,9 @@ namespace AniloxRoll.Monitor.Tests
             const int GrabsPerDay = 2000;
             const int NumCameras = 7;
             const int RecordsPerDay = GrabsPerDay * NumCameras; // 14,000
-            // Rate 校準：1 分鐘可生成+計算 ~2,500,000 筆
-            // STRESS_MINUTES=1 → 30 天(420K筆), =10 → 300 天, =60 → 1800 天
-            const int Rate = 2_500_000;
-
-            int totalRecords = Scale(Rate);
-            int totalDays = Math.Max(1, totalRecords / RecordsPerDay);
-            totalRecords = totalDays * RecordsPerDay;
-
-            var sw = LogStart("Statistics", totalRecords, Rate);
+            const int totalDays = 30;
+            const int totalRecords = totalDays * RecordsPerDay;
+            var sw = LogStart("Statistics");
             TestContext.Progress.WriteLine(
                 $"  [{DateTime.Now:HH:mm:ss}]   Statistics  {totalDays} days x {RecordsPerDay:N0} records/day = {totalRecords:N0} total");
 
@@ -448,25 +454,35 @@ namespace AniloxRoll.Monitor.Tests
                 TestContext.Progress.WriteLine(
                     $"  [{DateTime.Now:HH:mm:ss}]   Statistics  CSV generation done ({genSw.Elapsed.TotalSeconds:F1}s)");
 
-                // ── Phase 2: Compute 統計 ──
-                var compSw = Stopwatch.StartNew();
+                // ── Phase 2: 在剩餘牆鐘預算內重複 Compute + 驗證 ──
+                int computePasses = 0;
+                DateTime nextLog = DateTime.UtcNow.AddMinutes(1);
                 var endDate = baseDate.AddDays(totalDays);
-                var stats = InspectionStatisticsService.Compute(tempRoot, baseDate, endDate);
-                compSw.Stop();
-                TestContext.Progress.WriteLine(
-                    $"  [{DateTime.Now:HH:mm:ss}]   Statistics  Compute done ({compSw.Elapsed.TotalSeconds:F1}s, " +
-                    $"{totalRecords / Math.Max(0.001, compSw.Elapsed.TotalSeconds):F0} records/sec)");
-
-                // ── Phase 3: 驗證每台相機統計 ──
-                for (int c = 1; c <= NumCameras; c++)
+                do
                 {
-                    Assert.That(stats[c].Pass, Is.EqualTo(expectedPerCam[c][0]),
-                        $"CAM{c} pass count mismatch");
-                    Assert.That(stats[c].Fail, Is.EqualTo(expectedPerCam[c][1]),
-                        $"CAM{c} fail count mismatch");
-                    Assert.That(stats[c].Total, Is.EqualTo(GrabsPerDay * totalDays),
-                        $"CAM{c} total count mismatch");
+                    var stats = InspectionStatisticsService.Compute(
+                        tempRoot, baseDate, endDate);
+                    for (int c = 1; c <= NumCameras; c++)
+                    {
+                        Assert.That(
+                            stats[c].Pass,
+                            Is.EqualTo(expectedPerCam[c][0]),
+                            $"CAM{c} pass count mismatch");
+                        Assert.That(
+                            stats[c].Fail,
+                            Is.EqualTo(expectedPerCam[c][1]),
+                            $"CAM{c} fail count mismatch");
+                        Assert.That(
+                            stats[c].Total,
+                            Is.EqualTo(GrabsPerDay * totalDays),
+                            $"CAM{c} total count mismatch");
+                    }
+
+                    computePasses++;
+                    nextLog = LogProgress(
+                        "Statistics", computePasses, sw, nextLog);
                 }
+                while (HasBudget(sw, computePasses));
             }
             finally
             {

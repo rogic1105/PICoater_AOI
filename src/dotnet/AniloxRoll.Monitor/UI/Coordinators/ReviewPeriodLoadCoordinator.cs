@@ -1,14 +1,13 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
 
 namespace AniloxRoll.Monitor.UI.Coordinators
 {
     /// <summary>
-    /// Serializes Review period loads while preserving every distinct user-selected period.
-    /// Duplicate requests already running or queued are ignored; Invalidate prevents an old
-    /// period result from applying after the user switches to grab-id mode.
+    /// Serializes Review period loads while retaining only the latest pending selection.
+    /// Duplicate requests already running or pending are ignored. A running request may finish
+    /// its read, but cannot apply once a newer pending selection exists. Invalidate prevents an
+    /// old period result from applying after the user switches to grab-id mode.
     /// </summary>
     internal sealed class ReviewPeriodLoadCoordinator
     {
@@ -20,7 +19,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         }
 
         private readonly object _gate = new object();
-        private readonly Queue<Request> _pending = new Queue<Request>();
+        private Request _pendingRequest;
         private readonly Func<Request, Func<bool>, Task> _loadAsync;
         private readonly Action<Exception> _onError;
         private Request _runningRequest;
@@ -42,15 +41,15 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             lock (_gate)
             {
                 if (Matches(_runningRequest, period, processedMode) ||
-                    _pending.Any(x => Matches(x, period, processedMode)))
+                    Matches(_pendingRequest, period, processedMode))
                     return _drainTask;
 
-                _pending.Enqueue(new Request
+                _pendingRequest = new Request
                 {
                     Period = period,
                     ProcessedMode = processedMode,
                     Generation = _generation
-                });
+                };
                 if (!_running)
                 {
                     _running = true;
@@ -71,7 +70,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             lock (_gate)
             {
                 _generation++;
-                _pending.Clear();
+                _pendingRequest = null;
             }
         }
 
@@ -82,13 +81,14 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 Request request;
                 lock (_gate)
                 {
-                    if (_pending.Count == 0)
+                    if (_pendingRequest == null)
                     {
                         _runningRequest = null;
                         _running = false;
                         return;
                     }
-                    request = _pending.Dequeue();
+                    request = _pendingRequest;
+                    _pendingRequest = null;
                     _runningRequest = request;
                 }
 
@@ -113,7 +113,11 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
         private bool IsCurrent(Request request)
         {
-            lock (_gate) return request.Generation == _generation;
+            lock (_gate)
+            {
+                return request.Generation == _generation &&
+                       _pendingRequest == null;
+            }
         }
 
         private static bool Matches(Request request, DateTime period, bool processedMode)

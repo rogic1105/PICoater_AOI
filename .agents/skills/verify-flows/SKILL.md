@@ -38,3 +38,21 @@ PropertyGrid `5. Log 設定（記錄／除錯） > 記錄範圍` is the runtime 
 `check_all_flows.py` reads the `log mode=...` session marker. Rules that require DVT-only evidence
 must return `NOT COVERED`, not `FAIL`, when a session used the operational mode. Legacy traces have
 no marker and are treated as fully instrumented because all probes were unconditional then.
+
+## Automated UI driver
+
+`tools/dvt/AniloxRoll.DvtRunner` operates the real WinForms controls through Windows UI
+Automation and Win32 control messages. Its scenario steps reference contract IDs and wait for
+the smallest required Flow evidence; cross-step order, forbidden lines, counts, and completeness
+remain owned by `tools/python/check_all_flows.py`.
+
+- Use the runner to automate repeatable smoke/DVT actions while an operator observes the screen.
+- A scenario must not duplicate the full contract or invent a second PASS standard.
+- Every UI action or setting change step must identify its owning contract.
+- The runner restores changed PropertyGrid values and attempts to stop an active Grab on abort.
+- Automated cleanup gives the product up to 60 seconds to close normally. If failure recovery or
+  disconnected hardware prevents shutdown, the runner force-terminates its test process so a
+  failed campaign cannot leave an orphaned product instance; that run does not satisfy the normal
+  shutdown contract.
+- `NOT COVERED` still means the scenario did not exercise that behavior. Physical disconnects,
+  visual correctness, stress, and soak evidence remain separate test layers.

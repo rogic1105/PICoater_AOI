@@ -86,6 +86,20 @@ SettingsHub.Changed → AniloxRollForm.OnSettingChanged(c)
   若 502 啟動失敗，先檢查是否被其他 Modbus server 占用；`1502` 僅作衝突排查的備援 Port。
 - icon 用官方 `sdk/tools/icon-gen/make_icon.py`（藍＝Bridge 工具）。
 
+### 無人值守 IO 循環
+
+`IoBridge.IoSimulator.exe --auto` 不開 GUI，依參數送出 DI-1 High/Low 後自行結束：
+
+```powershell
+IoBridge.IoSimulator.exe --auto --port 502 --cycles 3 `
+  --initial-delay-ms 20000 --high-ms 10000 --low-ms 4000 `
+  --exit-delay-ms 5000 --result-file D:\Anilox\Logs\io-simulator-dvt.txt
+```
+
+DI-0 全程為 High。初始延遲用來等待 app 完成 Modbus 連線；每個 High/Low 的實際時間
+與最後 DO 狀態會寫進 result file。此入口由 DVT Runner 的實際取相情境使用，
+不得把它當成產品 IO 時序的實作來源。
+
 ## Build
 
 一律 `Release|x64`。`sdk/Bridges/IoBridge/*.sln` 或主 `PICoater_AOI.sln`（已收四個 IoBridge sample 含 IoSimulator）。`.Core` 輸出位置不可改（共用 bin 是刻意設計）。

@@ -1,0 +1,287 @@
+{
+  "Id": "monitor-background-v1",
+  "Name": "監控與背景 V1",
+  "Description": "依 F1/F2/F3/F8 自動取得背景、預覽、正常 Grab/Stop，最後執行完整 Flow checker。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 DVT 探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "manual-control",
+      "Contract": "F2",
+      "Title": "暫時停用 IO 自動控制",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "否",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-light",
+      "Contract": "H.Light",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "wait-light-ready",
+      "Contract": "H.Light",
+      "Title": "等待光源完成 COM 連線",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "wait-acquisition-ready",
+      "Contract": "F1/F2",
+      "Title": "等待相機待機與相位準備完成",
+      "Action": "wait-log",
+      "Pattern": "acquisition idle prepare ready cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "standard-bg",
+      "Contract": "F8",
+      "Title": "切換標準去背",
+      "Action": "set-property",
+      "Target": "去背演算法",
+      "Value": "標準去背",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "wait-bg-ready",
+      "Contract": "F1/F8",
+      "Title": "等待相機與光源可取得背景",
+      "Action": "wait-log",
+      "Pattern": "background capture ready=True camReady=True lightReady=True grabbing=False",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "get-bg",
+      "Contract": "F8",
+      "Title": "按下取得背景",
+      "Action": "click",
+      "Target": "取得背景",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "get-bg-intent",
+      "Contract": "F8",
+      "Title": "確認取得背景 intent",
+      "Action": "wait-log",
+      "Pattern": "ui:【取得背景】鈕",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "bg-output-suppressed",
+      "Contract": "F8",
+      "Title": "確認背景採樣不寫產品資料",
+      "Action": "wait-log",
+      "Pattern": "background capture begin output=disabled",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "bg-first-set",
+      "Contract": "F8",
+      "Title": "等待完整首組相位",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "bg-sampled",
+      "Contract": "F8",
+      "Title": "等待背景採樣完成",
+      "Action": "wait-log",
+      "Pattern": "background capture sampling complete durationMs=",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "bg-complete",
+      "Contract": "F8",
+      "Title": "確認背景版本啟用成功",
+      "Action": "wait-log",
+      "Pattern": "background capture end output=disabled result=ok",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "preview-intent",
+      "Contract": "F8",
+      "Title": "確認自動進入背景預覽",
+      "Action": "wait-log",
+      "Pattern": "ui:【預覽背景】鈕",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "preview-enter",
+      "Contract": "F8",
+      "Title": "確認背景預覽共用顯示路",
+      "Action": "wait-log",
+      "Pattern": "EnterBackgroundPreview",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "preview-row-clear",
+      "Contract": "F8",
+      "Title": "確認預覽不保留列圖表",
+      "Action": "wait-log",
+      "Pattern": "background preview rowChart clear",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "preview-clear",
+      "Contract": "F8",
+      "Title": "再次按預覽背景以清除",
+      "Action": "click",
+      "Target": "預覽背景",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "preview-exit",
+      "Contract": "F8",
+      "Title": "確認離開預覽並還原顯示模式",
+      "Action": "wait-log",
+      "Pattern": "ExitBackgroundPreview",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "normal-grab-evidence-boundary",
+      "Contract": "F2",
+      "Title": "切開背景流程與正常 Grab 證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "start-grab",
+      "Contract": "F2",
+      "Title": "開始正常 Grab",
+      "Action": "click",
+      "Target": "開始抓取",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "start-intent",
+      "Contract": "F2",
+      "Title": "確認開始 intent",
+      "Action": "wait-log",
+      "Pattern": "ui:【開始抓取】鈕",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "gate-open",
+      "Contract": "F2",
+      "Title": "確認產品擷取 gate 開啟",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "first-set",
+      "Contract": "F2",
+      "Title": "確認首組相位對齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "curve-after-image",
+      "Contract": "F2",
+      "Title": "確認 Curve 不早於主畫面",
+      "Action": "wait-log",
+      "Pattern": "rowCurve present after=mainImage",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "stop-grab",
+      "Contract": "F3",
+      "Title": "停止正常 Grab",
+      "Action": "click",
+      "Target": "停止抓取",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "stop-proof",
+      "Contract": "F3",
+      "Title": "確認 StopGrab",
+      "Action": "wait-log",
+      "Pattern": "StopGrab",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "gate-closed",
+      "Contract": "F3",
+      "Title": "確認 gate 關閉且待機仍開啟",
+      "Action": "wait-log",
+      "Pattern": "capture gate closed standby=on",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "close-intent",
+      "Contract": "G2.shutdown",
+      "Title": "確認關閉 intent",
+      "Action": "wait-log",
+      "Pattern": "ui:關閉程式",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行所有已註冊 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

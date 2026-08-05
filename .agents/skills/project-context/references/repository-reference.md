@@ -339,6 +339,16 @@ against current code with `rg` before editing because lookup data can become sta
 
 ---
 
+### DVT 自動操作工具
+
+| 路徑 | 用途 |
+|------|------|
+| `tools/dvt/AniloxRoll.DvtRunner/` | 外部 WinForms DVT 操作器；依情境操作真實 UI、等待 Flow 證據，最後呼叫完整 checker |
+| `tools/dvt/AniloxRoll.DvtRunner/Scenarios/*.json` | 可重複的 UI 操作情境；每一步必須指向 verify-flow contract，不保存第二份判定規格 |
+| `tools/python/check_all_flows.py` | 對單次或整日 Trace 執行所有已註冊 domain validator；仍是自動 PASS/FAIL 的唯一入口 |
+
+---
+
 ### 參考文件（僅供查閱，不自動載入）
 
 | 文件 | 用途 |

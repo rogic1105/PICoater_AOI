@@ -1,0 +1,365 @@
+{
+  "Id": "physical-fixed-stop-capture",
+  "Name": "時間與高度實際取相",
+  "Description": "用本機 IO 模擬器提早送出 START Low，驗證時間與高度停止條件仍由各自的固定目標決定，並完成 Curve、封裝與遠端待傳鏈。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 DVT 探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-light",
+      "Contract": "H.Light",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "wait-light-ready",
+      "Contract": "H.Light",
+      "Title": "等待光源完成 COM 連線",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "wait-acquisition-ready",
+      "Contract": "F1/F2",
+      "Title": "等待相機待機與相位準備完成",
+      "Action": "wait-log",
+      "Pattern": "acquisition idle prepare ready cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "enable-save",
+      "Contract": "C1",
+      "Title": "啟用正式存檔",
+      "Action": "set-property",
+      "Target": "存檔",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "time-condition",
+      "Contract": "F2.Time",
+      "Title": "停止條件設為時間",
+      "Action": "set-property",
+      "Target": "停止條件",
+      "Value": "時間",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "time-limit",
+      "Contract": "F2.Time",
+      "Title": "總時間設為十秒",
+      "Action": "set-property",
+      "Target": "總時間(秒)",
+      "Value": "10",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "reset-time-evidence",
+      "Contract": "F2.Time",
+      "Title": "清除時間模式舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "io-ip",
+      "Contract": "H1",
+      "Title": "切換到本機 IO 模擬器",
+      "Action": "set-property",
+      "Target": "IO IP",
+      "Value": "127.0.0.1",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-port",
+      "Contract": "H1",
+      "Title": "使用標準 Modbus 連接埠",
+      "Action": "set-property",
+      "Target": "IO Port",
+      "Value": "502",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-io",
+      "Contract": "H1",
+      "Title": "啟用 IO 控制",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "time-simulator",
+      "Contract": "H1/F2.Time",
+      "Title": "啟動時間與高度兩次 IO 脈衝",
+      "Action": "launch-helper",
+      "Target": "bin\\x64\\Release\\tools\\io\\IoBridge.IoSimulator.exe",
+      "Value": "--auto --port 502 --cycles 2 --initial-delay-ms 15000 --high-ms 3000 --low-ms 16000 --exit-delay-ms 3000 --result-file D:\\Anilox\\Logs\\io-simulator-fixed-dvt.txt",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "time-controller",
+      "Contract": "H1",
+      "Title": "確認本機控制器已啟動",
+      "Action": "wait-log",
+      "Pattern": "IO controller start generation=\\d+ endpoint=127\\.0\\.0\\.1:502",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "time-io-connected",
+      "Contract": "H1",
+      "Title": "等待模擬 IO 連線",
+      "Action": "wait-log",
+      "Pattern": "\\[OutputHealth\\] resolve code=IoConnection",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "time-request",
+      "Contract": "F2.Time",
+      "Title": "時間模式接受 START High",
+      "Action": "wait-log",
+      "Pattern": "IO grab request stopCondition=Time stopOnLow=False",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "time-wait-first-set",
+      "Contract": "F2.Time",
+      "Title": "時間計時器等待首幀集合",
+      "Action": "wait-log",
+      "Pattern": "grab stop waiting condition=Time configured=10s source=io",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "time-gate",
+      "Contract": "F2.Time",
+      "Title": "時間模式開啟產品取相閘門",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "time-first-set",
+      "Contract": "F2.Time",
+      "Title": "時間模式首幀集合對齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "time-armed",
+      "Contract": "F2.Time",
+      "Title": "首幀後啟動十秒計時",
+      "Action": "wait-log",
+      "Pattern": "grab stop armed condition=Time limit=10s configured=10s grace=0s source=io start=first-set",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "time-curve",
+      "Contract": "F2.Time",
+      "Title": "時間模式 Curve 晚於主圖",
+      "Action": "wait-log",
+      "Pattern": "rowCurve present after=mainImage",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "time-low-ignored",
+      "Contract": "H4/F2.Time",
+      "Title": "提早 START Low 不得停止",
+      "Action": "wait-log",
+      "Pattern": "IO START edge=Low stopOnLow=False action=continue-fixed-target",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "time-stop",
+      "Contract": "F3.Time",
+      "Title": "十秒目標自行停止",
+      "Action": "wait-log",
+      "Pattern": "auto:抓取停止 condition=Time limit=10s",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "time-closed",
+      "Contract": "F3.Time",
+      "Title": "時間模式關閉產品取相閘門",
+      "Action": "wait-log",
+      "Pattern": "capture gate closed standby=on",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "time-finalize",
+      "Contract": "C1/F3.Time",
+      "Title": "時間模式完成封裝與遠端排程",
+      "Action": "wait-log",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "height-condition",
+      "Contract": "F2.Height",
+      "Title": "停止條件設為高度",
+      "Action": "set-property",
+      "Target": "停止條件",
+      "Value": "高度",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "height-limit",
+      "Contract": "F2.Height",
+      "Title": "共同完成高度設為一萬五千列",
+      "Action": "set-property",
+      "Target": "總高度",
+      "Value": "15000",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "reset-height-evidence",
+      "Contract": "F2.Height",
+      "Title": "清除高度模式舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "height-request",
+      "Contract": "F2.Height",
+      "Title": "高度模式接受 START High",
+      "Action": "wait-log",
+      "Pattern": "IO grab request stopCondition=Height stopOnLow=False",
+      "TimeoutSeconds": 25
+    },
+    {
+      "Id": "height-armed",
+      "Contract": "F2.Height",
+      "Title": "高度模式監看共同完成列數",
+      "Action": "wait-log",
+      "Pattern": "grab stop armed condition=height limit=15000px source=io",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "height-gate",
+      "Contract": "F2.Height",
+      "Title": "高度模式開啟產品取相閘門",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "height-first-set",
+      "Contract": "F2.Height",
+      "Title": "高度模式首幀集合對齊",
+      "Action": "wait-log",
+      "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "height-curve",
+      "Contract": "F2.Height",
+      "Title": "高度模式 Curve 晚於主圖",
+      "Action": "wait-log",
+      "Pattern": "rowCurve present after=mainImage",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "height-low-ignored",
+      "Contract": "H4/F2.Height",
+      "Title": "提早 START Low 不得停止",
+      "Action": "wait-log",
+      "Pattern": "IO START edge=Low stopOnLow=False action=continue-fixed-target",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "height-stop",
+      "Contract": "F3.Height",
+      "Title": "共同列數達標自行停止",
+      "Action": "wait-log",
+      "Pattern": "auto:抓取停止 condition=Height rows=\\d+ limit=15000px",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "height-closed",
+      "Contract": "F3.Height",
+      "Title": "高度模式關閉產品取相閘門",
+      "Action": "wait-log",
+      "Pattern": "capture gate closed standby=on",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "height-finalize",
+      "Contract": "C1/F3.Height",
+      "Title": "高度模式完成封裝與遠端排程",
+      "Action": "wait-log",
+      "Pattern": "capture finalize grab=.*archive=.*\\.acap .*remoteFiles=[1-9]\\d*",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "height-simulator-complete",
+      "Contract": "H1/F3.Height",
+      "Title": "兩次固定停止 IO 脈衝正常結束",
+      "Action": "wait-helper-exit",
+      "Target": "time-simulator",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行完整 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

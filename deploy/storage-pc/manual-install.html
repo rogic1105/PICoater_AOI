@@ -94,6 +94,21 @@
   <p>「控制台 → 電源選項 → 變更進階電源設定」把睡眠、休眠與硬碟關閉時間設為「永不」。螢幕關閉時間可以保留。</p>
 
   <h2>驗證</h2>
+  <h3>一鍵測試自動重啟</h3>
+  <ol>
+    <li>在解壓縮後的 Release 根目錄，對 <code>test_storage_restart.bat</code> 按右鍵，選「以系統管理員身分執行」。</li>
+    <li>直接按 Enter 使用預設 3 次。工具會故意關閉儲存程式，等待工作排程以新 PID 自動重開；不會手動替排程啟動程式。</li>
+    <li>每次都必須在 90 秒內看到新 PID 與新 heartbeat。完成後程式會保持運行。</li>
+    <li>測試報告位於 <code>D:\Anilox\Logs\DvtReports</code>；任一輪失敗都保留報告供追查。</li>
+  </ol>
+  <h3>一鍵測試低磁碟自動刪檔</h3>
+  <ol>
+    <li>這是破壞性驗收，只能在已確認沒有正式資料時執行；它會永久刪除 <code>D:\Anilox\Captures</code> 最舊的一整天。</li>
+    <li>在 Release 根目錄，對 <code>test_storage_retention.bat</code> 按右鍵，選「以系統管理員身分執行」。</li>
+    <li>看清楚路徑後輸入 <code>DELETE</code>。工具會備份現行 <code>app-mode.json</code>，暫時把預留空間設為比目前剩餘量高 1 GiB，再重啟正式儲存程式執行真正的清理流程。</li>
+    <li>PASS 必須同時符合：只刪最舊完整一天與同日 CSV、較新日期全保留、空間回到門檻以上、原設定已還原、儲存程式 heartbeat 恢復。</li>
+    <li>報告與設定備份位於 <code>D:\Anilox\Logs\DvtReports</code>。無論 PASS 或 FAIL，都先看報告再處理資料。</li>
+  </ol>
   <table><tr><th>檢查</th><th>正確結果</th></tr>
     <tr><td><code>ipconfig</code></td><td>指定網卡具有 <code>IpAddress</code></td></tr>
     <tr><td>檢測電腦開啟 <code>\\&lt;IpAddress&gt;\&lt;ShareName&gt;</code></td><td>不要求密碼，能建立並刪除測試檔</td></tr>

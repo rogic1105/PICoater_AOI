@@ -1,0 +1,195 @@
+{
+  "Id": "physical-io-storage-soak",
+  "Name": "IO＋儲存電腦待機耐久測試（不 Grab）",
+  "Description": "持續確認實體 IO 待機、SMB 可寫、Storage app heartbeat 與儲存綠燈；不啟動相機 Grab。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "H1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 Flow marker",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "light-port",
+      "Contract": "H1",
+      "Title": "指定實體光源 COM Port",
+      "Action": "set-property",
+      "Target": "COM Port",
+      "Value": "COM17",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-physical-light",
+      "Contract": "H1",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "\u555f\u7528\u5149\u6e90",
+      "Value": "\u662f",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "light-brightness",
+      "Contract": "H1",
+      "Title": "固定耐久測試光源亮度",
+      "Action": "set-property",
+      "Target": "亮度",
+      "Value": "255",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "light-ready-log",
+      "Contract": "H1",
+      "Title": "等待光源取得 COM Port",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "light-green",
+      "Contract": "H1",
+      "Title": "確認光源狀態維持已連線",
+      "Action": "wait-element",
+      "Target": "● 光源 已連線 (255)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "io-endpoint-ip",
+      "Contract": "H1",
+      "Title": "指定實體 IO IP",
+      "Action": "set-property",
+      "Target": "IO IP",
+      "Value": "192.168.255.1",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-endpoint-port",
+      "Contract": "H1",
+      "Title": "指定實體 IO Port",
+      "Action": "set-property",
+      "Target": "IO Port",
+      "Value": "502",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-physical-io",
+      "Contract": "H1",
+      "Title": "啟用實體 IO",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "controller-start",
+      "Contract": "H1",
+      "Title": "確認實體 IO endpoint 啟動",
+      "Action": "wait-log",
+      "Pattern": "IO controller start generation=\\d+ endpoint=192\\.168\\.255\\.1:502",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "io-idle",
+      "Contract": "H1",
+      "Title": "等待 IO 完成交握並進入待機",
+      "Action": "wait-element",
+      "Target": "待機",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "share-writable",
+      "Contract": "H1",
+      "Title": "確認 SMB 分享可實際寫入",
+      "Action": "wait-log",
+      "Pattern": "\\[RemoteCopy\\] remote share accepted \\(write verified\\)",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "heartbeat",
+      "Contract": "H1",
+      "Title": "確認儲存程式 heartbeat 新鮮",
+      "Action": "wait-log",
+      "Pattern": "儲存程式 heartbeat 恢復 pid=\\d+ age=[0-9.]+s",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "storage-green",
+      "Contract": "H1",
+      "Title": "確認儲存電腦兩層皆正常",
+      "Action": "wait-element",
+      "Target": "● 儲存電腦 已連線",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "stability-window",
+      "Contract": "H1",
+      "Title": "持續觀察 IO 與儲存狀態",
+      "Action": "soak",
+      "Target": "待機|● 儲存電腦 已連線|● 光源 已連線 (255)",
+      "TimeoutSeconds": 3600
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "controller-stop",
+      "Contract": "H1",
+      "Title": "確認 IO controller 正常停止",
+      "Action": "wait-log",
+      "Pattern": "IO controller stop generation=\\d+ reason=(?:settings|shutdown)",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行所有已註冊 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

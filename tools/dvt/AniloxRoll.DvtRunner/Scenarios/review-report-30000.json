@@ -1,0 +1,566 @@
+{
+  "Id": "review-report-30000",
+  "Name": "回顧與報表 30,000 筆",
+  "Description": "以 D:\\Anilox\\StressCaptures_30000 驗證大型資料集掃描、重新讀取最新、回顧快滾／時序／強化、方向／熱力圖／顯示裁切、報表單筆／範圍／Y軸／異常篩選與跨頁 Curve 重用。",
+  "Steps": [
+    {
+      "Id": "stage-review-root",
+      "Contract": "DVT.Setup",
+      "Title": "暫設大型資料集路徑",
+      "Action": "set-session-value",
+      "Target": "LastDataPath",
+      "Value": "D:\\Anilox\\StressCaptures_30000",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化記錄模式",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-flow-log",
+      "Contract": "DVT.LogMode",
+      "Title": "啟用流程驗證探針",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "flow-log-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認流程驗證探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "open-review",
+      "Contract": "R1",
+      "Title": "切到回顧頁",
+      "Action": "select-tab",
+      "Target": "回顧",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "review-evidence-boundary",
+      "Contract": "R1",
+      "Title": "切開大型資料集載入證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "select-stress-folder",
+      "Contract": "R1/D1",
+      "Title": "讀取 30,000 筆測試資料",
+      "Action": "confirm-folder",
+      "Target": "讀取資料",
+      "Value": "D:\\Anilox\\StressCaptures_30000",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-folder-proof",
+      "Contract": "R1",
+      "Title": "確認回顧資料夾切換",
+      "Action": "wait-log",
+      "Pattern": "RV folder selected root=D:\\\\Anilox\\\\StressCaptures_30000",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-index-proof",
+      "Contract": "R1",
+      "Title": "確認大型資料索引完成",
+      "Action": "wait-log",
+      "Pattern": "RV repo scan root=D:\\\\Anilox\\\\StressCaptures_30000 files=[1-9][0-9]*",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-first-load",
+      "Contract": "R1",
+      "Title": "等待最新序號完整上畫",
+      "Action": "wait-log",
+      "Pattern": "RV loadGrab done [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-zoom-before-drag",
+      "Contract": "R4.first-view",
+      "Title": "放大回顧主畫面以建立可拖曳視野",
+      "Action": "wheel",
+      "Target": "camReviewMain",
+      "Value": "240",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "review-main-drag",
+      "Contract": "R4.first-view",
+      "Title": "拖曳回顧主畫面",
+      "Action": "drag",
+      "Target": "camReviewMain",
+      "Value": "80,40",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "review-drag-proof",
+      "Contract": "R4.first-view",
+      "Title": "驗證拖曳首位移已發布",
+      "Action": "wait-log",
+      "Pattern": "RV viewEdges",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "data-index-proof",
+      "Contract": "D1",
+      "Title": "確認報表共用快照完成",
+      "Action": "wait-log",
+      "Pattern": "DT stats snapshot csv=[1-9][0-9]* records=[1-9][0-9]* grabs=30000 ms=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-scroll-boundary",
+      "Contract": "R2",
+      "Title": "切開回顧快速滾動證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "review-fast-scroll",
+      "Contract": "R2",
+      "Title": "快速滾動回顧序號 500 筆",
+      "Action": "select-combo",
+      "Target": "回顧序號",
+      "Value": "next:500",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "review-fast-curve",
+      "Contract": "R2",
+      "Title": "確認快路 Curve 追到最新選擇",
+      "Action": "wait-log",
+      "Pattern": "RV curves [0-9]{6}-[0-9]{6}（[0-9]+ms）",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "review-fast-image",
+      "Contract": "R2",
+      "Title": "確認停下後完整圖片追上",
+      "Action": "wait-log",
+      "Pattern": "RV loadGrab done [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "period-boundary",
+      "Contract": "R3",
+      "Title": "切開時序導航證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "period-date",
+      "Contract": "R3",
+      "Title": "切換回顧日期",
+      "Action": "select-combo",
+      "Target": "回顧日期",
+      "Value": "next:5",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "period-time",
+      "Contract": "R3",
+      "Title": "快速切換回顧時間",
+      "Action": "select-combo",
+      "Target": "回顧時間",
+      "Value": "next:100",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "period-complete",
+      "Contract": "R3",
+      "Title": "確認時序圖片與 Curve 完成",
+      "Action": "wait-log",
+      "Pattern": "RV period done [0-9]{4}-[0-9]{2}-[0-9]{2}",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "review-reload-boundary",
+      "Contract": "R1.reload-latest",
+      "Title": "切開重新讀取證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "review-reload",
+      "Contract": "R1.reload-latest",
+      "Title": "再次讀取並跳回最新序號",
+      "Action": "confirm-folder",
+      "Target": "讀取資料",
+      "Value": "D:\\Anilox\\StressCaptures_30000",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-reload-proof",
+      "Contract": "R1.reload-latest",
+      "Title": "確認重新讀取後完整上畫",
+      "Action": "wait-log",
+      "Pattern": "RV loadGrab done [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "review-enhance-on",
+      "Contract": "S2",
+      "Title": "點回顧圖表切換強化圖片",
+      "Action": "click",
+      "Target": "chart1",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-enhance-on-setting",
+      "Contract": "S2",
+      "Title": "確認回顧強化已開啟",
+      "Action": "wait-log",
+      "Pattern": "set:\\[hd_EnableReviewEnhance\\]=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-enhance-on-proof",
+      "Contract": "S2",
+      "Title": "確認強化圖片更新且 Curve 保留",
+      "Action": "wait-log",
+      "Pattern": "RV loadGrab done [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "review-enhance-off",
+      "Contract": "S2",
+      "Title": "再點同一圖表還原原圖",
+      "Action": "click",
+      "Target": "chart1",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-enhance-off-setting",
+      "Contract": "S2",
+      "Title": "確認回顧強化已關閉",
+      "Action": "wait-log",
+      "Pattern": "set:\\[hd_EnableReviewEnhance\\]=False",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-enhance-off-proof",
+      "Contract": "S2",
+      "Title": "確認原圖更新且 Curve 保留",
+      "Action": "wait-log",
+      "Pattern": "RV loadGrab done [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "normalize-heatmap",
+      "Contract": "S5",
+      "Title": "正規化強化熱力圖",
+      "Action": "set-property",
+      "Target": "強化熱力圖",
+      "Value": "關閉",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "set-heatmap",
+      "Contract": "S5",
+      "Title": "切換強化熱力圖",
+      "Action": "set-property",
+      "Target": "強化熱力圖",
+      "Value": "冷色",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "heatmap-proof",
+      "Contract": "S5",
+      "Title": "確認熱力圖只改顯示",
+      "Action": "wait-log",
+      "Pattern": "enhance heatmap mode=Cold .* scope=main-only data=unchanged",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-direction",
+      "Contract": "S3",
+      "Title": "正規化上下方向",
+      "Action": "set-property",
+      "Target": "上下方向",
+      "Value": "由下而上",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "direction-settle",
+      "Contract": "S3",
+      "Title": "等待方向重畫完成",
+      "Action": "delay",
+      "Value": "1",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "set-direction",
+      "Contract": "S3",
+      "Title": "切換上下方向",
+      "Action": "set-property",
+      "Target": "上下方向",
+      "Value": "由上而下",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "direction-proof",
+      "Contract": "S3",
+      "Title": "確認列圖表依新方向重畫",
+      "Action": "wait-log",
+      "Pattern": "RV row (rowChart|rowView) dir=TopToBottom",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-crop-head",
+      "Contract": "S6",
+      "Title": "正規化顯示去頭",
+      "Action": "set-property",
+      "Target": "去頭",
+      "Value": "0",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "set-crop-head",
+      "Contract": "S6",
+      "Title": "調整顯示去頭",
+      "Action": "set-property",
+      "Target": "去頭",
+      "Value": "1",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "crop-head-proof",
+      "Contract": "S6",
+      "Title": "確認裁切只改顯示布局",
+      "Action": "wait-log",
+      "Pattern": "displayCrop head=1(?:\\.0+)? .* scope=main\\+column-chart data=unchanged waterfallHistory=preserved",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "open-report",
+      "Contract": "D1",
+      "Title": "切到報表頁",
+      "Action": "select-tab",
+      "Target": "報表",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "report-single-boundary",
+      "Contract": "D3",
+      "Title": "切開報表單序號證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "report-fast-scroll",
+      "Contract": "D3",
+      "Title": "快速滾動報表序號 500 筆",
+      "Action": "select-combo",
+      "Target": "報表序號",
+      "Value": "next:500",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "report-column-curve",
+      "Contract": "D3",
+      "Title": "確認報表欄 Curve 追上",
+      "Action": "wait-log",
+      "Pattern": "DT curve load [0-9]{6}-[0-9]{6} captures=[1-9][0-9]*",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "report-row-curve",
+      "Contract": "D3",
+      "Title": "確認報表列 Curve 同步上畫",
+      "Action": "wait-log",
+      "Pattern": "DT row curve load [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "report-review-reuse",
+      "Contract": "D3.review-reuse",
+      "Title": "切回回顧並重用報表 Curve",
+      "Action": "select-tab",
+      "Target": "回顧",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "review-reuse-proof",
+      "Contract": "D3.review-reuse",
+      "Title": "確認回顧不重讀 Curve bin",
+      "Action": "wait-log",
+      "Pattern": "RV loadGrab curves=reuse source=Data [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "return-report",
+      "Contract": "D3",
+      "Title": "回到報表頁",
+      "Action": "select-tab",
+      "Target": "報表",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "report-range-boundary",
+      "Contract": "D3",
+      "Title": "切開報表範圍證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "range-latest",
+      "Contract": "D3",
+      "Title": "快速調整範圍結束 500 筆",
+      "Action": "select-combo",
+      "Target": "報表範圍結束",
+      "Value": "next:500",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "range-oldest",
+      "Contract": "D3",
+      "Title": "快速調整範圍起始 500 筆",
+      "Action": "select-combo",
+      "Target": "報表範圍起始",
+      "Value": "previous:500",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "range-preview",
+      "Contract": "D3",
+      "Title": "確認範圍 Curve 跳讀追上",
+      "Action": "wait-log",
+      "Pattern": "DT range preview apply gen=[0-9]+ latest=[0-9]+",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "range-settle",
+      "Contract": "D3",
+      "Title": "確認範圍停止後完整對帳",
+      "Action": "wait-log",
+      "Pattern": "DT range settle → refresh",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "period-chart-year",
+      "Contract": "D4",
+      "Title": "切換年度圖表",
+      "Action": "select-combo",
+      "Target": "報表年",
+      "Value": "next:1",
+      "TimeoutSeconds": 60,
+      "Optional": true
+    },
+    {
+      "Id": "period-chart-month",
+      "Contract": "D4",
+      "Title": "切換月份圖表",
+      "Action": "select-combo",
+      "Target": "報表月",
+      "Value": "next:1",
+      "TimeoutSeconds": 60,
+      "Optional": true
+    },
+    {
+      "Id": "period-chart-day",
+      "Contract": "D4",
+      "Title": "切換日期圖表",
+      "Action": "select-combo",
+      "Target": "報表日",
+      "Value": "next:1",
+      "TimeoutSeconds": 60,
+      "Optional": true
+    },
+    {
+      "Id": "yield-scale-toggle",
+      "Contract": "D5.y-scale",
+      "Title": "切換年度良率圖 Y 軸",
+      "Action": "click",
+      "Target": "chartDataYieldYearly",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "yield-scale-proof",
+      "Contract": "D5.y-scale",
+      "Title": "確認 Y 軸模式切換",
+      "Action": "wait-log",
+      "Pattern": "ui:【良率圖-年】→ Y軸=(Auto|Fixed)",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "fail-filter-on",
+      "Contract": "D5.fail-filter",
+      "Title": "只顯示異常序號",
+      "Action": "click",
+      "Target": "△ 顯示異常",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "fail-filter-on-proof",
+      "Contract": "D5.fail-filter",
+      "Title": "確認異常清單與範圍同步",
+      "Action": "wait-log",
+      "Pattern": "ui:【篩選異常】→ 只顯示異常",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "fail-filter-off",
+      "Contract": "D5.fail-filter",
+      "Title": "還原顯示全部序號",
+      "Action": "click",
+      "Target": "○ 顯示全部",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "fail-filter-off-proof",
+      "Contract": "D5.fail-filter",
+      "Title": "確認完整清單與範圍同步",
+      "Action": "wait-log",
+      "Pattern": "ui:【篩選異常】→ 顯示全部",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行所有已註冊 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 180
+    }
+  ]
+}

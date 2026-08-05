@@ -21,7 +21,10 @@ class HardwareFlowValidator:
             self._edge_pattern.match(line.message)
             or self._camera_pattern.match(line.message)
             or line.message.startswith(("儲存程式 heartbeat ", "⚠ 儲存程式 heartbeat "))
-            or line.message.startswith(("IO controller ", "io:DI START ", "IO grab "))
+            or line.message.startswith("[RemoteCopy] ")
+            or line.message.startswith(
+                ("IO controller ", "IO poll state ", "io:DI START ", "IO grab ", "IO START edge=")
+            )
             for line in session.lines
         )
         if not covered:
@@ -30,11 +33,130 @@ class HardwareFlowValidator:
 
         self._check_connection_edges(session, report)
         self._check_storage_heartbeat(session, report)
+        self._check_remote_copy_recovery(session, report)
         self._check_camera_edges(session, report)
         self._check_io_controller_lifecycle(session, report)
+        self._check_io_poll_health(session, report)
         self._check_io_grab_outcomes(session, report)
         self._check_io_stop_policy(session, report)
         return report
+
+    def _check_remote_copy_recovery(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        queued = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("[RemoteCopy] pending queued ")
+        ]
+        retries = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if line.message.startswith("[RemoteCopy] retry pending ")
+        ]
+        evidence = sorted(queued + retries, key=lambda item: item[0])
+        if not evidence:
+            report.add(
+                self.domain,
+                "H1.remote-copy-recovery",
+                CheckStatus.NOT_COVERED,
+                "本 session 無 SMB 中斷待傳資料",
+            )
+            return
+
+        last_pending_index = evidence[-1][0]
+        unavailable = [
+            line for line in session.lines[: last_pending_index + 1]
+            if line.message.startswith("[RemoteCopy] remote share unavailable:")
+        ]
+        accepted = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if index > last_pending_index
+            and line.message
+            == "[RemoteCopy] remote share accepted (write verified)"
+        ]
+        drained = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if index > last_pending_index
+            and line.message.startswith("[RemoteCopy] backlog drained: ")
+        ]
+
+        failures = []
+        if not unavailable:
+            failures.append("待傳重試前缺 remote share unavailable")
+        if not accepted:
+            failures.append("最後重試後缺 remote share accepted")
+        if not drained:
+            failures.append("最後重試後缺 backlog drained")
+        if accepted and drained and drained[0][0] < accepted[0][0]:
+            failures.append("backlog drained 早於 remote share accepted")
+
+        report.add(
+            self.domain,
+            "H1.remote-copy-recovery",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"queued={len(queued)} retries={len(retries)} unavailable={len(unavailable)} "
+            f"acceptedAfter={len(accepted)} drainedAfter={len(drained)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_io_poll_health(self, session: FlowSession, report: CheckReport) -> None:
+        pattern = re.compile(
+            r"^IO poll state attempts=(\d+) successes=(\d+) snapshots=(\d+) "
+            r"connected=(True|False) state=(\w+)$"
+        )
+        samples = [
+            (line, pattern.match(line.message))
+            for line in session.lines
+            if line.message.startswith("IO poll state ")
+        ]
+        if not samples:
+            report.add(
+                self.domain,
+                "H1.io-poll",
+                CheckStatus.NOT_COVERED,
+                "no stable IO polling snapshot in this session",
+            )
+            return
+
+        failures = []
+        previous = None
+        for line, match in samples:
+            if match is None:
+                failures.append(f"{line.timestamp} malformed snapshot")
+                continue
+
+            attempts = int(match.group(1))
+            successes = int(match.group(2))
+            snapshots = int(match.group(3))
+            connected = match.group(4) == "True"
+            current = (attempts, successes, snapshots)
+
+            if not connected:
+                failures.append(f"{line.timestamp} controller disconnected")
+            if attempts != successes or successes != snapshots:
+                failures.append(
+                    f"{line.timestamp} counts diverged "
+                    f"attempts={attempts} successes={successes} snapshots={snapshots}"
+                )
+            if previous is not None and any(
+                current[index] <= previous[index] for index in range(3)
+            ):
+                failures.append(
+                    f"{line.timestamp} counters did not advance "
+                    f"previous={previous} current={current}"
+                )
+            previous = current
+
+        report.add(
+            self.domain,
+            "H1.io-poll",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"samples={len(samples)} invalid={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
 
     def _check_io_controller_lifecycle(self, session: FlowSession, report: CheckReport) -> None:
         pattern = re.compile(r"^IO controller (start|stop) generation=(\d+)")
@@ -130,7 +252,16 @@ class HardwareFlowValidator:
             for line in session.lines
             if line.message.startswith("IO grab stop ")
         ]
-        if not lines:
+        fixed_low_message = (
+            "IO START edge=Low stopOnLow=False "
+            "action=continue-fixed-target"
+        )
+        fixed_lows = [
+            (index, line)
+            for index, line in enumerate(session.lines)
+            if line.message == fixed_low_message
+        ]
+        if not lines and not fixed_lows:
             report.add(
                 self.domain,
                 "H4.io-stop-policy",
@@ -160,11 +291,34 @@ class HardwareFlowValidator:
                     f"{line.timestamp} ignored condition={condition}"
                 )
 
+        request_pattern = re.compile(
+            r"^IO grab request stopCondition=(?P<condition>IoSignal|Time|Height) "
+            r"stopOnLow=(?P<stop>True|False)$"
+        )
+        for index, line in fixed_lows:
+            prior_request = next(
+                (
+                    request_pattern.match(candidate.message)
+                    for candidate in reversed(session.lines[:index])
+                    if request_pattern.match(candidate.message)
+                ),
+                None,
+            )
+            if (
+                prior_request is None
+                or prior_request.group("condition") not in ("Time", "Height")
+                or prior_request.group("stop") != "False"
+            ):
+                failures.append(
+                    f"{line.timestamp} fixed Low 無有效的 Time/Height request"
+                )
+
         report.add(
             self.domain,
             "H4.io-stop-policy",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
-            f"requests={len(lines)} invalid={len(failures)}"
+            f"requests={len(lines)} fixedLow={len(fixed_lows)} "
+            f"invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

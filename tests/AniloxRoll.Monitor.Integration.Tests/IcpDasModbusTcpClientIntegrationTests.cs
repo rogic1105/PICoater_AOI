@@ -15,7 +15,7 @@ namespace AniloxRoll.Monitor.Integration.Tests
     public class IcpDasModbusTcpClientIntegrationTests
     {
         [Test]
-        public async Task ReadTimeout_ObservesLateFailure_AndAllowsReconnect()
+        public async Task ReadTimeout_ClosesTransport_AndAllowsReconnect()
         {
             int unobservedCount = 0;
             EventHandler<UnobservedTaskExceptionEventArgs> onUnobserved = (sender, args) =>
@@ -55,7 +55,7 @@ namespace AniloxRoll.Monitor.Integration.Tests
                 GC.Collect();
 
                 Assert.That(unobservedCount, Is.Zero,
-                    "Timed-out NetworkStream tasks must be observed instead of reaching the process-wide handler.");
+                    "Timed-out socket operations must not reach the process-wide handler.");
             }
             finally
             {

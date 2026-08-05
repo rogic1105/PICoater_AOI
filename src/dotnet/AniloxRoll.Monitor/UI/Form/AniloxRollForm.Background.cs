@@ -26,6 +26,8 @@ namespace AniloxRoll.Monitor.Forms
     /// <summary>AniloxRollForm 背景（取得/載入/預覽）相關方法 — 由主檔拆出的 partial。</summary>
     public partial class AniloxRollForm
     {
+        private bool? _lastFlowBackgroundCaptureReady;
+
         /// <summary>
         /// 取得背景：啟動 grab → 採集 N 秒 → 多幀平均 column mean → 存 MCBF bin。
         /// </summary>
@@ -389,8 +391,20 @@ namespace AniloxRoll.Monitor.Forms
             // 背景鈕不歸 IO 管（借 grab 取樣：光源+相機就緒、非抓取中即可）——原本放在 IO early-return
             // 之後 → IO 開機即連線的機台每 tick 提前返回、開機鎖死到第一次 grab 才被 UpdateGrabButton 解
             // （2026-07-09 使用者回報）。
-            btnLiveGetBackground.Enabled = IsLightReadyForBg && camReady
-                && !(_liveCameraManager?.IsLiveGrabbing ?? false);
+            bool lightReady = IsLightReadyForBg;
+            bool isGrabbing =
+                _liveCameraManager?.IsLiveGrabbing ?? false;
+            bool backgroundCaptureReady =
+                lightReady && camReady && !isGrabbing;
+            btnLiveGetBackground.Enabled = backgroundCaptureReady;
+            if (_lastFlowBackgroundCaptureReady != backgroundCaptureReady)
+            {
+                FlowTrace.Log(
+                    $"background capture ready={backgroundCaptureReady} " +
+                    $"camReady={camReady} lightReady={lightReady} " +
+                    $"grabbing={isGrabbing}");
+                _lastFlowBackgroundCaptureReady = backgroundCaptureReady;
+            }
 
             // IO 已連線且未暫停：btnLiveGrab 由 IO 連線邏輯控制，不覆寫
             if (CurrentIoController?.IsConnected == true && !_isIoSuspended) return;

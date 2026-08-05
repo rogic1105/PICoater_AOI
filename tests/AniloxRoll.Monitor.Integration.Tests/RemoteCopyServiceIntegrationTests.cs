@@ -148,6 +148,45 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void EnqueueFile_PreviouslyUnavailableThenDirectSuccess_LogsDurableBacklogAndDrain()
+        {
+            string currentRemote = Path.Combine(_tempRoot, "missing");
+            string source = CreateCaptureFile("direct-recovery.bin", "payload");
+            var traceOutput = new StringWriter();
+            var listener = new TextWriterTraceListener(traceOutput);
+            bool previousAutoFlush = Trace.AutoFlush;
+            Trace.Listeners.Add(listener);
+            Trace.AutoFlush = true;
+
+            try
+            {
+                using (var service = new RemoteCopyService(() => currentRemote, () => _localRoot))
+                {
+                    Assert.That(service.ProbeRemoteWritable(), Is.False);
+
+                    Directory.CreateDirectory(_remoteRoot);
+                    currentRemote = _remoteRoot;
+                    service.EnqueueFile(source);
+                    WaitUntil(() => service.QueueCount == 0, 5000, "direct recovery queue drain");
+
+                    Assert.That(service.TotalRetryAttempts, Is.Zero);
+                }
+
+                listener.Flush();
+                string trace = traceOutput.ToString();
+                StringAssert.Contains("[RemoteCopy] pending queued added=1 queue=1", trace);
+                StringAssert.Contains("[RemoteCopy] backlog drained:", trace);
+            }
+            finally
+            {
+                Trace.Listeners.Remove(listener);
+                listener.Dispose();
+                Trace.AutoFlush = previousAutoFlush;
+                traceOutput.Dispose();
+            }
+        }
+
+        [Test]
         public void EnqueueMutableFile_UpdatedWhilePending_PublishesLatestSnapshot()
         {
             string blockedPath = CreateBlockedRemotePath();
@@ -222,6 +261,75 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void Retention_LowSpace_DeletesOnlyOldestCompleteDayThenStops()
+        {
+            string blockedPath = CreateBlockedRemotePath();
+            string oldestDay = Path.Combine(_localRoot, "2026", "202607", "20260714");
+            string newerDay = Path.Combine(_localRoot, "2026", "202607", "20260715");
+            Directory.CreateDirectory(Path.Combine(oldestDay, "_curve_summary"));
+            Directory.CreateDirectory(Path.Combine(newerDay, "_curve_summary"));
+
+            string oldestArchive = Path.Combine(oldestDay, "260714-120000.acap");
+            WriteAllocatedFile(oldestArchive, 32 * 1024 * 1024);
+            string oldestTicks = Path.Combine(oldestDay, "_ticks.csv");
+            string oldestSummary = Path.Combine(
+                oldestDay, "_curve_summary", "260714-120000.mcsf");
+            string oldestCsv = Path.Combine(
+                Path.GetDirectoryName(oldestDay), "20260714.csv");
+            File.WriteAllText(oldestTicks, "frame,100\r\n");
+            File.WriteAllText(oldestSummary, "derived");
+            File.WriteAllText(oldestCsv, "inspection-record");
+
+            string newerArchive = Path.Combine(newerDay, "260715-120000.acap");
+            string newerTicks = Path.Combine(newerDay, "_ticks.csv");
+            string newerSummary = Path.Combine(
+                newerDay, "_curve_summary", "260715-120000.mcsf");
+            string newerCsv = Path.Combine(
+                Path.GetDirectoryName(newerDay), "20260715.csv");
+            File.WriteAllText(newerArchive, "newer-capture");
+            File.WriteAllText(newerTicks, "frame,200\r\n");
+            File.WriteAllText(newerSummary, "newer-derived");
+            File.WriteAllText(newerCsv, "newer-inspection-record");
+
+            using (var service = new RemoteCopyService(
+                () => blockedPath, () => _localRoot))
+            {
+                service.EnqueueFiles(new[] { oldestArchive, oldestCsv, newerArchive });
+                WaitUntil(() => service.QueueCount == 3, 2000, "pending sources");
+
+                string driveRoot = Path.GetPathRoot(Path.GetFullPath(_localRoot));
+                long minFreeBytes =
+                    new DriveInfo(driveRoot).AvailableFreeSpace + (8L * 1024 * 1024);
+                var retention = new StorageRetentionService(
+                    () => _localRoot,
+                    () => minFreeBytes,
+                    dayDirectoryToDelete =>
+                    {
+                        int canceled = service.CancelPendingFilesUnder(dayDirectoryToDelete);
+                        string month = Path.GetDirectoryName(dayDirectoryToDelete);
+                        string csv = Path.Combine(
+                            month, Path.GetFileName(dayDirectoryToDelete) + ".csv");
+                        if (service.CancelPendingFile(csv)) canceled++;
+                        return canceled;
+                    });
+
+                retention.RunCleanup();
+
+                Assert.That(Directory.Exists(oldestDay), Is.False);
+                Assert.That(File.Exists(oldestCsv), Is.False);
+                Assert.That(File.Exists(oldestTicks), Is.False);
+                Assert.That(File.Exists(oldestSummary), Is.False);
+                Assert.That(File.Exists(newerArchive), Is.True);
+                Assert.That(File.Exists(newerTicks), Is.True);
+                Assert.That(File.Exists(newerSummary), Is.True);
+                Assert.That(File.Exists(newerCsv), Is.True);
+                Assert.That(retention.LastCleanedDayFolders, Is.EqualTo(1));
+                Assert.That(service.QueueCount, Is.EqualTo(1));
+                Assert.That(FindPendingMarkers(), Has.Length.EqualTo(1));
+            }
+        }
+
+        [Test]
         public void Retention_MinFreeAtOrAboveVolumeTotal_DoesNotDeleteCaptures()
         {
             string source = CreateCaptureFile("must-remain.bin", "payload");
@@ -256,6 +364,22 @@ namespace AniloxRoll.Monitor.Tests
             string path = Path.Combine(dayDirectory, fileName);
             File.WriteAllText(path, content);
             return path;
+        }
+
+        private static void WriteAllocatedFile(string path, int length)
+        {
+            byte[] block = new byte[1024 * 1024];
+            using (var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.None))
+            {
+                int remaining = length;
+                while (remaining > 0)
+                {
+                    int count = Math.Min(block.Length, remaining);
+                    stream.Write(block, 0, count);
+                    remaining -= count;
+                }
+                stream.Flush(true);
+            }
         }
 
         private string[] FindPendingMarkers()

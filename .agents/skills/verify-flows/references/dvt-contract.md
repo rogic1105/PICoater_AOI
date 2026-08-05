@@ -150,6 +150,10 @@ S0 通用（所有 PropertyGrid 設定自動記 `ui:設定[名]=值`）。新增
 [UiPaint] {control} {ms}ms              ← chart WM_PAINT >50ms；IC/RV paint …=canvas OnPaint
 IC|WF stats paints=N/s paintMs=M statusEv=K/s ← 完整診斷；canvas 每秒重繪組成（>5 次/秒才記）
 ```
+耐久資源量測由外部 `tests/TestRunner.ps1` 每 30 秒取樣，不在產品程序內列舉
+`Process.Threads` 或建立診斷同步物件。量測者與被測程式分離，避免觀測動作本身造成
+handle 成長。外部取樣包含 Private Bytes、Working Set、handles、GDI、USER、
+threads、CPU 與 UI responsiveness；一次跳升後持平不算洩漏，持續成長才依耐久門檻失敗。
 `UiStallDetector` 在 Form ctor 建立，但必須等 `Shown` 的全 tab 預熱完成後才
 `BeginInteractiveMeasurement`；建構期使用者尚不能互動，不得把 ctor／預熱時間算成第一筆 stall。
 **判讀決策樹（2026-07-07 十輪教訓的結晶）**：
@@ -318,6 +322,10 @@ armed while the product gate is closed; synchronization work must finish before 
 | `HeadGuard` | next complete frame from every connected camera | `Capturing` | Log per-camera hardware ticks and validate circular phase spread. A mismatch invalidates the next start but does not truncate the current HIGH window. |
 | `Capturing` | IO falling edge and stop condition=`IO` | `TailDrain` | Snapshot each camera's last accepted tick; accept exactly one newer complete frame per camera. |
 | `Capturing` | IO falling edge and stop condition=`Time`/`Height` | `Capturing` | Record the edge but keep the product gate open; the selected fixed target owns stop timing. |
+
+待機時的完整相位重算最多每 5 秒一次，避免 500ms 狀態輪詢持續配置 LINQ／快照物件。
+任何相位失效事件會立即解除此節流；每次真正開始 Grab 仍在開 gate 前同步重驗，
+因此節流只降低無操作時的背景成本，不放寬開始條件。
 | `Capturing` | IO communication/PLC-alive loss and stop condition=`IO` | `ReadyIdle` | Stop immediately without waiting for a tail frame; the IO boundary is no longer trustworthy. |
 | `Capturing` | IO communication/PLC-alive loss and stop condition=`Time`/`Height` | `Capturing` | Keep the product gate open and finish the selected fixed target; report the hardware fault independently. |
 | `Capturing` | fixed time or common completed-row target reached | `ReadyIdle` or `AwaitingStartLow` | Close the gate immediately. If START is still High, wait for Low before rearming; otherwise return Idle. |
@@ -947,6 +955,11 @@ btnLiveGetBackground_Click@AniloxRollForm.Background.cs      intent 行 ui:【�
  │   ＋ `background capture end output=disabled result=ok|failed` ＋ UpdateStandardBgSubLockState
  ├（_autoStartGrabAfterBg）await ReleaseAsync → btnLiveGrab_Click（IO 觸發自動回抓）→ return
  └ 尾端自動預覽：btnLiveViewBackground_Click（直呼）
+按鈕可用性：
+UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
+ ├ 輸入＝相機已就緒＋光源已就緒＋目前未 Grab
+ ├ 由 OnCamerasHwReady 與光源狀態轉變共同觸發，不依賴兩者誰先完成
+ └ 狀態轉變記 `background capture ready=...`
 時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後，
 依 `CaptureStopCondition` 作為時間模式停止值或 IO 模式安全上限，兩者不得互相中止。高度模式不武裝此 timer。
 PropertyGrid 分別顯示為檢測設定的 `背景採樣(秒)`，以及「畫布設定」下的
@@ -997,6 +1010,7 @@ background bind camN mode=single source=per-frame status=ready
 background bind camN mode=standard source=none status=skipped reason=offline
 
 取得背景非產品採樣：
+background capture ready=True camReady=True lightReady=True grabbing=False
 background capture begin output=disabled
 background capture waiting first-set timeoutMs=N
 capture first-set ready ... aligned=True
@@ -1026,12 +1040,17 @@ background apply camN grab=G mode=single source=per-frame width=W
 ## 硬體連線契約（H 系列）——邊緣觸發（同 MURA 模式：轉變才記，不洗版）
 
 ### H1 IO / 光源 / 儲存電腦 連線轉變
+
+啟動時 `啟用 IO=否` 不建立空的 `IoConnectionCoordinator`；之後第一次啟用才建立
+乾淨的 controller generation。耐久測試每 2 秒讀取實際 label 文字，不能只驗
+handle 存活；IO、儲存電腦與光源任一文字離開綠燈即失敗。
 ```
 Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存分享 同格式
 Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
 Tn: 儲存程式 heartbeat 恢復 pid=N age=Ns
 Tn: ⚠ 儲存程式 heartbeat 未回報 reason=…
 T1: IO controller start generation=N endpoint=IP:Port
+穩態（DVT 每 30 秒）: IO poll state attempts=N successes=N snapshots=N connected=True state=Idle
 設定變更：IO controller stop generation=N reason=settings
         → IO controller start generation=N+1 endpoint=IP:Port
 快速連改：IO controller restart coalesced generation=N（可有；該代不得再 start）
@@ -1053,8 +1072,11 @@ InitIoController／HandleIoSettingsChanged@AniloxRollForm.IoControl.cs
 IoGrabController events
  → IoConnectionCoordinator.IsCurrent（舊 generation 截止）
  → OnIoController*Requested／DispatchCurrentIoController@AniloxRollForm.IoControl.cs
-    ├ Start／Stop → Form 的 request generation＋transition gate＋既有 Grab FSM
-    └ State／Connection／IoUpdated → UI 呈現
+     ├ Start／Stop → Form 的 request generation＋transition gate＋既有 Grab FSM
+     ├ State／Connection → UI 呈現
+     └ IoUpdated → 原子替換最新快照
+        → TelemetryTimer_Tick@AniloxRollForm.Telemetry.cs
+        → ApplyPendingIoSnapshot（只套用最新狀態，不為每次 500ms poll 建立 BeginInvoke）
 關閉程式
  → ShutdownIoControllerAsync@AniloxRollForm.IoControl.cs
  → ShutdownAsync@IoConnectionCoordinator.cs
@@ -1062,6 +1084,13 @@ IoGrabController events
 ```
 - `IoConnectionCoordinator` 只擁有 controller 建立、替換、關閉、active generation 與 lifecycle gate；
   不得擁有 GrabId、相機準備、停止條件、BUSY／MURA 等產品政策。
+- 耐久測試不能只看綠燈；`IO poll state` 的 attempts／successes／snapshots 必須持續增加且相等，
+  才能證明背景 polling 與 UI snapshot 鏈仍在運作。
+- Modbus 穩態讀寫保留 `Task` API，但 `IcpDasModbusTcpClient.SendAndReceive` 必須在 worker task
+  使用同步 `Socket.Send/Receive` 與 socket timeout；禁止回到每次 poll 建立
+  `NetworkStream.ReadAsync/WriteAsync`，否則 .NET Framework 會隨輪詢累積 Event／Thread handle。
+- 光源定期健康探測由 `LightConnectionCoordinator` 的單一 `LightProbe` worker 串行執行；
+  不得每 2 秒新建 ThreadPool `Task`，否則大型 MIL 程序長時間未 GC 時會累積 Event handle。
 - Form 只保留 IO 擷取 request generation 與 transition gate；controller lifecycle 欄位不得在 Form
   另存第二份。
 
@@ -1115,8 +1144,9 @@ TelemetryTimer_Tick
   `OnConnectionChanged(true)`；任一步失敗須 Dispose 並維持 Disconnected/CommLost，禁止假綠。
 - **連線狀態 SSoT**：業務層一律讀 `IoGrabController.IsConnected`（accepted gate）；TCP 已接上但交握未過時，
   `NotifyGrabStarted/Stopped` 與 `NotifyMuraDetected/ClearMura` 必須靜默拒絕，不得用 `_plc.IsConnected` 繞過。
-- **逾時收口**：`SendAndReceive` read/write 逾時先 `ObserveLateFault` 再關 transport；Connect timeout
-  關 socket 後等待 SAEA completion 再釋放 args。全天 crash log 不得新增來源為 ConnectAsync/NetworkStream 的
+- **逾時收口**：`SendAndReceive` 以 socket `SendTimeout/ReceiveTimeout` 將
+  `TimedOut/WouldBlock` 轉為 `TimeoutException`，外層關閉 transport；Connect timeout
+  關 socket 後等待 SAEA completion 再釋放 args。全天 crash log 不得新增來源為 ConnectAsync/Socket 的
   `UnobservedTaskException`。
   Connect 必須走 `SocketAsyncEventArgs`；debugger 不得再出現晚到 `TcpClient.EndConnect` 的
   `ObjectDisposedException/NullReferenceException` first-chance 例外。
@@ -1124,8 +1154,14 @@ TelemetryTimer_Tick
   `IO reconnect pending: attempt N, {TCP unavailable|handshake rejected}`，成功行必帶 attempt。
 - **儲存電腦綠燈＝兩層都通**：第一層為 TCP 445 + `RemotePath` 建立/寫入/flush/刪除唯一探針檔；
   第二層為 `RemoteConfigPath\storage-app-heartbeat.json` 的 `LastSeenUtc` 不超過 15 秒。分享不可用顯示紅色；
-  分享可寫但 heartbeat 缺少/過期顯示黃色；兩層都通才綠。斷線時每 2 秒重試，app 先開、儲存機後上電
+  分享可寫但 heartbeat 缺少/過期顯示黃色；兩層都通才綠。曾成功讀取且最後有效 `LastSeenUtc`
+  尚未超過 15 秒時，SMB 原子替換窗口的一次性讀檔失敗不得讓綠燈閃黃；超過 15 秒仍讀不到才算未回報。
+  TCP 445 timeout 使用 non-blocking socket + `Socket.Select`，不得為每次 2 秒探測建立
+  `AsyncWaitHandle`；長時間 DVT 的總 handle 不得隨探測次數單調增加。
+  斷線時每 2 秒重試，app 先開、儲存機後上電
   不得要求重開 app。
+- **光源關閉收尾**：關閉程式前，Light coordinator 必須等待已排隊的 COM 探測工作收尾；
+  不得讓 `SerialStream` 在程序 finalizer 階段才釋放或產生背景 fatal。
 - **儲存程式自舉**：Release 根目錄 `setup.bat` 自動選擇完整安裝或更新；兩路都必須移除 payload 下載封鎖標記，並以
   `BUILTIN\Administrators` 群組主體安裝「任一使用者登入」＋「每分鐘保活」雙觸發排程；
   `RdpUser` 只供遠端登入，不得綁死排程。程式存活時 `MultipleInstances=IgnoreNew` 必須讓保活觸發靜默略過；
@@ -1133,6 +1169,11 @@ TelemetryTimer_Tick
   安裝當下必須由目前登入的系統管理員立即啟動，並在 10 秒內確認正確 EXE process 存活；
   `LastTaskResult=267011 (0x00041303)` 代表尚未執行，必須判定失敗而非歸因 DLL 封鎖。Storage role 每 5 秒原子發布
   heartbeat（PID、啟動/回報時間、磁碟與最後清理結果）。SMB 可寫只證明分享，不得當成程式存活。
+  Release 根目錄 `test_storage_restart.bat` 是保活 DVT 唯一入口：在儲存電腦上強制結束指定
+  `AppDir` 的程序後，禁止測試工具自行啟動 app；每輪必須由排程在 90 秒內產生不同 PID，且該 PID
+  在 15 秒 freshness 規則內發布 heartbeat。工具必須接受產品 `JavaScriptSerializer` 寫出的
+  `\/Date(milliseconds)\/` UTC 日期格式，也可相容 ISO 8601。預設三輪，報告寫入
+  `D:\Anilox\Logs\DvtReports`，無論成功或失敗，測試收尾都必須讓儲存程式維持運行。
 - **儲存資料捷徑**：檢測電腦 `setup.bat` 必須冪等在 Public Desktop 建立
   `Anilox 儲存資料.lnk`，目標由 `\\VerifyPingTarget\StorageShareName` 計算，不得額外寫死 `192.168.10.20`。
 - **程式桌面捷徑**：Storage 與 Inspection 的安裝及更新都必須冪等建立 Public Desktop
@@ -1171,12 +1212,45 @@ TelemetryTimer_Tick
 ```
 [RemoteCopy] remote share unavailable: ...             ← TCP/路徑/寫入任一層未通
 [RemoteCopy] remote share accepted (write verified)    ← 實際寫入交握通過
+[RemoteCopy] pending queued added=N queue=N bytes=N     ← 本機 durable marker 已落盤；斷線期間待傳正式成立
 [RemoteCopy] retry pending attempt=N queue=N file=...  ← 保留待傳；第 1 次及每 10 次留痕
 [RemoteCopy] restored pending queue count=N            ← 程式重開復原
 [RemoteCopy] backlog drained: copied=N bytes=N          ← 斷線積壓清空
 ```
 狀態轉換：`未排程 --持久標記成功--> 待傳 --複製失敗/重開--> 待傳
 --長度驗證+原子發布+刪標記--> 完成`。任何失敗不得進完成態。
+
+**H1/C3 軟體斷線 DVT**：`physical-smb-backlog-recovery` 以固定 `/32` Loopback
+黑洞路由只隔離儲存電腦 `192.168.10.20`。IO 與儲存共用實體 NIC，禁止停用整張網卡；
+情境仍把 IO 切到本機模擬器，使 START 循環不依賴外部控制器。
+阻斷期間必須完成至少兩輪本機封裝，
+看見 `remote share unavailable` 與 `pending queued`；移除黑洞路由後必須依序出現
+`remote share accepted`、`backlog drained`，且 heartbeat 恢復。Windows UNC 呼叫可能在
+網路中斷期間阻塞，恢復後直接成功，因此 `retry pending` 是診斷證據而非必要成功條件。`check_all_flows.py`
+的 `H1.remote-copy-recovery` 驗證上述順序。安裝器與 Runner 都必須以新的 TCP 連線量測
+SMB `:445` 確實由可達→不可達→可達，不能以路由存在冒充故障已生效。Runner 在成功、
+失敗與中止時都必須移除自己建立的黑洞路由。此測試適合反覆執行；最終版本仍需另做一次實體拔線，以涵蓋網卡、
+交換器與線材，不得把軟體阻斷冒充實體接線證據。
+
+**H1/H.Light 軟體故障注入 DVT**：`physical-bridge-recovery` 以暫時 `/32` Loopback 黑洞路由
+阻斷實體 IO `192.168.255.1`，並以 PnP 暫停光源 `COM17`；兩者各三輪。檢測電腦的
+IO `192.168.255.x` 與儲存 `192.168.10.x` 共用實體 NIC，不得停用整張網卡。Windows
+Firewall profile 也可能被停用，不能以 Firewall rule 存在冒充已阻斷。黑洞路由固定送至
+本機 Loopback（ifIndex 1／next hop `0.0.0.0`），不得假設區網內某個未用 IP 永遠不可達。
+每輪加入黑洞路由後必須在 PropertyGrid 將 `啟用 IO` 切成 `否 → 是`，強迫新的
+controller generation 在阻斷狀態下重新連線；安裝器與 Runner 都必須量測新的 TCP
+確實失敗，解除路由後再量測恢復。
+光源因 Windows 不允許停用仍由主程式持有的串口，每輪須先在 PropertyGrid 將
+`啟用光源` 切成 `否` 釋放 COM17，再停用 PnP 裝置，接著切回 `是`，讓新
+controller 在裝置停用狀態下探測失敗；恢復 COM17 後才驗證自動重連。
+每輪必須嚴格完成 `⚠ {IO|光源} 斷線 → OutputHealth raise →
+{IO|光源} 恢復連線 → OutputHealth resolve`，最後 IO 回待機且正常關閉。
+第一次由 `tests/InstallDvtAdminActions.bat` 經 UAC 安裝六個固定白名單排程動作；
+後續 Runner 本身仍以一般權限執行，只能要求封鎖／解除固定 IO、儲存端點及停用／啟用
+固定 COM17，不得建立可執行任意 repo script 的永久提升入口。
+Runner 在成功、失敗及中止時，都必須移除自己建立的黑洞路由並重新啟用 PnP
+裝置。此情境驗證產品與 Windows 驅動之間的失聯恢復，不代表線材、電源或硬體重新上電
+已覆蓋；正式交付仍各需一次實體拔線／斷電證據。
 
 ### H2 相機在線數轉變
 ```
@@ -1388,6 +1462,35 @@ StorageRetentionService.RunCleanup
 不必真的填滿磁碟。只有使用者明確確認目前沒有正式資料時，才可直接使用實際 Captures；執行前仍須記錄來源、目的地與檔案量，
 複製只能合併、不得 `/MIR` 或預先刪除目的資料。
 
+**C3/C4 檢測電腦低磁碟 DVT**：`physical-retention-cleanup` 只可使用
+`%TEMP%\PICoater-DVT-Retention`，且刪除前必須核對 Runner 專用 marker，禁止指向正式
+`D:\Anilox\Captures`。Runner 建立前天與昨天兩個完整日期資料；依當下 volume free space
+選擇 `floor(freeGiB)` 為門檻，並只在最舊日配置足以讓 free 暫時低於門檻的檔案。
+清理後必須同時成立：
+
+- 最舊日期資料夾及月份層同日 CSV 消失；
+- 較新日期資料夾、`.acap` 與 CSV 全部保留；
+- free space 回到門檻以上，`LocalLowSpace` 與 `RetentionCleanup` 各自完成
+  `raise → resolve → ack`；
+- Runner 還原 `Anilox 根目錄`、`預留空間 (GB)`，再刪除 marker 保護的 fixture；
+- 成功、失敗或中止都不得碰正式 Capture，且需正常關閉與通過完整 checker。
+
+**C3 儲存電腦本機最終驗收**：只有使用者明確確認實際資料可刪時，才可在儲存電腦本機執行
+`test_storage_retention.bat`。工具必須硬性核對根目錄恰為 `D:\Anilox\Captures`、要求人工輸入
+`DELETE`、備份 `C:\AniloxMonitor\Config\app-mode.json`，並把暫時門檻設為
+`floor(currentFreeGiB)+1`（且小於 volume total）。最舊完整日的容量必須足以單獨達標，否則拒絕執行。
+驗收必須證明只刪最舊完整一天與同日 CSV、較新日期全保留、free 達標；最後還原原始 JSON、重啟
+儲存程式並取得新鮮 heartbeat。報告與 JSON 備份寫入 `D:\Anilox\Logs\DvtReports`。
+
+長時間聚合驗證使用 `verify-log-min-count` 直接統計 evidence；已納入聚合統計的高密度行不得留在
+`wait-log` 的逐行 UI 輸出佇列。否則 2 小時約 4 萬行會在關閉階段重播，產品雖已完成取相與關閉，
+Runner 仍會因 UI 佇列塞住而觸發外層 safety timeout。
+
+反覆 Grab 的 Private Bytes 是大幅鋸齒波；同一輪配置影像／封裝 buffer，之後由 Server GC 回收。
+資源守門偵測到至少三次擴張與三次回收後，必須改比較穩態前半／後半的最低 retained trough，
+不可用任意最後樣本與第一樣本相減。trough 持續成長超過 256 MB/hour 或增加超過 4 GB 才判定
+Private leak；UI 無回應、handle、GDI、USER、thread 仍各自獨立判定。
+
 ### C4 產出健康度與底部狀態列
 
 `OutputHealthService` 是產出健康度唯一狀態機；writer、remote-copy、retention、設定與背景流程只回報事件，
@@ -1480,6 +1583,65 @@ python tools/python/check_all_flows.py trace-a.log trace-b.log
 - domain 專用舊指令保留為薄 wrapper（例如 `check_review_flows.py`），規則實作只能存在
   `flow_checks/{domain}.py` 一份，避免 wrapper／總入口兩份判準分歧。
 
+### 實際取相自動 DVT
+
+`physical-io-capture` 不是模擬產品影像；它使用實體相機與光源，只把 PLC START
+替換成 Runner 管理的本機 Modbus 模擬器。固定執行三次 `High 10s / Low 4s`，每輪必須具備：
+
+```
+IO grab request stopCondition=IoSignal stopOnLow=True
+capture gate open cams=P
+capture head frame dropped ... × P
+capture first-set ready ... aligned=True
+rowCurve present after=mainImage
+capture tail begin cams=...
+capture tail complete pending=
+StopGrab
+capture gate closed standby=on
+capture finalize grab=... archive=...acap ... remoteFiles=N
+```
+
+- 三輪須各自成對，不得以第一輪的 gate 搭配第二輪的 finalize。
+- `P` 為當次在線相機數；七台未接齊時可驗既有相機，但報告必明列未覆蓋七台滿載。
+- `remoteFiles>0` 只證明完成封裝並加入遠端待傳；實際 SMB 可寫與 heartbeat 由
+  `physical-storage-stability` 驗證，兩者不得互相冒充。
+- Runner 中止或失敗時，必先停止可能仍在進行的 Grab，再終止所有 helper、
+  還原 PropertyGrid 並關閉主程式。helper exit code 非 0 直接判 FAIL。
+
+`physical-capture-soak` 將同一契約延伸為耐久驗證，不另造產品判準：
+
+- IO 模擬器固定 `High 10s / Low 4s`，測試時間只換算完整循環數；結束必落在 Low。
+- 兩小時理論值為 `floor(7200 / 14) = 514` 輪。
+- 每輪必須各有一筆 request、gate open、`aligned=True` first-set、gate close 與
+  `capture finalize ... remoteFiles>0`；每輪至少一筆 `rowCurve present after=mainImage`。
+- 六個聚合計數守門只負責及早指出缺輪；最終仍由 `check_all_flows.py` 逐輪檢查順序，
+  不能以總數相同掩蓋跨輪錯配。
+- 外部資源探針每 30 秒量測 UI 回應、Private Bytes、handle、GDI/USER 與 thread。
+  影像封裝造成的暫時尖峰可接受，但暖機後基線不可持續墊高。
+- 儲存與光源狀態必須全程健康；七台未接齊時，報告必明列七台滿載仍為未覆蓋。
+
+`physical-fixed-stop-capture` 延續同一條實體影像鏈，另外驗證停止 owner：
+
+```
+Time:
+IO grab request stopCondition=Time stopOnLow=False
+grab stop waiting condition=Time configured=10s source=io
+capture first-set ready ... aligned=True
+grab stop armed condition=Time limit=10s ... start=first-set
+IO START edge=Low stopOnLow=False action=continue-fixed-target
+auto:抓取停止 condition=Time limit=10s
+
+Height:
+IO grab request stopCondition=Height stopOnLow=False
+grab stop armed condition=height limit=15000px source=io
+IO START edge=Low stopOnLow=False action=continue-fixed-target
+auto:抓取停止 condition=Height rows=N limit=15000px
+```
+
+- Time 的十秒從 `first-set` 起算，不含跨邊界丟幀與等待相機成組時間。
+- Height 的 `rows` 是所有在線相機已完成列數的最小值，不得用最快單台提前停止。
+- 兩種模式皆須另外具備主圖先於 Curve、gate 關閉、封裝、遠端待傳與正常清理證據。
+
 ## 回顧 tab 契約（R 系列；儀器前綴 RV）
 
 **回顧鏈自動校稿工具**（`flow_checks/review.py` 的相容入口；改回顧/跨 tab 同步後必跑）：
@@ -1523,6 +1685,9 @@ T1: RV prefitApply {grabId} after=Nms visible=True col=axis=…/view=… row=axi
 T1: RV mainRange {grabId} viewX=L~R viewY=T~B
 T1: RV chartRange {grabId} chart=col|row axis=A~B/view=L~R
     ← 真實狀態邊緣：主畫面 ViewRangeMmChanged 與 MSChart PostPaint 只有在座標值改變時才記；不是 intent。
+      WinForms 可在 ComboBox 原生 selection message 尚未返回時同步觸發 PostPaint，使同 grabId 的一個
+      `DT chartRange` 比 managed intent 早數毫秒；checker 以「上一個不同 grabId intent 後至切換模式前」
+      的同 ID selection burst 關聯，不以嚴格行序誤判。
       圖片／Curve 上畫後若又出現不同的 chart axis 或 view，代表座標仍有二次跳位，不能因首個
       prefitPaint 很快就判綠。主畫面視野同時擁有 Axis 與 ScaleView；Curve 資料長度不得擴張座標軸。
 T1: RV pushFrames P/7（merge=True, feedScale=…, chartView=publish）   ← P=該 grab 有影像的相機數；缺台=黑占位
@@ -1535,6 +1700,10 @@ T1: RV loadGrab done {grabId}（…ms）
 已退場的同層 `Captures_pack` 或 Anilox 根目錄會先解析成設定的 `CaptureRootPath`，並寫回 session；
 log 留 `RV|DT data root upgraded from=… to=…`。其他外部封存資料夾仍保留使用者選擇。
 開機自動恢復上次位置不在此限。
+大量資料不變量：`ImageRepository.LoadDirectory` 與 `InspectionStatisticsService.LoadSnapshot` 必須在
+背景執行；四個 30,000 筆序號 ComboBox 仍以 `AddRange` 批次填入，但每個 ComboBox 完成後必須讓出
+一次 UI message（`DT combo fill count=N yieldMs=50`）。總載入時間可超過一秒，期間不得形成連續
+`UiStall >1000ms`。
 載入 busy 視覺唯一 owner＝`BusyUiBinder`；`AniloxRollPresenter.BusyStateChanged` 與
 `ReviewStitchCoordinator.LoadGrabStitchedViewAsync` 共用同一實例。圖片 latest token 與 busy lease 由
 `ReviewImageLoadGate` 同時管理：新序號 intent 作廢舊圖片時，若舊圖片仍持有 lease，必須立即出現
@@ -1565,7 +1734,9 @@ Tn: RV plan prepare begin {grabId}｜RV plan prepare reuse-inflight {grabId}
       尚未開始的中間 intent 合併為最新一筆，不顯示 busy cursor。
       `atlas`＝所選 raw／proc C／proc R 只讀一筆 1080p 預覽合圖；`frames`＝舊逐幀縮圖 fallback
 （影像 debounce 250ms：滾動中不發完整載入；停下才同步日期/時間、載「最後選取」完整圖；session 也只在 settle 落盤一次）
-T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit … → RV lodRebind merge …（fit reset）→ RV pushFrames → RV loadGrab done
+T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit …
+  → （尺寸改變）RV lodRebind merge …（fit reset）
+  → RV fit(record-change) → RV pushFrames → RV loadGrab done
 Tn: RV prefetch begin center={grabId} neighbors={next}|{previous}
  → RV prefetch ready center={grabId} neighbor={neighborId} thumbnail=cold|join|hit total=Nms
  或 RV prefetch unavailable center={grabId} neighbor={neighborId} error=no-preview
@@ -1602,7 +1773,16 @@ Tn: RV prefetch begin center={grabId} neighbors={next}|{previous}
 - **日期/session 分層**：滾動中不得逐格呼叫 `SetPeriodToCombo`；其 `Items.Contains/SelectedItem`
   會線性搜尋時間 Combo，大量資料時可單獨阻塞 UI。日期/時間同步與 `SaveCurrentSelection`
   都只在 250ms settle 對最後序號執行一次；不得走 `NavigateTo` 的完整 Initialize/Save。
-- **換序號＝重設視野（fit）＝預期**（各 grab 高度不同 → lodRebind 合法出現）。
+- **換序號＝重設視野（fit）＝預期**：完整新序號上畫必有 `RV fit(record-change)`。
+  尺寸不同時 `lodRebind` 也會先 reset；尺寸相同時 LOD 不重綁，因此仍須由
+  `ReviewDisplayManager.PushFrames(preserveChartView:false)` 明確 fit，否則會沿用上一筆的 pan/zoom，
+  造成 prefit 先畫全幅、圖片完成後又跳回舊視野。同序號切強化與快速縮圖
+  `preserveChartView:true`，不得觸發此重設。
+- **prefit 到完整圖片之間禁止舊視野回灌**：`StitchedLayoutReady` 必先呼叫
+  `ReviewDisplayManager.BeginRecordTransition(grabId)`。直到完整新序號完成
+  `fit(record-change)` 前，上一筆主畫面的延遲 `ViewRangeMmChanged` 必須被丟棄（首筆記
+  `RV staleView drop {grabId}`），不得把欄／列圖表從 prefit 範圍拉回舊 pan/zoom。
+  完整圖片 fit 後只發布一次最終視野；同序號快速縮圖與強化切換仍保持目前視野。
 - **報表／回顧初始 fit SSoT**：`ReviewImageDataLoader.Prepare` 只讀 JPEG 表頭與 `#CFG`，不解碼像素；
   `ImageDisplayView.TryComputeMergeFitViewRange` 再以實際主畫面的 `MergeLayout + AspectFitCalculator + PixelMmMapper`
   預算四邊界。實際上畫後的 `ViewRangeMmChanged` 也走同一座標換算核心，不得由 bin 長度另推一份公式，
@@ -1709,9 +1889,12 @@ T1: RV row … / RV state …（chart/狀態快照視資料而定）
 T1: RV period done {yyyy-MM-dd HH:mm:ss.fff}
 ```
 - 時段模式不進 `RV loadGrab begin/done`；它走 request 的 immutable period → `ApplyGlobalMergeForPeriod` → `StitchedImagesReady` → `ReviewDisplayManager.PushFrames`。
-- **時序選擇 policy（使用者定版 2026-07-13）**：每個有效且不同的時點 intent 都刷新三項＝圖片＋欄曲線＋列曲線；
-  資料量小，不套 R2 的 250ms debounce／latest-only。loader 由 `ReviewPeriodLoadCoordinator` 去重後 FIFO single-flight，
-  各 request 持有 immutable period；不得並行後在 await 尾端重讀 ComboBox（會讓多筆都套用最新時點）。
+- **時序選擇 policy（2026-07-30 大量資料修訂）**：單次有效時點 intent 仍立即刷新三項＝圖片＋欄曲線＋列曲線；
+  loader 不加固定 debounce，但採「執行中 1 筆＋等待中最新 1 筆」single-flight。前一筆執行時若持續快滾，
+  中間 pending 可被較新的時點取代；執行中的舊時點若已存在較新 pending，只能完成讀取後記
+  `RV period stale-drop`，不得上畫或同步序號 ComboBox。最後停下的時點才同步序號並完整刷新三項。
+  各 request 持有 immutable period；
+  不得並行後在 await 尾端重讀 ComboBox（會讓多筆都套用最新時點）。
   切回 R2 序號時 `Invalidate` 清 pending，running request 只能記 stale-drop、不得上畫面。
 - **同一時點只載一次**：日期 combo 串聯改時間 combo 必掛 `_updating`（DateTimeNavigator）；
   同時點連發 `RV period load`＝串聯去重失效（2026-07-10 修 ×2~×6 重複載入）。
@@ -1724,7 +1907,7 @@ PeriodSelectionChanged@DateTimeNavigator.cs
    ├ InvalidateImageLoad@ReviewStitchCoordinator.cs（R2 舊圖片不得覆蓋 R3）
    └ Enqueue@ReviewPeriodLoadCoordinator.cs
       ├ 同 period+mode running/pending → 去重
-      ├ 不同 period → FIFO single-flight（不得平行）
+      ├ 不同 period → running 單工、pending 只保留最新（不得平行）
       └ LoadReviewPeriodRequestAsync@AniloxRollForm.Review.cs
          ├ RunWorkflowForPeriodAsync@AniloxRollPresenter.cs → GetImages(DateTime)@ImageRepository.cs
          ├ generation 失效 → stale-drop（不得 apply）
@@ -1973,12 +2156,11 @@ T1: DT stats snapshot csv=N records=N grabs=N ms=N
 
 **code-flow（一次解析，多個 view 共用）**
 ```
-LoadDataFolder|SyncFromReviewFolder@DataStatisticsPresenter.cs
- → LoadStatisticsSnapshot@DataStatisticsPresenter.cs
- → LoadSnapshot@InspectionStatisticsService.cs
+LoadDataFolder|SyncFromReviewFolderAsync@DataStatisticsPresenter.cs
+ → LoadStatisticsSnapshot|Task.Run(LoadSnapshot)@InspectionStatisticsService.cs
     ├ 只讀 yyyyMMdd.csv（排除 _ticks.csv）
     └ 一次產生 AvailableTimes／GrabIdsDescending／DetailsByGrabId
- → PopulateAllGrabIdCombos／RefreshStats／YieldPeriodChartPresenter
+ → PopulateAllGrabIdCombos|PopulateAllGrabIdCombosAsync／RefreshStats／YieldPeriodChartPresenter
     └ ComputeGroupedByMonthOfYear|DayOfMonth|HourOfDay（索引 overload，不再掃 CSV）
 ```
 - **初始載入 SSoT**：同一資料夾＋同一門檻下，序號 List、色卡、年月日圖表必須共用同一份
@@ -2250,14 +2432,18 @@ T1: ui:【良率圖-年|月|日】→ Y軸={Auto|Fixed} setting={Auto|Fixed} ove
       都從 YieldPeriodChartPresenter.ApplyScale 單點套用，禁止以 chart.Tag 另存狀態。
 T1: ui:【篩選異常】→ 只顯示異常|顯示全部 dataOptions=N rangeOptions=N selected={序號|empty} range={最舊}~{最新}|empty
 ```
+大量資料下，異常篩選重建 cbDataId／範圍起點／範圍終點時，必在各 ComboBox 批次填充之間
+讓出 UI 訊息迴圈；30,000 筆 DVT 的回顧／報表互動期間 `UiStall` 仍不得超過 1000ms，
+不得以放寬門檻掩蓋同步重填。
 
 **code-flow（篩選異常）**
 ```
 BtnShowFail.Click → BtnShowFail_Click@DataStatisticsPresenter.cs
  ├ EnsureSingleGrabDetailIndex（Pass/Fail 依目前欄／列門檻重算）
  ├ SelectFailRangeInfos（相機任一 Fail 或列 Fail）→ `_rangeGrabIdInfos`
- ├ RefreshFilteredGrabIdCombos@DataDateGrabIdNavigator.cs
+ ├ await RefreshFilteredGrabIdCombosAsync@DataDateGrabIdNavigator.cs
  │  ├ 同一份 `_rangeGrabIdInfos` → cbDataId、cbDataIdStart、cbDataIdEnd
+ │  ├ 三個 ComboBox 各自 `AddRange` 後讓出 UI 訊息迴圈 50ms
  │  ├ cbDataId 優先保留切換前序號；被篩掉時依全量清單位置選距離最近者
  │  └ cbReviewId 維持全量；跨頁同步依 GrabId 查找，不共用 filtered index
  ├ 單序號模式：cbDataId 當前 GrabId → 統計、欄／列 Curve

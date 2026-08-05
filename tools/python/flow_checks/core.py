@@ -16,6 +16,10 @@ DEFAULT_LOG_DIR = Path(r"D:\Anilox\Logs")
 FLOW_RE = re.compile(
     r"\[Flow\]\s+(?P<ts>\d{2}:\d{2}:\d{2}\.\d{3})\s+T\s*(?P<thread>\d+)\s+(?P<msg>.*)$"
 )
+REMOTE_COPY_TRACE_RE = re.compile(
+    r"^\s*AniloxRoll\.Monitor\.exe (?:Information|Warning|Error): \d+ : "
+    r"(?P<msg>\[RemoteCopy\]\s+.*)$"
+)
 GRABID_RE = re.compile(r"\b(\d{6}-\d{6})\b")
 UI_STALL_RE = re.compile(r"^\[UiStall\]\s+(?P<ms>\d+)ms(?:（(?P<gc>.*)）)?")
 UI_PING_RE = re.compile(r"^\[UiPing\]\s+(?P<ms>\d+)ms")
@@ -58,20 +62,35 @@ class FlowSession:
     def load(cls, path: os.PathLike[str] | str) -> "FlowSession":
         source = Path(path)
         lines: List[FlowLine] = []
+        last_elapsed = 0.0
+        last_timestamp = "00:00:00.000"
         with source.open(encoding="utf-8", errors="replace") as stream:
             for raw in stream:
                 match = FLOW_RE.search(raw)
-                if not match:
-                    continue
-                timestamp = match.group("ts")
-                lines.append(
-                    FlowLine(
-                        elapsed=parse_ts(timestamp),
-                        timestamp=timestamp,
-                        thread=int(match.group("thread")),
-                        message=match.group("msg").strip(),
+                if match:
+                    timestamp = match.group("ts")
+                    last_elapsed = parse_ts(timestamp)
+                    last_timestamp = timestamp
+                    lines.append(
+                        FlowLine(
+                            elapsed=last_elapsed,
+                            timestamp=timestamp,
+                            thread=int(match.group("thread")),
+                            message=match.group("msg").strip(),
+                        )
                     )
-                )
+                    continue
+
+                trace_match = REMOTE_COPY_TRACE_RE.search(raw)
+                if trace_match:
+                    lines.append(
+                        FlowLine(
+                            elapsed=last_elapsed,
+                            timestamp=last_timestamp,
+                            thread=0,
+                            message=trace_match.group("msg").strip(),
+                        )
+                    )
         return cls(source, lines)
 
     @property

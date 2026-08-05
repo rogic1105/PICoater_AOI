@@ -1,0 +1,135 @@
+{
+  "Id": "physical-io-stability",
+  "Name": "實體 IO 五分鐘穩定測試（不 Grab）",
+  "Description": "確認 ET-7044 連線、待機輪詢、controller 生命週期與關閉收尾；不啟動相機 Grab。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "H1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 Flow marker",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-endpoint-ip",
+      "Contract": "H1",
+      "Title": "指定實體 IO IP",
+      "Action": "set-property",
+      "Target": "IO IP",
+      "Value": "192.168.255.1",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-endpoint-port",
+      "Contract": "H1",
+      "Title": "指定實體 IO Port",
+      "Action": "set-property",
+      "Target": "IO Port",
+      "Value": "502",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-physical-io",
+      "Contract": "H1",
+      "Title": "啟用實體 IO",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "controller-start",
+      "Contract": "H1",
+      "Title": "確認實體 IO endpoint 啟動",
+      "Action": "wait-log",
+      "Pattern": "IO controller start generation=\\d+ endpoint=192\\.168\\.255\\.1:502",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "io-idle",
+      "Contract": "H1",
+      "Title": "等待 IO 完成交握並進入待機",
+      "Action": "wait-element",
+      "Target": "待機",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "stability-window",
+      "Contract": "H1",
+      "Title": "持續輪詢五分鐘",
+      "Action": "delay",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "io-still-idle",
+      "Contract": "H1",
+      "Title": "確認五分鐘後仍在待機",
+      "Action": "wait-element",
+      "Target": "待機",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "controller-stop",
+      "Contract": "H1",
+      "Title": "確認 IO controller 正常停止",
+      "Action": "wait-log",
+      "Pattern": "IO controller stop generation=\\d+ reason=(?:settings|shutdown)",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行所有已註冊 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

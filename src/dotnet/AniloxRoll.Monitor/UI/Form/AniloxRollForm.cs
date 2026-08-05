@@ -859,6 +859,7 @@ namespace AniloxRoll.Monitor.Forms
                     if (!computed.HasValue) return;
                     ImageViewRange range = computed.Value;
 
+                    _reviewDisplayManager?.BeginRecordTransition(grabId);
                     var viewport = camReviewMain.ClientSize;
                     FlowTrace.Dvt($"RV prefit {grabId} content={range.ContentWidth}x{range.ContentHeight} " +
                         $"viewport={viewport.Width}x{viewport.Height} " +
@@ -906,11 +907,6 @@ namespace AniloxRoll.Monitor.Forms
             // 4c：舊 gallery 選擇鏈已拆（PictureBox 被 sdk ThumbStrip 覆蓋＝點擊不可達；
             //     縮圖↔主畫面雙向連動由 ImageDisplayView 內建）。
             _dateTimeNavigator.PeriodSelectionChanged += _presenter.UpdatePeriodNavigationState;
-            _dateTimeNavigator.PeriodSelectionChanged += () =>
-            {
-                var current = _dateTimeNavigator.GetCurrentPeriodOrDefault(DateTime.MinValue);
-                if (current != DateTime.MinValue) _dataStatsPresenter.SyncGrabIdFromTime(current);
-            };
             _dateTimeNavigator.PeriodSelectionChanged += OnPeriodComboChanged;
             _presenter.PeriodNavigationStateChanged   += (canLast, canNext) =>
             {
@@ -1086,6 +1082,7 @@ namespace AniloxRoll.Monitor.Forms
                     _settings.GetCameraOpsUmArray(), _settings.GetCameraStartPositionMmArray());
             UpdateCamCountLabel(_liveCameraManager.ConnectedCameraCount, CameraCount);
             RefreshGrabButtonState();
+            UpdateStandardBgSubLockState();
 
             // CLProtocol 就緒後：把每張板的板載記憶體（總量/可用）標到系統參數表。
             // 記憶體是「每張板」共用（同板 channel 共池）→ 每個 unique System 顯示一列；同時 log 高度/線掃上限診斷。

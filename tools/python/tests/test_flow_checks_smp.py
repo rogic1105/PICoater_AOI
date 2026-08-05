@@ -914,6 +914,41 @@ class DataFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
 
+    def test_single_fit_fails_when_fast_curve_prefit_is_overwritten_before_image_load(self):
+        messages = [
+            "DT selected 260721-080001 stats=cache list=keep ms=1",
+            "RV curves paths 260721-080001 root=D:\\Anilox images=7 cams=7 cfg=yes align=tick source=bins",
+            "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+            "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+            "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+            "RV prefitPaint 260721-080001 chart=row after=0ms axis=-439~17105/view=-400~17000",
+            "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+            "RV prefitApply 260721-080001 after=0ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+            "RV layout intent 260721-080001 images=7 cams=7 align=tick before=curves",
+            "RV curves 260721-080001 (10ms)",
+            "RV loadGrab begin 260721-080001 (proc=False)",
+            "RV prefit 260721-080001 content=20236x15000 viewport=1353x596 viewX=-952~3422 viewY=17105~-439",
+            "RV prefitPaint 260721-080001 chart=col after=0ms axis=-952~3422/view=-900~3350",
+            "RV chartRange 260721-080001 chart=col axis=-952~3422/view=-900~3350",
+            "RV prefitPaint 260721-080001 chart=row after=0ms axis=-439~17105/view=-400~17000",
+            "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
+            "RV prefitApply 260721-080001 after=0ms visible=True col=axis=-952~3422/view=-900~3350 row=axis=-439~17105/view=-400~17000",
+            "RV mainRange 260721-080001 viewX=-952.00~3422.00 viewY=17105.00~-439.00",
+            "RV lodRebind merge 20236x15000 (fit reset)",
+            "RV fit(record-change)",
+            "RV pushFrames 7/7 (merge=True, feedScale=5, chartView=publish)",
+            "RV loadGrab done 260721-080001 (100ms)",
+        ]
+        report = DataFlowValidator().validate(session(*messages))
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+        messages.insert(
+            10,
+            "RV chartRange 260721-080001 chart=row axis=-439~17105/view=-350~16950",
+        )
+        report = DataFlowValidator().validate(session(*messages))
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.fit").status)
+
     def test_single_fit_fails_when_chart_axis_changes_but_view_stays_equal(self):
         report = DataFlowValidator().validate(
             session(
@@ -981,6 +1016,20 @@ class DataFlowValidatorTests(unittest.TestCase):
                 "DT curve load 260721-080001 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
                 "ui:【期間-日】→ 範圍 260721-080001~260721-090001",
                 "DT chartRange 260721-080001 chart=col axis=0~2470/view=0~2470",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+    def test_report_single_fit_accepts_reentrant_paint_before_final_intent(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260721-080001",
+                "ui:【報表序號】→ 260721-080002",
+                "DT chartRange 260721-080003 chart=col axis=-952~3422/view=-900~3350",
+                "ui:【報表序號】→ 260721-080003",
+                "DT prefit 260721-080003 content=20236x15000 viewX=-952~3422 viewY=17105~-439 source=main-geometry",
+                "DT chartRange 260721-080003 chart=row axis=-439~17105/view=-400~17000",
+                "DT curve load 260721-080003 captures=7 source=shared storage=summary configMs=1 waitMs=2 pathMs=0 mergeMs=0 summaryMs=1 points=100 drawMs=3 totalMs=5",
             )
         )
         self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
