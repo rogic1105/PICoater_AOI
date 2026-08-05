@@ -22,6 +22,36 @@ class SettingsFlowValidator:
         r"^setting route (?P<name>\S+) "
         r"owner=(?P<owner>\w+) effects=(?P<effects>[\w+]+)$"
     )
+    _live_apply_pattern = re.compile(
+        r"^live inspection apply setting=(?P<name>\S+) "
+        r"hm=(?P<hm_c>\d+(?:\.\d+)?)/(?P<hm_r>\d+(?:\.\d+)?) "
+        r"thresholdC=(?P<mean_c>\d+(?:\.\d+)?)/(?P<max_c>\d+(?:\.\d+)?) "
+        r"thresholdR=(?P<mean_r>\d+(?:\.\d+)?)/(?P<max_r>\d+(?:\.\d+)?) "
+        r"mode=(?P<mode>Mean|Max|Both) direction=(?P<direction>Vertical|Horizontal|Both) "
+        r"action=(?P<action>normalization-reset|refresh)$"
+    )
+    _live_row_scale_pattern = re.compile(
+        r"^live row normalize captureHm=(?P<capture>\d+(?:\.\d+)?) "
+        r"rowHm=(?P<row>\d+(?:\.\d+)?) ratio=(?P<ratio>\d+(?:\.\d+)?)$"
+    )
+    _live_stimulus_pattern = re.compile(
+        r"^live inspection stimulus brightness=(?P<brightness>\d+) "
+        r"direction=(?P<direction>col|row) "
+        r"mean=(?P<mean>\d+(?:\.\d+)?) max=(?P<max>\d+(?:\.\d+)?) "
+        r"threshold=(?P<th_mean>\d+(?:\.\d+)?)/(?P<th_max>\d+(?:\.\d+)?) "
+        r"mode=(?P<mode>Mean|Max|Both) verdict=(?P<verdict>O|X) "
+        r"source=light-surrogate-not-mura$"
+    )
+    _live_inspection_settings = {
+        "dc_HessianMaxFactorV",
+        "dd_HessianMaxFactorH",
+        "eb_RidgeDir",
+        "eca_ColumnCurveMode",
+        "ec_ErrorValueMeanV",
+        "ed_ErrorValueMaxV",
+        "ee_ErrorValueMeanH",
+        "ef_ErrorValueMaxH",
+    }
     _capture_policy_settings = {
         "AniloxRootPath",
         "EnableAutoCapture",
@@ -45,6 +75,9 @@ class SettingsFlowValidator:
 
         self._check_format(settings, report)
         self._check_routes(session, settings, report)
+        self._check_live_inspection_settings(session, settings, report)
+        self._check_live_row_scale(session, report)
+        self._check_live_inspection_stimulus(session, report)
         self._check_review_enhance(session, settings, report)
         self._check_live_enhance(session, settings, report)
         self._check_enhance_heatmap(session, settings, report)
@@ -105,6 +138,187 @@ class SettingsFlowValidator:
             "S0.route",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"changes={len(settings)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_live_inspection_settings(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") in self._live_inspection_settings
+        ]
+        if not changes:
+            report.add(
+                self.domain, "S1.live-apply", CheckStatus.NOT_COVERED,
+                "未調整監控檢測標準",
+            )
+            return
+
+        failures = []
+        for index, line, match in changes:
+            name = match.group("name")
+            route_match = (
+                self._route_pattern.match(session.lines[index + 1].message)
+                if index + 1 < len(session.lines) else None
+            )
+            if route_match is None or "LiveInspectionCurves" not in set(
+                route_match.group("effects").split("+")
+            ):
+                failures.append(f"{line.timestamp} {name} 缺 LiveInspectionCurves route")
+                continue
+
+            apply_match = None
+            for candidate in session.lines[index + 2:index + 20]:
+                if candidate.message.startswith(("ui:設定[", "set:[")):
+                    break
+                parsed = self._live_apply_pattern.match(candidate.message)
+                if parsed and parsed.group("name") == name:
+                    apply_match = parsed
+                    break
+            if apply_match is None:
+                failures.append(f"{line.timestamp} {name} 缺 live inspection apply")
+                continue
+
+            expected_action = (
+                "normalization-reset"
+                if name in {"dc_HessianMaxFactorV", "dd_HessianMaxFactorH"}
+                else "refresh"
+            )
+            if apply_match.group("action") != expected_action:
+                failures.append(
+                    f"{line.timestamp} {name} action={apply_match.group('action')}"
+                )
+
+            value = (match.group("value") or match.group("arrow")).strip()
+            numeric_fields = {
+                "dc_HessianMaxFactorV": "hm_c",
+                "dd_HessianMaxFactorH": "hm_r",
+                "ec_ErrorValueMeanV": "mean_c",
+                "ed_ErrorValueMaxV": "max_c",
+                "ee_ErrorValueMeanH": "mean_r",
+                "ef_ErrorValueMaxH": "max_r",
+            }
+            field = numeric_fields.get(name)
+            if field is not None:
+                try:
+                    if abs(float(value) - float(apply_match.group(field))) > 0.0001:
+                        failures.append(
+                            f"{line.timestamp} {name} intent={value} "
+                            f"applied={apply_match.group(field)}"
+                        )
+                except ValueError:
+                    failures.append(f"{line.timestamp} {name} 非數值 intent={value}")
+
+        report.add(
+            self.domain,
+            "S1.live-apply",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(changes)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_live_row_scale(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        matches = [
+            self._live_row_scale_pattern.match(line.message)
+            for line in session.lines
+        ]
+        matches = [match for match in matches if match]
+        if not matches:
+            report.add(
+                self.domain, "S1.row-normalize", CheckStatus.NOT_COVERED,
+                "無監控列 Curve 正規值樣本",
+            )
+            return
+
+        failures = []
+        for match in matches:
+            capture = float(match.group("capture"))
+            row = float(match.group("row"))
+            ratio = float(match.group("ratio"))
+            expected = capture / row if capture > 0 and row > 0 else 1.0
+            if abs(ratio - expected) > 0.0002:
+                failures.append(
+                    f"capture={capture} row={row} ratio={ratio} expected={expected:.4f}"
+                )
+        report.add(
+            self.domain,
+            "S1.row-normalize",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"samples={len(matches)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_live_inspection_stimulus(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        samples = [
+            match
+            for line in session.lines
+            for match in [self._live_stimulus_pattern.match(line.message)]
+            if match
+        ]
+        levels = sorted({int(match.group("brightness")) for match in samples})
+        complete_levels = [
+            level for level in levels
+            if {match.group("direction") for match in samples
+                if int(match.group("brightness")) == level} == {"col", "row"}
+        ]
+        if len(complete_levels) < 2:
+            report.add(
+                self.domain, "S1.light-stimulus", CheckStatus.NOT_COVERED,
+                "需要至少兩個亮度且每個亮度都有欄／列樣本；此測試不是正式 Mura 模擬",
+            )
+            return
+
+        failures = []
+        for match in samples:
+            mean = float(match.group("mean"))
+            maximum = float(match.group("max"))
+            th_mean = float(match.group("th_mean"))
+            th_max = float(match.group("th_max"))
+            mode = match.group("mode")
+            expected_fail = (
+                (mode != "Max" and mean > th_mean) or
+                (mode != "Mean" and maximum > th_max)
+            )
+            expected = "X" if expected_fail else "O"
+            if match.group("verdict") != expected:
+                failures.append(
+                    f"brightness={match.group('brightness')} "
+                    f"direction={match.group('direction')} "
+                    f"verdict={match.group('verdict')} expected={expected}"
+                )
+
+        changed_directions = set()
+        for direction in ("col", "row"):
+            by_level = {
+                int(match.group("brightness")): (
+                    float(match.group("mean")), float(match.group("max")))
+                for match in samples if match.group("direction") == direction
+            }
+            values = [by_level[level] for level in complete_levels if level in by_level]
+            if values and any(
+                abs(value[0] - values[0][0]) >= 0.005 or
+                abs(value[1] - values[0][1]) >= 0.005
+                for value in values[1:]
+            ):
+                changed_directions.add(direction)
+        if changed_directions != {"col", "row"}:
+            failures.append(
+                "亮度切換後欄／列 Curve 未同時產生可量測變化：" +
+                ",".join(sorted(changed_directions))
+            )
+
+        report.add(
+            self.domain,
+            "S1.light-stimulus",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"levels={complete_levels} samples={len(samples)} failures={len(failures)}；"
+            "光源僅為檢測標準替代刺激，不代表真實 Mura 檢出率"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

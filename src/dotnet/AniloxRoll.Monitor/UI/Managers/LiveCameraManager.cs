@@ -140,7 +140,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, rowCurveMean_raw255, rowCurveMax_raw255)</summary>
-        public event Action<int, float[], float[]> OnLiveRowCurveData;
+        public event Action<int, float[], float[], float> OnLiveRowCurveData;
 
         /// <summary>
         /// Raised when every connected capture camera has completed at least the reported
@@ -303,8 +303,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                         grabId, camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak);
                 cam.OnLiveCurveData      += (camId, mean, max) =>
                     OnLiveCurveData?.Invoke(camId, mean, max);
-                cam.OnLiveRowCurveData   += (camId, mean, max) =>
-                    OnLiveRowCurveData?.Invoke(camId, mean, max);
+                cam.OnLiveRowCurveData   += (camId, mean, max, frameHessianMaxFactor) =>
+                    OnLiveRowCurveData?.Invoke(
+                        camId, mean, max, frameHessianMaxFactor);
                 int captureCameraId = cam.CameraId;
                 cam.OnFilesSaved = files =>
                     OnFilesSaved?.Invoke(captureCameraId, files);

@@ -113,6 +113,7 @@ namespace AniloxRoll.Monitor.Forms
                     _lightConnectionCoordinator?.SetBrightness(
                         _settings.LightChannel,
                         _settings.LightBrightness);
+                    ArmLiveInspectionStimulusProbe(_settings.LightBrightness);
                     UpdateLightConnLabel();
                     break;
             }

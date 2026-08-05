@@ -219,7 +219,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
         public event Action<int, float[], float[]> OnLiveCurveData;
-        public event Action<int, float[], float[]> OnLiveRowCurveData;
+        public event Action<int, float[], float[], float> OnLiveRowCurveData;
 
         /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
         public Action<string[]> OnFilesSaved { get; set; }
@@ -560,6 +560,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
                     var swGpu = System.Diagnostics.Stopwatch.StartNew();
                     IntPtr backgroundColumnMean = _precomputedColMean;
+                    float frameHessianMaxFactor = (float)HessianFixedMax;
                     _aoiService.ProcessImage(new AoiProcessRequest
                     {
                         Input = new AoiProcessRequest.InputImage
@@ -590,7 +591,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                         {
                             BgSigmaFactor  = InspectionEngineConfig.PerFrameBgSigma,
                             RidgeSigma     = (float)HessianSigma,
-                            HessianMaxFactor = (float)HessianFixedMax,
+                            HessianMaxFactor = frameHessianMaxFactor,
                             RidgeMode      = "vertical+horizontal",  // 永遠計算雙方向，確保 V/H 皆可存檔
                             PrecomputedColMean = backgroundColumnMean
                         }
@@ -645,7 +646,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                             float[] rowMaxArr  = new float[rowCurveLen];
                             Marshal.Copy(picoaterRowCurveMean, rowMeanArr, 0, rowCurveLen);
                             Marshal.Copy(picoaterRowCurveMax,  rowMaxArr,  0, rowCurveLen);
-                            OnLiveRowCurveData?.Invoke(CameraId, rowMeanArr, rowMaxArr);
+                            OnLiveRowCurveData?.Invoke(
+                                CameraId, rowMeanArr, rowMaxArr, frameHessianMaxFactor);
                         }
                     }
 

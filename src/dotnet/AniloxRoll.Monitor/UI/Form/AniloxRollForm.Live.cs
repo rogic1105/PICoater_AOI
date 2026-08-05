@@ -463,6 +463,26 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         // Mura 超標狀態（[0]=v,[1]=h；邊緣觸發 flow 留痕用，超標期間不洗版）
         private readonly bool[] _muraExceedLatch = new bool[2];
+        private readonly object _liveInspectionStimulusLock = new object();
+        private readonly bool[] _liveInspectionStimulusLogged = new bool[2];
+        private int _liveInspectionStimulusBrightness = -1;
+        private long _liveInspectionStimulusReadyAtTicks;
+        private string _lastLiveRowScaleTrace;
+
+        private void ArmLiveInspectionStimulusProbe(int brightness)
+        {
+            if (!FlowTrace.DvtEnabled) return;
+            lock (_liveInspectionStimulusLock)
+            {
+                _liveInspectionStimulusBrightness = brightness;
+                _liveInspectionStimulusReadyAtTicks = DateTime.UtcNow.AddMilliseconds(500).Ticks;
+                _liveInspectionStimulusLogged[0] = false;
+                _liveInspectionStimulusLogged[1] = false;
+            }
+            FlowTrace.Dvt(
+                $"live inspection stimulus armed brightness={brightness} settleMs=500 " +
+                "purpose=inspection-standard-surrogate");
+        }
 
         private void CheckLiveMura(float[] meanArr, float[] maxArr, string direction)
         {
@@ -490,6 +510,8 @@ namespace AniloxRoll.Monitor.Forms
                 meanPeak, maxPeak, thMean, thMax, columnMode);
             bool exceed = cause != ColumnFailureCause.None;
             int di = direction == "h" ? 1 : 0;
+            LogLiveInspectionStimulusSample(
+                di, direction, meanPeak, maxPeak, thMean, thMax, columnMode, exceed);
             if (exceed != _muraExceedLatch[di])   // 邊緣觸發：進入/離開超標各記一行
             {
                 _muraExceedLatch[di] = exceed;
@@ -528,6 +550,48 @@ namespace AniloxRoll.Monitor.Forms
                     t => { /* swallow — PollTick 會偵測真正的 CommLost */ },
                     TaskContinuationOptions.OnlyOnFaulted);
             }
+        }
+
+        /// <summary>
+        /// DVT 專用的檢測標準替代刺激樣本；光源亮暗只驗接線與公式，不代表真實 Mura。
+        /// </summary>
+        private void LogLiveInspectionStimulusSample(
+            int directionIndex,
+            string direction,
+            float meanPeak,
+            float maxPeak,
+            float thresholdMean,
+            float thresholdMax,
+            ColumnCurveDisplayMode mode,
+            bool exceed)
+        {
+            if (!FlowTrace.DvtEnabled) return;
+
+            int brightness;
+            lock (_liveInspectionStimulusLock)
+            {
+                if (_liveInspectionStimulusBrightness < 0 ||
+                    DateTime.UtcNow.Ticks < _liveInspectionStimulusReadyAtTicks ||
+                    _liveInspectionStimulusLogged[directionIndex])
+                    return;
+
+                _liveInspectionStimulusLogged[directionIndex] = true;
+                brightness = _liveInspectionStimulusBrightness;
+            }
+
+            FlowTrace.Dvt(string.Format(
+                CultureInfo.InvariantCulture,
+                "live inspection stimulus brightness={0} direction={1} " +
+                "mean={2:F4} max={3:F4} threshold={4:F4}/{5:F4} " +
+                "mode={6} verdict={7} source=light-surrogate-not-mura",
+                brightness,
+                direction == "h" ? "row" : "col",
+                meanPeak,
+                maxPeak,
+                thresholdMean,
+                thresholdMax,
+                mode,
+                exceed ? "X" : "O"));
         }
 
         /// <summary>Mura 超標的畫面警告（callback 執行緒 → UI）：lblIoDoMura 亮並**閂鎖到該次檢測結束**
@@ -630,15 +694,37 @@ namespace AniloxRoll.Monitor.Forms
             // 由 _liveOverviewDirty + UpdateOverviewChart 路徑更新（boundary 唯一歸屬、與影像對齊）。
         }
 
-        private void OnLiveRowCurveData(int camId, float[] meanArr, float[] maxArr)
+        private void OnLiveRowCurveData(
+            int camId,
+            float[] meanArr,
+            float[] maxArr,
+            float frameHessianMaxFactor)
         {
+            float currentRowFactor = (float)_settings.HessianMaxFactorH;
+            float[] displayMean = HessianRescaleHelper.CloneAndRescale1D(
+                meanArr, frameHessianMaxFactor, currentRowFactor);
+            float[] displayMax = HessianRescaleHelper.CloneAndRescale1D(
+                maxArr, frameHessianMaxFactor, currentRowFactor);
+            string scaleTrace = string.Format(
+                CultureInfo.InvariantCulture,
+                "captureHm={0:F4} rowHm={1:F4} ratio={2:F4}",
+                frameHessianMaxFactor,
+                currentRowFactor,
+                HessianRescaleHelper.Ratio(frameHessianMaxFactor, currentRowFactor));
+            if (FlowTrace.DvtEnabled && !string.Equals(
+                _lastLiveRowScaleTrace, scaleTrace, StringComparison.Ordinal))
+            {
+                _lastLiveRowScaleTrace = scaleTrace;
+                FlowTrace.Dvt("live row normalize " + scaleTrace);
+            }
+
             // Live Mura 判斷（列方向）
-            CheckLiveMura(meanArr, maxArr, "h");
+            CheckLiveMura(displayMean, displayMax, "h");
 
             lock (_pendingLiveRowCurveLock)
             {
-                _pendingLiveRowMean[camId] = meanArr;
-                _pendingLiveRowMax[camId] = maxArr;
+                _pendingLiveRowMean[camId] = displayMean;
+                _pendingLiveRowMax[camId] = displayMax;
             }
         }
 
@@ -787,6 +873,63 @@ namespace AniloxRoll.Monitor.Forms
             _liveViewLeftMm = _liveViewRightMm = double.NaN;
             _liveViewTopMm = _liveViewBotMm = double.NaN;
             _liveRowPresentationCameraCount = 0;
+        }
+
+        private void ApplyLiveInspectionSettings(string settingName)
+        {
+            _liveOverviewHelper?.SetThresholds(
+                _settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
+            _liveOverviewHelper?.SetVisibleMetrics(
+                _settings.ShowColumnMean, _settings.ShowColumnMax);
+            _liveRowDisplay?.SetThresholds(
+                _settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+
+            bool columnNormalizationChanged =
+                settingName == nameof(InspectionSettings.dc_HessianMaxFactorV);
+            bool rowNormalizationChanged =
+                settingName == nameof(InspectionSettings.dd_HessianMaxFactorH);
+            bool normalizationChanged =
+                columnNormalizationChanged || rowNormalizationChanged;
+            string action = normalizationChanged ? "normalization-reset" : "refresh";
+            if (normalizationChanged)
+            {
+                ResetLiveWaterfallRowChart();
+                lock (_pendingLiveRowCurveLock)
+                {
+                    _pendingLiveRowMean.Clear();
+                    _pendingLiveRowMax.Clear();
+                }
+                _liveRowMeanCache.Clear();
+                _liveRowMaxCache.Clear();
+                _liveRowDisplay?.Clear();
+                if (columnNormalizationChanged)
+                {
+                    for (int i = 0; i < CameraCount; i++)
+                    {
+                        _liveCurveMean[i] = null;
+                        _liveCurveMax[i] = null;
+                    }
+                    _liveOverviewDirty = false;
+                    _liveOverviewHelper?.Clear();
+                }
+                _lastLiveRowScaleTrace = null;
+            }
+
+            FlowTrace.Log(string.Format(
+                CultureInfo.InvariantCulture,
+                "live inspection apply setting={0} hm={1:F4}/{2:F4} " +
+                "thresholdC={3:F4}/{4:F4} thresholdR={5:F4}/{6:F4} " +
+                "mode={7} direction={8} action={9}",
+                settingName,
+                _settings.HessianMaxFactorV,
+                _settings.HessianMaxFactorH,
+                _settings.ErrorValueMeanV,
+                _settings.ErrorValueMaxV,
+                _settings.ErrorValueMeanH,
+                _settings.ErrorValueMaxH,
+                _settings.ColumnCurveMode,
+                _settings.RidgeDir,
+                action));
         }
 
         private void ClearLiveRowChartForBackgroundPreview()

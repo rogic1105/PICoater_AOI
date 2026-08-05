@@ -59,6 +59,69 @@ class GlobalContractValidatorTests(unittest.TestCase):
 
 
 class SettingsFlowValidatorTests(unittest.TestCase):
+    def test_live_inspection_settings_scale_and_light_stimulus_pass(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[dc_HessianMaxFactorV]=0.5",
+                "setting route dc_HessianMaxFactorV owner=DataStats "
+                "effects=InspectionService+CapturePolicy+ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dc_HessianMaxFactorV "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-reset",
+                "ui:設定[dd_HessianMaxFactorH]=1.0",
+                "setting route dd_HessianMaxFactorH owner=DataStats "
+                "effects=ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dd_HessianMaxFactorH "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-reset",
+                "live row normalize captureHm=0.5000 rowHm=1.0000 ratio=0.5000",
+                "live inspection stimulus brightness=100 direction=col "
+                "mean=0.1000 max=0.3000 threshold=0.2000/0.6000 "
+                "mode=Both verdict=O source=light-surrogate-not-mura",
+                "live inspection stimulus brightness=100 direction=row "
+                "mean=0.1200 max=0.3200 threshold=0.2000/0.6000 "
+                "mode=Both verdict=O source=light-surrogate-not-mura",
+                "live inspection stimulus brightness=255 direction=col "
+                "mean=0.3000 max=0.8000 threshold=0.2000/0.6000 "
+                "mode=Both verdict=X source=light-surrogate-not-mura",
+                "live inspection stimulus brightness=255 direction=row "
+                "mean=0.3500 max=0.7500 threshold=0.2000/0.6000 "
+                "mode=Both verdict=X source=light-surrogate-not-mura",
+            )
+        )
+
+        self.assertEqual(CheckStatus.PASS, result(report, "S1.live-apply").status)
+        self.assertEqual(CheckStatus.PASS, result(report, "S1.row-normalize").status)
+        self.assertEqual(CheckStatus.PASS, result(report, "S1.light-stimulus").status)
+
+    def test_live_inspection_stimulus_rejects_wrong_verdict(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[ec_ErrorValueMeanV]=0.2",
+                "setting route ec_ErrorValueMeanV owner=DataStats "
+                "effects=InspectionService+ColumnThresholds+ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=ec_ErrorValueMeanV "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Mean direction=Both action=refresh",
+                "live inspection stimulus brightness=100 direction=col "
+                "mean=0.1000 max=0.3000 threshold=0.2000/0.6000 "
+                "mode=Mean verdict=O source=light-surrogate-not-mura",
+                "live inspection stimulus brightness=100 direction=row "
+                "mean=0.1000 max=0.3000 threshold=0.2000/0.6000 "
+                "mode=Both verdict=O source=light-surrogate-not-mura",
+                "live inspection stimulus brightness=255 direction=col "
+                "mean=0.3000 max=0.3000 threshold=0.2000/0.6000 "
+                "mode=Mean verdict=O source=light-surrogate-not-mura",
+                "live inspection stimulus brightness=255 direction=row "
+                "mean=0.3000 max=0.7000 threshold=0.2000/0.6000 "
+                "mode=Both verdict=X source=light-surrogate-not-mura",
+            )
+        )
+
+        self.assertEqual(CheckStatus.FAIL, result(report, "S1.light-stimulus").status)
+
     def test_direction_and_review_enhance_are_followed_by_required_updates(self):
         report = SettingsFlowValidator().validate(
             session(

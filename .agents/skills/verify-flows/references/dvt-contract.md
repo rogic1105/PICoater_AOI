@@ -1983,13 +1983,53 @@ CapturePolicy
 `⚠ 契約違規：瀑布模式下幀流入 IC 路徑` / `⚠ 契約違規：即時模式下幀流入瀑布路徑`
 （每 view 週期一次）——log 出現此行＝訂閱錯掛/殘留，不用比對即定罪。
 
-### S1 檢測參數（dc_/dd_ 正規值、eb_ 檢出方向、ec_~ef_ 閾值）
+### S1 檢測標準（監控／回顧／報表共用設定）
+
+涵蓋 `dc_`／`dd_` 欄列正規值、`eb_` 檢出方向、`eca_` 欄曲線判定及
+`ec_`～`ef_` 欄列平均／最大閾值。這些設定不是 Data tab 專用；監控 Live 必須同時生效。
+
+**log-flow**：
 ```
-T1: ui:設定[ec_ErrorValueMeanV]（例）
-（反應：chart 閾值線/曲線坡度更新；Data 曲線重畫走 HandleDataStatsSettingsChanged）
-禁止：**其他任何設定**（IO/光源/儲存/顯示…）不得觸發 Data 曲線 reload+重綁
-      ——違規即「無關設定閃圖」（2026-07-03 修過的家族）。
+T1: ui:設定[{name}]={value}
+T1: setting route {name} owner=DataStats effects=…+LiveInspectionCurves
+T1: live inspection apply setting={name} hm=C/R thresholdC=Mean/Max
+    thresholdR=Mean/Max mode={Mean|Max|Both} direction={Vertical|Horizontal|Both}
+    action={normalization-reset|refresh}
+
+（dc_／dd_ 改變後，下一筆監控列 Curve）
+Tn: live row normalize captureHm=C rowHm=R ratio=C/R
 ```
+
+**code-flow 與數值契約**：
+```
+SettingsHub.Changed
+ → OnSettingChanged@AniloxRollForm.cs
+ → SettingImpactClassifier：S1 全部帶 LiveInspectionCurves
+ → ApplyLiveInspectionSettings@AniloxRollForm.Live.cs
+    ├ 閾值／欄曲線模式／方向：保留資料，立即更新線與下一幀 O/X
+    └ 欄／列正規值：清除舊尺度 Live Curve 緩衝，禁止同圖混用兩種尺度
+
+ProcessImage@AniloxCamera.cs
+ → OnLiveRowCurveData(cam, rawMean, rawMax, frameHmC)
+ → Live 顯示列值 = raw × frameHmC / currentHmR
+ → CheckLiveMura（使用換算後值）→ pending row → chart
+```
+
+欄與列的 O/X 都遵守同一公式：啟用平均時 `mean > meanThreshold` 才因平均失敗；
+啟用最大時 `max > maxThreshold` 才因最大失敗。不得以平均閾值判斷最大曲線。
+
+**光源替代刺激 Smoke（S1.LightSurrogate）**：流程驗證模式可在 Grab 中切亮度
+`100 ↔ 255`，等待 500 ms 後各取一筆欄／列 peak、當下閾值與 O/X：
+```
+live inspection stimulus brightness=B direction={col|row} mean=M max=X
+threshold=TM/TX mode={Mean|Max|Both} verdict={O|X} source=light-surrogate-not-mura
+```
+checker 必須驗證兩個亮度都有欄／列資料、數值確實改變且 verdict 符合公式。
+這只證明「檢測標準接線與計算會對穩定輸入變化作出反應」，**不是正式 Mura 模擬，
+不得拿來宣稱真實瑕疵檢出率或光學準確度**。
+
+禁止：其他任何設定（IO／光源／儲存／一般顯示）不得觸發 Data 曲線 reload+重綁。
+光源亮度只允許 arm S1 測試樣本，不得改寫檢測標準。
 
 ### S2 回顧強化（hd_EnableReviewEnhance）
 ```

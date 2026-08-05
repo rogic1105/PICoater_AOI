@@ -29,7 +29,8 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         ColumnThresholds = 1 << 2,
         RowThresholds = 1 << 3,
         RowPitch = 1 << 4,
-        ReviewCurves = 1 << 5
+        ReviewCurves = 1 << 5,
+        LiveInspectionCurves = 1 << 6
     }
 
     internal struct SettingRoute
@@ -108,23 +109,30 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
             Add(routes, nameof(InspectionSettings.db_Algorithm), SettingFeatureOwner.Background);
             Add(routes, nameof(InspectionSettings.dc_HessianMaxFactorV), SettingFeatureOwner.DataStats,
-                SettingImpact.InspectionService | SettingImpact.CapturePolicy | SettingImpact.ReviewCurves);
+                SettingImpact.InspectionService | SettingImpact.CapturePolicy |
+                SettingImpact.ReviewCurves | SettingImpact.LiveInspectionCurves);
             Add(routes, nameof(InspectionSettings.dd_HessianMaxFactorH), SettingFeatureOwner.DataStats,
-                SettingImpact.ReviewCurves);
+                SettingImpact.ReviewCurves | SettingImpact.LiveInspectionCurves);
             Add(routes, nameof(InspectionSettings.de_RidgeSigma), SettingFeatureOwner.None,
                 SettingImpact.CapturePolicy);
             Add(routes, nameof(InspectionSettings.eb_RidgeDir), SettingFeatureOwner.DataStats,
-                SettingImpact.InspectionService | SettingImpact.CapturePolicy | SettingImpact.ReviewCurves);
+                SettingImpact.InspectionService | SettingImpact.CapturePolicy |
+                SettingImpact.ReviewCurves | SettingImpact.LiveInspectionCurves);
             Add(routes, nameof(InspectionSettings.eca_ColumnCurveMode), SettingFeatureOwner.DataStats,
-                SettingImpact.ColumnThresholds | SettingImpact.ReviewCurves);
+                SettingImpact.ColumnThresholds | SettingImpact.ReviewCurves |
+                SettingImpact.LiveInspectionCurves);
             Add(routes, nameof(InspectionSettings.ec_ErrorValueMeanV), SettingFeatureOwner.DataStats,
-                SettingImpact.InspectionService | SettingImpact.ColumnThresholds | SettingImpact.ReviewCurves);
+                SettingImpact.InspectionService | SettingImpact.ColumnThresholds |
+                SettingImpact.ReviewCurves | SettingImpact.LiveInspectionCurves);
             Add(routes, nameof(InspectionSettings.ed_ErrorValueMaxV), SettingFeatureOwner.DataStats,
-                SettingImpact.InspectionService | SettingImpact.ColumnThresholds | SettingImpact.ReviewCurves);
+                SettingImpact.InspectionService | SettingImpact.ColumnThresholds |
+                SettingImpact.ReviewCurves | SettingImpact.LiveInspectionCurves);
             Add(routes, nameof(InspectionSettings.ee_ErrorValueMeanH), SettingFeatureOwner.DataStats,
-                SettingImpact.RowThresholds | SettingImpact.ReviewCurves);
+                SettingImpact.RowThresholds | SettingImpact.ReviewCurves |
+                SettingImpact.LiveInspectionCurves);
             Add(routes, nameof(InspectionSettings.ef_ErrorValueMaxH), SettingFeatureOwner.DataStats,
-                SettingImpact.RowThresholds | SettingImpact.ReviewCurves);
+                SettingImpact.RowThresholds | SettingImpact.ReviewCurves |
+                SettingImpact.LiveInspectionCurves);
 
             AddMany(routes, SettingFeatureOwner.ChartScale,
                 nameof(InspectionSettings.gb_ChartScaleMode),

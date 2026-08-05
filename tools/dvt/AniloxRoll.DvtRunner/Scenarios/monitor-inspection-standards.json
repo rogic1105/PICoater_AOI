@@ -1,0 +1,291 @@
+{
+  "Id": "monitor-inspection-standards",
+  "Name": "監控檢測標準（光源替代刺激）",
+  "Description": "用光源 100/255 的穩定亮暗變化驗證監控正規值、閾值、欄曲線模式、檢出方向、欄列 Curve 與 O/X 公式。光源只提供替代刺激，不代表真實 Mura 光學檢出率。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 DVT 探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "manual-control",
+      "Contract": "F2",
+      "Title": "停用 IO 自動控制",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "否",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "enable-light",
+      "Contract": "H.Light",
+      "Title": "啟用實體光源",
+      "Action": "set-property",
+      "Target": "啟用光源",
+      "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "wait-light-ready",
+      "Contract": "H.Light",
+      "Title": "等待光源連線",
+      "Action": "wait-log",
+      "Pattern": "\\[LightController\\] AutoDetect: (使用設定|掃描找到)",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "wait-acquisition-ready",
+      "Contract": "F1/F2",
+      "Title": "等待相機待機完成",
+      "Action": "wait-log",
+      "Pattern": "acquisition idle prepare ready cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "start-grab",
+      "Contract": "F2",
+      "Title": "開始監控 Grab",
+      "Action": "click",
+      "Target": "開始抓取",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "gate-open",
+      "Contract": "F2",
+      "Title": "等待擷取閘門開啟",
+      "Action": "wait-log",
+      "Pattern": "capture gate open cams=",
+      "TimeoutSeconds": 180
+    },
+    {
+      "Id": "enable-mura-detection",
+      "Contract": "M1/S1",
+      "Title": "確認檢出未暫停",
+      "Action": "set-property",
+      "Target": "暫停檢出",
+      "Value": "否",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "direction-column",
+      "Contract": "S1",
+      "Title": "先切欄檢出以保證方向設定產生變更",
+      "Action": "set-property",
+      "Target": "檢出方向",
+      "Value": "欄",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "direction-both",
+      "Contract": "S1",
+      "Title": "啟用欄列雙方向檢出",
+      "Action": "set-property",
+      "Target": "檢出方向",
+      "Value": "全部",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "mode-mean",
+      "Contract": "S1",
+      "Title": "先切欄平均判定以保證模式產生變更",
+      "Action": "set-property",
+      "Target": "欄曲線判定",
+      "Value": "顯示平均",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "mode-both",
+      "Contract": "S1",
+      "Title": "欄判定改為平均與最大",
+      "Action": "set-property",
+      "Target": "欄曲線判定",
+      "Value": "顯示兩者",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "column-normalization",
+      "Contract": "S1",
+      "Title": "套用欄正規值",
+      "Action": "set-property",
+      "Target": "欄正規值",
+      "Value": "0.47",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "row-normalization",
+      "Contract": "S1",
+      "Title": "套用列正規值",
+      "Action": "set-property",
+      "Target": "列正規值",
+      "Value": "0.83",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "column-mean-threshold",
+      "Contract": "S1",
+      "Title": "套用欄平均閾值",
+      "Action": "set-property",
+      "Target": "欄平均閾值",
+      "Value": "0.31",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "column-max-threshold",
+      "Contract": "S1",
+      "Title": "套用欄最大閾值",
+      "Action": "set-property",
+      "Target": "欄最大閾值",
+      "Value": "0.71",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "row-mean-threshold",
+      "Contract": "S1",
+      "Title": "套用列平均閾值",
+      "Action": "set-property",
+      "Target": "列平均閾值",
+      "Value": "0.29",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "row-max-threshold",
+      "Contract": "S1",
+      "Title": "套用列最大閾值",
+      "Action": "set-property",
+      "Target": "列最大閾值",
+      "Value": "0.69",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "live-apply-proof",
+      "Contract": "S1",
+      "Title": "確認檢測標準進入監控套用點",
+      "Action": "wait-log",
+      "Pattern": "live inspection apply setting=ef_ErrorValueMaxH .*action=refresh",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "row-normalize-proof",
+      "Contract": "S1",
+      "Title": "確認列 Curve 使用欄列正規值換算",
+      "Action": "wait-log",
+      "Pattern": "live row normalize captureHm=0\\.4700 rowHm=0\\.8300 ratio=",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "light-low",
+      "Contract": "S1.LightSurrogate",
+      "Title": "光源降到 100 產生第一組替代刺激",
+      "Action": "set-property",
+      "Target": "亮度",
+      "Value": "100",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "low-column",
+      "Contract": "S1.LightSurrogate",
+      "Title": "取得亮度 100 的欄 Curve 樣本",
+      "Action": "wait-log",
+      "Pattern": "live inspection stimulus brightness=100 direction=col .*source=light-surrogate-not-mura",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "low-row",
+      "Contract": "S1.LightSurrogate",
+      "Title": "取得亮度 100 的列 Curve 樣本",
+      "Action": "wait-log",
+      "Pattern": "live inspection stimulus brightness=100 direction=row .*source=light-surrogate-not-mura",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "light-high",
+      "Contract": "S1.LightSurrogate",
+      "Title": "光源升到 255 產生第二組替代刺激",
+      "Action": "set-property",
+      "Target": "亮度",
+      "Value": "255",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "high-column",
+      "Contract": "S1.LightSurrogate",
+      "Title": "取得亮度 255 的欄 Curve 樣本",
+      "Action": "wait-log",
+      "Pattern": "live inspection stimulus brightness=255 direction=col .*source=light-surrogate-not-mura",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "high-row",
+      "Contract": "S1.LightSurrogate",
+      "Title": "取得亮度 255 的列 Curve 樣本",
+      "Action": "wait-log",
+      "Pattern": "live inspection stimulus brightness=255 direction=row .*source=light-surrogate-not-mura",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "stop-grab",
+      "Contract": "F3",
+      "Title": "停止監控 Grab",
+      "Action": "click",
+      "Target": "停止抓取",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "gate-closed",
+      "Contract": "F3",
+      "Title": "確認擷取安全結束",
+      "Action": "wait-log",
+      "Pattern": "capture gate closed standby=on",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "核對檢測標準、正規比例與替代刺激結果",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}

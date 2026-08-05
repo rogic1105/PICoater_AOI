@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalRetention", "PhysicalSoak", "PhysicalCaptureSoak", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalInspectionStandards", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalRetention", "PhysicalSoak", "PhysicalCaptureSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 120,
     [double]$SoakMinutes = 120,
@@ -58,6 +58,8 @@ $acceptanceCriteria = @{
         "Load exactly 30,000 grab IDs; reload jumps to newest; Review rapid/period navigation, enhancement, direction, heatmap, and display crop preserve data contracts; Report single/range curves, Y-axis toggle, fail filter, cross-tab curve reuse, clean shutdown, and the full checker pass."
     "Physical camera/background smoke" =
         "Connected cameras become ready; background capture, preview, Grab/Stop, image-before-curve order, cleanup, and the full checker pass."
+    "Physical inspection-standard smoke" =
+        "With cameras and light connected, brightness 100 and 255 produce measurable column and row responses; live normalization, mean/max thresholds, metric mode, direction, threshold lines, and O/X formulas match the configured inspection standards. This surrogate stimulus does not validate real Mura detection rate."
     "Physical IO capture cycles" =
         "Three 10-second START High cycles each open the product gate, produce an aligned first set and image-before-curve evidence, drain one tail frame per camera on Low, close cleanly, finalize an archive, and enqueue remote output."
     "Physical fixed-stop capture modes" =
@@ -676,7 +678,7 @@ function Write-CampaignReport {
     [void]$builder.AppendLine()
     [void]$builder.AppendLine("## Not covered by this campaign")
     [void]$builder.AppendLine()
-    if ($Mode -in @("PhysicalCamera", "PhysicalCapture", "PhysicalCaptureSoak", "PhysicalRecovery")) {
+    if ($Mode -in @("PhysicalCamera", "PhysicalInspectionStandards", "PhysicalCapture", "PhysicalCaptureSoak", "PhysicalRecovery")) {
         [void]$builder.AppendLine("- Seven-camera full-load acquisition remains untested; this run covered only the connected cameras.")
         if ($Mode -in @("PhysicalCapture", "PhysicalCaptureSoak", "PhysicalRecovery")) {
             [void]$builder.AppendLine("- Background capture and preview are covered by the separate PhysicalCamera scenario, not this run.")
@@ -784,6 +786,12 @@ if ($Mode -in @("ReviewReport30k", "All")) {
 if ($Mode -eq "PhysicalCamera") {
     $allPassed = (Invoke-DvtScenario "monitor-background-v1" `
         "Physical camera/background smoke" "Physical camera DVT" 900) -and $allPassed
+}
+
+if ($Mode -eq "PhysicalInspectionStandards") {
+    $allPassed = (Invoke-DvtScenario "monitor-inspection-standards" `
+        "Physical inspection-standard smoke" `
+        "Physical inspection-standard DVT" 900) -and $allPassed
 }
 
 if ($Mode -eq "PhysicalCapture") {

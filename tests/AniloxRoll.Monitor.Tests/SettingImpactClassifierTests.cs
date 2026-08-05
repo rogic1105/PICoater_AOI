@@ -51,17 +51,20 @@ namespace AniloxRoll.Monitor.Tests
                 SettingFeatureOwner.DataStats,
                 SettingImpact.InspectionService |
                 SettingImpact.ColumnThresholds |
-                SettingImpact.ReviewCurves);
+                SettingImpact.ReviewCurves |
+                SettingImpact.LiveInspectionCurves);
             yield return Route(
                 nameof(InspectionSettings.eca_ColumnCurveMode),
                 SettingFeatureOwner.DataStats,
                 SettingImpact.ColumnThresholds |
-                SettingImpact.ReviewCurves);
+                SettingImpact.ReviewCurves |
+                SettingImpact.LiveInspectionCurves);
             yield return Route(
                 nameof(InspectionSettings.ee_ErrorValueMeanH),
                 SettingFeatureOwner.DataStats,
                 SettingImpact.RowThresholds |
-                SettingImpact.ReviewCurves);
+                SettingImpact.ReviewCurves |
+                SettingImpact.LiveInspectionCurves);
         }
 
         [TestCaseSource(nameof(ExactRoutes))]

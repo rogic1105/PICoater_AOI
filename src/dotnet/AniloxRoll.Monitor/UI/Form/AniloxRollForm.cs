@@ -1295,13 +1295,13 @@ namespace AniloxRoll.Monitor.Forms
 
                     if (applyDisplayImmediately)
                     {
-                        ApplyCrossFeatureSettingImpacts(route.Impacts);
+                        ApplyCrossFeatureSettingImpacts(route.Impacts, c.Name);
                         await DispatchSettingOwner(route.Owner, c.Name);
                     }
                 }
                 else
                 {
-                    ApplyCrossFeatureSettingImpacts(route.Impacts);
+                    ApplyCrossFeatureSettingImpacts(route.Impacts, c.Name);
                     await DispatchSettingOwner(route.Owner, c.Name);
                 }
 
@@ -1313,7 +1313,7 @@ namespace AniloxRoll.Monitor.Forms
             finally { _onSettingChangedSemaphore.Release(); }
         }
 
-        private void ApplyCrossFeatureSettingImpacts(SettingImpact impacts)
+        private void ApplyCrossFeatureSettingImpacts(SettingImpact impacts, string settingName)
         {
             if ((impacts & SettingImpact.InspectionService) != 0)
                 _inspectionSettingsCoordinator.ApplySettingsToService();
@@ -1322,13 +1322,10 @@ namespace AniloxRoll.Monitor.Forms
             if ((impacts & SettingImpact.ColumnThresholds) != 0)
             {
                 _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-                _liveOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
                 _reviewOverviewHelper?.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
-                _liveOverviewHelper?.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
             }
             if ((impacts & SettingImpact.RowThresholds) != 0)
             {
-                _liveRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
                 _reviewRowDisplay?.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
             }
             if ((impacts & SettingImpact.RowPitch) != 0)
@@ -1339,6 +1336,8 @@ namespace AniloxRoll.Monitor.Forms
                 _stitchCoordinator.UpdateStitchedOverviewChart();
                 _stitchCoordinator.RefreshChartsForSettingsChange();
             }
+            if ((impacts & SettingImpact.LiveInspectionCurves) != 0)
+                ApplyLiveInspectionSettings(settingName);
         }
 
         private async Task DispatchSettingOwner(SettingFeatureOwner owner, string name)

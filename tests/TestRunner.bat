@@ -19,9 +19,10 @@ echo 10. SMB 中斷／待傳補送恢復（需系統管理員）
 echo 11. IO／光源軟體斷線恢復（首次安裝固定管理員動作）
 echo 12. 低磁碟刪檔與狀態恢復（隔離 TEMP，不碰正式資料）
 echo 13. 反覆 Grab 耐久測試（預設 120 分鐘）
-echo 14. 結束
+echo 14. 監控檢測標準（光源 100/255 替代刺激）
+echo 15. 結束
 echo.
-set /p choice="請選擇 (1-14): "
+set /p choice="請選擇 (1-15): "
 
 if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
@@ -36,7 +37,8 @@ if "%choice%"=="10" goto :physical_recovery
 if "%choice%"=="11" goto :physical_bridge_recovery
 if "%choice%"=="12" goto :physical_retention
 if "%choice%"=="13" goto :physical_capture_soak
-if "%choice%"=="14" goto :done
+if "%choice%"=="14" goto :physical_inspection_standards
+if "%choice%"=="15" goto :done
 goto :invalid
 
 :functional
@@ -61,6 +63,10 @@ goto :result
 
 :physical_capture
 powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalCapture
+goto :result
+
+:physical_inspection_standards
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalInspectionStandards
 goto :result
 
 :physical_storage
