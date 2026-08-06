@@ -63,7 +63,6 @@ class CaptureFlowValidator:
         required = (
             " archive=",
             ".acap",
-            " assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r",
             " preview=1920x1080x3",
         )
         legacy = (
@@ -82,6 +81,11 @@ class CaptureFlowValidator:
             if current_id:
                 ids.add(current_id)
             missing = [token for token in required if token not in message]
+            if " hessianScale=" in message:
+                if " assets=raw|proc_c|proc_r|hessian_c|hessian_r|mean_c|max_c|mean_r|max_r" not in message:
+                    missing.append("hessian-standard-assets")
+            elif " assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r" not in message:
+                missing.append("capture-assets")
             old = [token for token in legacy if token in message]
             if not current_id or " root=" not in message or " imageDir=" not in message or " csv=" not in message:
                 failures.append(f"{line.timestamp} 欄位不完整")

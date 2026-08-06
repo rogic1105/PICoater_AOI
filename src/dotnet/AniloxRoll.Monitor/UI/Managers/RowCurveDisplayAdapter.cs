@@ -95,6 +95,12 @@ namespace AniloxRoll.Monitor.UI.Managers
             _chart.UpdateData(mean, max);
         }
 
+        public void UpdateDataPreservingView(float[] mean, float[] max)
+        {
+            ApplyDirection();
+            _chart.UpdateDataPreservingView(mean, max);
+        }
+
         public void UpdateDataAndViewRange(float[] mean, float[] max, double topMm, double botMm)
         {
             ApplyDirection();

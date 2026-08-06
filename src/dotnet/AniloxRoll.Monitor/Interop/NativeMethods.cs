@@ -33,6 +33,10 @@ namespace AniloxRoll.Monitor.Core.Interop
         public IntPtr ResizedRaw;     // 原圖縮圖 dst（host pinned）
         public IntPtr ResizedRidge;   // V 脊線縮圖 dst
         public IntPtr ResizedMura;    // H 脊線縮圖 dst
+        public int StandardWidth;
+        public int StandardHeight;
+        public IntPtr ResizedHessianColumnHalf; // 未正規化欄 Hessian，IEEE binary16
+        public IntPtr ResizedHessianRowHalf;    // 未正規化列 Hessian，IEEE binary16
     }
 
     internal static class NativeMethods

@@ -23,7 +23,9 @@ namespace AniloxRoll.Monitor.Core.Services
         ThumbnailRowJpeg = 10,
         PreviewAtlasRaw = 11,
         PreviewAtlasColumn = 12,
-        PreviewAtlasRow = 13
+        PreviewAtlasRow = 13,
+        HessianColumnHalf = 14,
+        HessianRowHalf = 15
     }
 
     internal sealed class CaptureArchiveAsset
@@ -1001,6 +1003,8 @@ namespace AniloxRoll.Monitor.Core.Services
             kind = 0;
             string[] suffixes =
             {
+                CaptureFileNaming.HessianC,
+                CaptureFileNaming.HessianR,
                 CaptureFileNaming.ThumbRawJpg,
                 CaptureFileNaming.ThumbProcC,
                 CaptureFileNaming.ThumbProcR,
@@ -1014,6 +1018,8 @@ namespace AniloxRoll.Monitor.Core.Services
             };
             CaptureAssetKind[] kinds =
             {
+                CaptureAssetKind.HessianColumnHalf,
+                CaptureAssetKind.HessianRowHalf,
                 CaptureAssetKind.ThumbnailRawJpeg,
                 CaptureAssetKind.ThumbnailColumnJpeg,
                 CaptureAssetKind.ThumbnailRowJpeg,

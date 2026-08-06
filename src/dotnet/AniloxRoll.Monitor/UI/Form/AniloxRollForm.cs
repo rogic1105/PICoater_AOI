@@ -819,6 +819,29 @@ namespace AniloxRoll.Monitor.Forms
             propertyGridSettings.PropertyValueChanged += _propertyGrid_PropertyValueChanged;
             propertyGridSettings.SelectedGridItemChanged -= PropertyGridSettings_SelectedGridItemChanged;
             propertyGridSettings.SelectedGridItemChanged += PropertyGridSettings_SelectedGridItemChanged;
+            _wheelInterceptors.Add(new PropertyGridNumericWheelInterceptor(
+                propertyGridSettings,
+                new Dictionary<string, decimal>(StringComparer.Ordinal)
+                {
+                    { nameof(InspectionSettings.dc_HessianMaxFactorV), 0.1m },
+                    { nameof(InspectionSettings.dd_HessianMaxFactorH), 0.1m },
+                    { nameof(InspectionSettings.de_RidgeSigma), 1m },
+                    { nameof(InspectionSettings.ec_ErrorValueMeanV), 0.1m },
+                    { nameof(InspectionSettings.ed_ErrorValueMaxV), 0.1m },
+                    { nameof(InspectionSettings.ee_ErrorValueMeanH), 0.1m },
+                    { nameof(InspectionSettings.ef_ErrorValueMaxH), 0.1m }
+                },
+                (name, oldValue, newValue) =>
+                    _settingsHub.NotifyExternalChange(name, oldValue, newValue),
+                (name, armed) =>
+                {
+                    ShowPropertyGridHelp(
+                        propertyGridSettings.SelectedGridItem,
+                        armed
+                            ? "滑鼠滾輪：已啟用（再點一次取消）"
+                            : "滑鼠滾輪：已取消（再點一次啟用）");
+                    FlowTrace.Log($"property wheel {(armed ? "armed" : "disarmed")} setting={name}");
+                }));
             AutoFitPropertyGridLabelColumn(propertyGridSettings);
 
 
@@ -873,14 +896,14 @@ namespace AniloxRoll.Monitor.Forms
                 };
                 _stitchCoordinator.StitchedImagesReady += (
                     gray, ws, hs, ops, pos, isGlobal, preserveChartView,
-                    feedScale, rowPitchScale) =>
+                    feedScale, rowPitchCorrection) =>
                 {
                     CsvConfigSnapshot cropConfig = _stitchCoordinator.CurrentGrabConfig;
                     _reviewDisplayManager?.SetMainColorMap(ResolveReviewColorMap());
                     _reviewDisplayManager?.PushFrames(gray, ws, hs, ops, pos, isGlobal,
                         _reviewRuntimeState.ScreenMmPerPixel,
                         feedScale,
-                        (_reviewRowDisplay?.RowPitchMm ?? 0) * rowPitchScale,
+                        (_reviewRowDisplay?.RowPitchMm ?? 0) * rowPitchCorrection,
                         ShouldFlipDisplayVertical(),
                         cropConfig?.TrimHeadMm ?? _settings.TrimHeadMm,
                         cropConfig?.TrimTailMm ?? _settings.TrimTailMm,
@@ -1231,7 +1254,11 @@ namespace AniloxRoll.Monitor.Forms
         private void PropertyGridSettings_SelectedGridItemChanged(object sender, SelectedGridItemChangedEventArgs e)
         {
             if (_suppressGridSelChange) return;  // RefreshGridItem trick 暫時切 selection 不更新說明文字
-            var item = e.NewSelection;
+            ShowPropertyGridHelp(e.NewSelection, null);
+        }
+
+        private void ShowPropertyGridHelp(GridItem item, string wheelHint)
+        {
             helpRichText.Clear();
             if (item?.PropertyDescriptor == null) return;
 
@@ -1246,6 +1273,11 @@ namespace AniloxRoll.Monitor.Forms
             {
                 helpRichText.AppendText(Environment.NewLine);
                 helpRichText.AppendText(desc);
+            }
+            if (!string.IsNullOrEmpty(wheelHint))
+            {
+                helpRichText.AppendText(Environment.NewLine);
+                helpRichText.AppendText(wheelHint);
             }
         }
 

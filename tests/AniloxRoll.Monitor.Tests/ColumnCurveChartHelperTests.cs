@@ -109,5 +109,33 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(axis.Maximum, Is.EqualTo(axis.ScaleView.ViewMaximum).Within(1e-9));
             }
         }
+
+        [Test]
+        public void UpdateDataPreservingView_ChangesValuesWithoutMovingPhysicalRange()
+        {
+            using (var chart = new Chart { Size = new Size(800, 120) })
+            {
+                var helper = new ColumnCurveChartHelper(chart);
+                helper.SetOps(1000);
+                helper.UpdateDataAndView(
+                    new float[100], new float[100], 0, 20, 40);
+                var axis = chart.ChartAreas[0].AxisX;
+                double minimum = axis.Minimum;
+                double maximum = axis.Maximum;
+                double viewMinimum = axis.ScaleView.ViewMinimum;
+                double viewMaximum = axis.ScaleView.ViewMaximum;
+
+                helper.UpdateDataPreservingView(
+                    new float[] { 255, 128, 64 },
+                    new float[] { 255, 200, 100 },
+                    500);
+
+                Assert.That(axis.Minimum, Is.EqualTo(minimum).Within(1e-9));
+                Assert.That(axis.Maximum, Is.EqualTo(maximum).Within(1e-9));
+                Assert.That(axis.ScaleView.ViewMinimum, Is.EqualTo(viewMinimum).Within(1e-9));
+                Assert.That(axis.ScaleView.ViewMaximum, Is.EqualTo(viewMaximum).Within(1e-9));
+                Assert.That(helper.DisplayMeanPeak, Is.EqualTo(1.0).Within(1e-9));
+            }
+        }
     }
 }

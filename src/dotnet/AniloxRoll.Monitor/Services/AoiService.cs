@@ -33,6 +33,10 @@ namespace AniloxRoll.Monitor.Core.Services
             public IntPtr ResizedRaw { get; set; }
             public IntPtr ResizedRidge { get; set; }
             public IntPtr ResizedMura { get; set; }
+            public int StandardWidth { get; set; }
+            public int StandardHeight { get; set; }
+            public IntPtr ResizedHessianColumnHalf { get; set; }
+            public IntPtr ResizedHessianRowHalf { get; set; }
         }
 
         public sealed class AlgorithmParams
@@ -114,7 +118,11 @@ namespace AniloxRoll.Monitor.Core.Services
                 ResizeHeight = request.Output.ResizeHeight,
                 ResizedRaw = request.Output.ResizedRaw,
                 ResizedRidge = request.Output.ResizedRidge,
-                ResizedMura = request.Output.ResizedMura
+                ResizedMura = request.Output.ResizedMura,
+                StandardWidth = request.Output.StandardWidth,
+                StandardHeight = request.Output.StandardHeight,
+                ResizedHessianColumnHalf = request.Output.ResizedHessianColumnHalf,
+                ResizedHessianRowHalf = request.Output.ResizedHessianRowHalf
             };
 
             // 演算法參數組成 json（InvariantCulture：小數點一律 '.'，不受系統地區影響）

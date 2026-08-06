@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Globalization;
 using System.Windows.Forms;
 using TanukiCv.Controls;
 using TanukiCv.Core;
@@ -111,6 +112,8 @@ namespace AniloxRoll.Monitor.UI.Managers
             EnsureCreated(screenMmPerPx);
             bool publishRecordView = !preserveChartView;
             bool fittedRecord = false;
+            ImageViewRange preservedView = default(ImageViewRange);
+            bool hasPreservedView = preserveChartView && _view.TryGetViewRangeMm(out preservedView);
             _suppressViewRangeEvents = true;
             try
             {
@@ -131,6 +134,29 @@ namespace AniloxRoll.Monitor.UI.Managers
                 }
                 _view.ClearFramesExcept(present);
                 _view.RefreshNow();
+                Core.Services.FlowTrace.Log(
+                    $"RV pushFrames {pushed}/{count}（merge={mergeMode}, feedScale={feedScale}, " +
+                    $"chartView={(preserveChartView ? "keep" : "publish")}）");
+                if (preserveChartView)
+                {
+                    bool restored = hasPreservedView && _view.TryRestoreViewRangeMm(preservedView);
+                    ImageViewRange restoredView = default(ImageViewRange);
+                    bool measured = restored && _view.TryGetViewRangeMm(out restoredView);
+                    double maxDelta = measured ? MaxViewDelta(preservedView, restoredView) : double.PositiveInfinity;
+                    Core.Services.FlowTrace.Dvt(string.Format(
+                        CultureInfo.InvariantCulture,
+                        "RV variantView keep beforeX={0:F2}~{1:F2} beforeY={2:F2}~{3:F2} " +
+                        "afterX={4:F2}~{5:F2} afterY={6:F2}~{7:F2} maxDelta={8}",
+                        preservedView.LeftMm, preservedView.RightMm,
+                        preservedView.TopMm, preservedView.BottomMm,
+                        measured ? restoredView.LeftMm : double.NaN,
+                        measured ? restoredView.RightMm : double.NaN,
+                        measured ? restoredView.TopMm : double.NaN,
+                        measured ? restoredView.BottomMm : double.NaN,
+                        double.IsInfinity(maxDelta)
+                            ? "missing"
+                            : maxDelta.ToString("F3", CultureInfo.InvariantCulture)));
+                }
                 if (publishRecordView)
                 {
                     // A new record always starts fitted. Equal-sized records do not rebind LOD,
@@ -139,9 +165,6 @@ namespace AniloxRoll.Monitor.UI.Managers
                     Core.Services.FlowTrace.Display("RV", "fit(record-change)");
                     fittedRecord = true;
                 }
-                Core.Services.FlowTrace.Log(
-                    $"RV pushFrames {pushed}/{count}（merge={mergeMode}, feedScale={feedScale}, " +
-                    $"chartView={(preserveChartView ? "keep" : "publish")}）");
             }
             finally
             {
@@ -155,6 +178,13 @@ namespace AniloxRoll.Monitor.UI.Managers
                 _recordTransitionGrabId = null;
                 _view.RefireViewRange();
             }
+        }
+
+        private static double MaxViewDelta(ImageViewRange before, ImageViewRange after)
+        {
+            return Math.Max(
+                Math.Max(Math.Abs(before.LeftMm - after.LeftMm), Math.Abs(before.RightMm - after.RightMm)),
+                Math.Max(Math.Abs(before.TopMm - after.TopMm), Math.Abs(before.BottomMm - after.BottomMm)));
         }
 
         /// <summary>

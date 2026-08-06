@@ -15,7 +15,7 @@ namespace AniloxRoll.Monitor.Tests
                 raw, captureHm: 0.5f, currentHm: 1.0f);
 
             CollectionAssert.AreEqual(
-                new[] { 0f, 32f, 64f, 127.5f },
+                new[] { 0f, 128f, 256f, 510f },
                 display);
             CollectionAssert.AreEqual(
                 new[] { 0f, 64f, 128f, 255f },
@@ -28,6 +28,14 @@ namespace AniloxRoll.Monitor.Tests
         {
             Assert.That(HessianRescaleHelper.Ratio(0.5f, 0f), Is.EqualTo(1f));
             Assert.That(HessianRescaleHelper.Ratio(0f, 0.5f), Is.EqualTo(1f));
+        }
+
+        [Test]
+        public void Ratio_CurrentNormalizationIsLinearGain()
+        {
+            Assert.That(HessianRescaleHelper.Ratio(0.5f, 0.5f), Is.EqualTo(1f));
+            Assert.That(HessianRescaleHelper.Ratio(0.5f, 1.0f), Is.EqualTo(2f));
+            Assert.That(HessianRescaleHelper.Ratio(0.5f, 1.5f), Is.EqualTo(3f));
         }
     }
 }

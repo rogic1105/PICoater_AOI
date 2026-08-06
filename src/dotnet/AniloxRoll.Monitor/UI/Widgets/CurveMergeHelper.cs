@@ -31,7 +31,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             MergeOverlap overlap = MergeOverlap.Midline,
             float valueScale = 1f,
             double trimHeadMm = 0,
-            double trimTailMm = 0)
+            double trimTailMm = 0,
+            bool preservePhysicalRange = false)
         {
             if (target == null) return;
             if (allMean == null)
@@ -62,7 +63,10 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 r.GlobalMinMm, r.Mean.Length, r.GridMm,
                 trimHeadMm, trimTailMm,
                 ref viewLeft, ref viewRight);
-            target.UpdateDataAndView(r.Mean, r.Max, r.GlobalMinMm, viewLeft, viewRight);
+            if (preservePhysicalRange)
+                target.UpdateDataPreservingView(r.Mean, r.Max, r.GlobalMinMm);
+            else
+                target.UpdateDataAndView(r.Mean, r.Max, r.GlobalMinMm, viewLeft, viewRight);
         }
 
         internal static void ResolveHorizontalDisplayRange(

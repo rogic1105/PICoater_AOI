@@ -90,6 +90,36 @@ namespace TanukiCv.Controls
         }
 
         /// <summary>
+        /// Replaces row-curve values while retaining the current physical Y viewport. This is
+        /// used for normalization or threshold changes where image geometry did not change.
+        /// </summary>
+        public void UpdateDataPreservingView(float[] meanData, float[] maxData)
+        {
+            if (_chart.ChartAreas.Count == 0) return;
+            var axis = _chart.ChartAreas[0].AxisY;
+            double minimum = axis.Minimum;
+            double maximum = axis.Maximum;
+            double viewMinimum = axis.ScaleView.ViewMinimum;
+            double viewMaximum = axis.ScaleView.ViewMaximum;
+
+            UpdateData(meanData, maxData);
+
+            axis.Minimum = minimum;
+            axis.Maximum = maximum;
+            if (!double.IsNaN(viewMinimum) && !double.IsNaN(viewMaximum) &&
+                viewMinimum < viewMaximum)
+            {
+                try { axis.ScaleView.Zoom(viewMinimum, viewMaximum); }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Trace.TraceWarning(
+                        $"[RowCurveChartHelper.UpdateDataPreservingView] {ex.GetType().Name}: {ex.Message}");
+                }
+            }
+            _chart.Invalidate();
+        }
+
+        /// <summary>
         /// 更新 Y 軸視野範圍（對應 canvas 垂直 viewport），單位為 mm。
         /// </summary>
         public void UpdateDataAndViewRange(float[] meanData, float[] maxData,

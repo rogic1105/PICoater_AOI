@@ -1372,14 +1372,19 @@ T1: capture plan grab={yyMMdd-HHmmss} root={CaptureRootPath}
     imageDir={root}\yyyy\yyyyMM\yyyyMMdd
     csv={root}\yyyy\yyyyMM\yyyyMMdd.csv
     archive={grabId}.acap
-    assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r
+    assets=raw|proc_c|proc_r|hessian_c|hessian_r|mean_c|max_c|mean_r|max_r
     preview=1920x1080x3
     scale={DefaultSaveResizeScale}
+    hessianScale={DefaultHessianStandardMapScale}
 ```
+- `proc_c/proc_r` 是相容舊資料與快速預覽的 U8 JPEG；`hessian_c/hessian_r` 是正規化前的
+  binary16 標準圖（HSM1，無損壓縮）。兩者不得互相冒充。
+- 新資料的標準圖固定取相機輸入 `/25`，縮小採區塊最大值以保留細線尖峰；改欄／列正規值時只從 HSM1 重新映射顯示與熱力圖，
+  不得重新執行 Hessian。舊資料缺 HSM1 時才回退到 `proc_c/proc_r`。
 - `CaptureRootPath` 預設為 `D:\Anilox\Captures`；遠端預設為
   `\\192.168.10.20\Anilox\Captures`。舊 `Captures_pack` 預設在 JSON 載入時自動升級。
 - `imageDir`、`csv` 與 archive path 必須由 `CaptureStoragePaths` 推導。
-- 新寫端只產生每 Grab 一個 `.acap`；七種獨立 asset 與 frame tick 都在 record 內。舊散檔名稱只保留讀取相容。
+- 新寫端只產生每 Grab 一個 `.acap`；九種獨立 asset 與 frame tick 都在 record 內。舊散檔名稱只保留讀取相容。
 - 這行是每輪 grab 的「存放方式/位置」摘要；逐幀大小與資源量仍歸 `resource-monitor-*.csv`，不得用 `[Flow]` 洗版。
 
 ### C2 檢測 CSV 寫入（每個 grab 首筆 + CFG 變更）
@@ -1673,6 +1678,15 @@ T1: （首次）RV EnsureImageDisplay create（thumbs=7）
 T1: RV loadGrab begin {grabId}（proc=…）
 Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename source=acap|legacy
     ← CSV 已選到的單序號必須 images>0 且 cams>0；`R2.assets` 自動判斷，避免索引存在但實體輸出不可讀
+Tn: RV hessian standard {grabId} dir=C|R gain=G scale=S sampleMin=A sampleMax=B sampleMean=M
+    ← G 是目前 PropertyGrid 正規值的線性顯示增益；A/B/M 是送進主畫面的實際灰階抽樣值，
+      不是由設定值反推的預期值。同一 grabId、同一 dir 下 G 增加時，sampleMean/sampleMax 不得下降，
+      且同方向 Curve 必須一起增加；任一關係相反即代表設定有到但顯示資料未生效。
+    ← 新資料選強化圖時，完整圖從正規化前 HSM1 依目前欄／列正規值 M 映射；S 是相機原圖到
+      本次顯示資料的總縮小倍率（HSM1 目前為 25）。同一 grab 改 M 只准重載顯示圖，不重算 Curve/Hessian。
+      prefit `/5` 像素尺寸與 HSM1 `/25` 上畫尺寸可以不同，但換算後的物理 X/Y 範圍必須相同；
+      `feedScale` 已代表整數總倍率，row pitch 只可再乘 `exactScale/feedScale` 的小數修正，不得重複乘 `/5`。
+      舊資料沒有 HSM1 時不出此行，合法回退到 `_proc_c/_proc_r.jpg`。
 T1: RV prefit {grabId} content=WxH viewport=WxH viewX=L~R viewY=T~B
     ← 只讀 JPEG 表頭＋CFG，完整解碼前先由主畫面同源公式算好欄／列視野
 T1: RV prefitPaint {grabId} chart=col|row after=Nms axis=A~B/view=L~R
@@ -1874,7 +1888,7 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
 |---|---|---|
 | `Full` | 新序號 settle 後載圖 | 發布 prefit、載入 bin，並以實際圖片視野覆核 Curve |
 | `ReuseSharedCurves` | 報表已載 Curve 後切到回顧 | 套用報表共用快照，不重讀 bin；仍為新序號建立 fit |
-| `ImageVariantOnly` | 同序號切原圖／欄強化／列強化 | 只解碼並換圖；不 Suspend、不 prefit、不讀 bin、不發布 view range、不重畫 Curve |
+| `ImageVariantOnly` | 同序號切原圖／欄強化／列強化 | 只解碼並換圖；不 Suspend、不 prefit、不讀 bin、不發布 view range、不重畫 Curve；以物理 mm 保存並還原主畫面視野 |
 
 快速滾動的 latest-only 機制只適用「新序號」；同序號切圖片版本必須保留現有 Curve 與視野，
 不得用完整載入來間接重畫。
@@ -1948,6 +1962,14 @@ T1: setting route {屬性名} owner={owner|None} effects={effect+effect|None}
     ← 每個 setting intent 的下一行；分類一次後才執行副作用
 （之後的反應行歸此 intent 管）
 ```
+PropertyGrid「檢出標準」的數值列可用滑鼠滾輪調整：欄／列正規值與欄／列平均、最大閾值
+每格 `0.1`，細線濾除每格 `1`，最小值各為一格。第一次點選數值列才啟用滾輪，
+再點同一列即取消；切到其他列時原列必須解除，避免一般捲動誤改設定。狀態行為：
+`property wheel {armed|disarmed} setting={name}`。滾輪入口不得另建設定旁路：
+`WM_MOUSEWHEEL → PropertyGridNumericWheelInterceptor → PropertyDescriptor.SetValue
+→ SettingsHub.NotifyExternalChange`，之後必須產生與鍵盤輸入完全相同的 `ui:設定 → setting route`。
+非上述數值列不得攔截滾輪，仍由 PropertyGrid 正常捲動畫面。
+
 **⚠ 非 PropertyGrid 的使用者入口（點 label/chart 走 Hub.Set）會被記成 set:（程式來源）**——
 這類入口必須自帶 `ui:` intent 行（如【暫停Mura檢測】【IO暫停】），否則盲測會認錯兇手身份
 （2026-07-07 盲測實例：點 lblIoDoMura 被誤判為程式動作、點 lblIoConn 完全無痕漏抓）。
@@ -1997,8 +2019,15 @@ T1: live inspection apply setting={name} hm=C/R thresholdC=Mean/Max
     action={normalization-reset|refresh}
 
 （dc_／dd_ 改變後，下一筆監控列 Curve）
-Tn: live row normalize captureHm=C rowHm=R ratio=C/R
+Tn: live row normalize captureHm=C rowHm=R ratio=R/C
+
+（報表單序號已載入時）
+Tn: DT curve refresh {grabId} reason=setting-{name}
+    column={True|False} row={True|False} source=memory preserveRange=True rangeDelta=Dmm
 ```
+
+`rangeDelta` 是重算前後實讀欄圖 `AxisX`／列圖 `AxisY` 的最大座標差；設定重算必須
+`<= 0.01 mm`。超過即判 FAIL，不能只憑 `preserveRange=True` 宣告成功。
 
 **code-flow 與數值契約**：
 ```
@@ -2011,9 +2040,18 @@ SettingsHub.Changed
 
 ProcessImage@AniloxCamera.cs
  → OnLiveRowCurveData(cam, rawMean, rawMax, frameHmC)
- → Live 顯示列值 = raw × frameHmC / currentHmR
+ → Live 顯示列值 = raw × currentHmR / frameHmC
  → CheckLiveMura（使用換算後值）→ pending row → chart
+
+Report 單序號設定重畫
+ → RefreshForSettingsChange(name)@MuraProfileChartPresenter.cs
+ → 使用已呈現的 raw Curve＋既有 prefit view 原地重算，不得重新讀 bin／CFG 或重新計算 prefit
+    ├ 欄正規值只重畫欄；列正規值只重畫列
+    └ 閾值／顯示模式只更新其所屬圖表
 ```
+
+正規值是顯示增益：目前值加倍，Curve 高度也加倍；不得再出現反比
+`HM_capture / HM_current`。報表重畫時欄 X 與列 Y 的物理座標範圍必須保持不變。
 
 欄與列的 O/X 都遵守同一公式：啟用平均時 `mean > meanThreshold` 才因平均失敗；
 啟用最大時 `max > maxThreshold` 才因最大失敗。不得以平均閾值判斷最大曲線。
@@ -2036,10 +2074,15 @@ checker 必須驗證兩個亮度都有欄／列資料、數值確實改變且 ve
 T1: ui:設定[hd_EnableReviewEnhance]
 單序號模式：RV loadGrab begin {當前grabId}
  → RV loadGrab curves=keep source=display {當前grabId}
- → RV pushFrames … chartView=keep → RV loadGrab done
-    禁止：RV prefit／RV curves／curves=load source=bin（同序號只換圖片版本，不重畫 Curve 或視野）
+ → RV pushFrames … chartView=keep
+ → RV variantView keep beforeX=L~R beforeY=T~B afterX=L~R afterY=T~B maxDelta=D
+ → RV loadGrab done
+    判準：D ≤ 0.1 mm；禁止 RV prefit／RV curves／curves=load source=bin／RV mainRange。
+    原圖 `/5` 與 HSM1 `/25` 像素密度不同時，必須保存並還原同一組物理 mm 視野，
+    不得保存像素 zoom/pan，也不得重畫 Curve 或重新 fit。
 時序模式：RV period load {當前時點} images=P/7 proc=True|False cfg=yes|no
- → RV pushFrames … chartView=keep → RV period curves=keep source=display
+ → RV pushFrames … chartView=keep → RV variantView keep … maxDelta=D
+ → RV period curves=keep source=display
     ← 重載目前真正顯示的模式；不得一律假設單序號，也不得重畫 Curve
 ```
 
@@ -2151,7 +2194,8 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
 - `S0.route`：每個設定 intent 下一行必須有同名 `setting route`；並檢查
   `CapturePolicy` 只出現在允許的六個設定，防止無關設定重送相機參數。
 - `S2.review-enhance`：切強化必須依當前回顧模式，以同一 grabId 完成
-  `RV loadGrab begin → done`，或以同一時點完成 `RV period load`；尚無回顧資料則回 `NOT COVERED`。
+  `RV loadGrab begin → pushFrames(chartView=keep) → variantView keep(maxDelta≤0.1mm) → done`，
+  或以同一時點完成 `RV period load`；尚無回顧資料則回 `NOT COVERED`。
 - `S4.live-enhance`：有已配置相機時，切監控強化必須出現相同值且
   `scope=all-cameras waterfallHistory=preserved` 的狀態行；enabled=False 必須是 raw，
   enabled=True 必須是 column 或 row，證明全相機狀態一致且瀑布歷史未被清除。
@@ -2438,7 +2482,7 @@ cbDataIdStart|End 手動變更
      │    → Task.Run → LoadRange@InspectionMuraProfileRepository.cs（可取消）
      │       ├ 每日 CSV 簽章相同 → DailyIndex 依 grabId 取候選資料＋拍攝 HM（不重掃 CSV）
      │       └ 簽章改變／首次使用 → 重建該日索引（LRU bounded 25 萬筆／1024 日）
-     │    → 每筆候選以 HM_capture/HM_current 換算（含 MaxCMean 排名）→ 50 Mean／50 Max 彙總
+     │    → 每筆候選以 HM_current/HM_capture 換算（含 MaxCMean 排名）→ 50 Mean／50 Max 彙總
      │    → 回 UI 執行緒；token 有效即 UpdateOverviewChart → DT range preview apply gen=G latest=L
      │       （G≤latest；若 G<latest，下一輪直接接最新；generation 不得倒退或重複）
      └ 重壓 150ms settle timer → DT range settle → RefreshStats(updateRangeCurve:false)（List／色卡最終對帳）
@@ -2535,7 +2579,7 @@ Tbg acquisition standby ready cam2 tick=T
 ```
 10:37:13.854 T 1 StartGrab（cams=4）
 10:37:13.855 T 1 ApplyMainDisplayMode → ImageCanvas
-T1 capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r preview=1920x1080x3 scale=…
+T1 capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=raw|proc_c|proc_r|hessian_c|hessian_r|mean_c|max_c|mean_r|max_r preview=1920x1080x3 scale=… hessianScale=25
 T1 IO grab request stopCondition=IoSignal stopOnLow=True
 T1 grab stop armed condition=IoSignal limit=Ns configured=10s grace=Gs source=io grab=…
 T1 capture gate open cams=2 warm=True

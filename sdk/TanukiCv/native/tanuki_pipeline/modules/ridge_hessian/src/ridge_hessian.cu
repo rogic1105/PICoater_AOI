@@ -4,6 +4,7 @@
 #include "tanuki/core/imgproc/core_features.hpp"    // computeHessianResponse_gpu, detectionMode
 #include "tanuki/core/imgproc/core_background.hpp"  // calcColumn/Row Means/Max
 #include "tanuki/core/imgproc/core_utils.hpp"       // scale_clamp_f32_to_u8_gpu
+#include "tanuki/core/imgproc/core_transform.hpp"
 #include <cuda_runtime.h>
 #include <cstring>
 
@@ -77,6 +78,11 @@ bool RidgeHessianModule::Process(const InputImage& input, const Params& params, 
     // Step 4：切向脊線 → ridge_data + 切向曲線
     if (doVertical) {
         tanuki::core::computeHessianResponse_gpu(d_blur_f32_, d_resp_, W, H, tanuki::core::detectionMode::VERTICAL, s);
+        if (output->hessian_column_half && output->standard_width > 0 && output->standard_height > 0) {
+            tanuki::core::downsample_max_f32_to_f16_gpu(
+                d_resp_, W, H, output->hessian_column_half,
+                output->standard_width, output->standard_height, s);
+        }
         tanuki::core::calcColumnMeans_gpu<float>(d_resp_, output->mura_curve_mean, W, H, s);
         tanuki::core::calcColumnMax_gpu<float>(d_resp_, output->mura_curve_max, W, H, s);
         scale_f32_inplace_gpu(output->mura_curve_mean, W, scale_factor, s);
@@ -87,6 +93,11 @@ bool RidgeHessianModule::Process(const InputImage& input, const Params& params, 
     // Step 5：法向脊線 + 法向曲線
     if (doHorizontal) {
         tanuki::core::computeHessianResponse_gpu(d_blur_f32_, d_resp_, W, H, tanuki::core::detectionMode::HORIZONTAL, s);
+        if (output->hessian_row_half && output->standard_width > 0 && output->standard_height > 0) {
+            tanuki::core::downsample_max_f32_to_f16_gpu(
+                d_resp_, W, H, output->hessian_row_half,
+                output->standard_width, output->standard_height, s);
+        }
         if (output->mura_row_curve_mean) {
             tanuki::core::calcRowMeans_gpu<float>(d_resp_, output->mura_row_curve_mean, W, H, s);
             scale_f32_inplace_gpu(output->mura_row_curve_mean, H, scale_factor, s);

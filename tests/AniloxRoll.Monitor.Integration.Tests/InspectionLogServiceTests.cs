@@ -363,10 +363,10 @@ namespace AniloxRoll.Monitor.Tests
                 currentHmV: 2.0f);
 
             Assert.That(profiles.HmRows, Is.EqualTo(2));
-            Assert.That(profiles.Mean[1][0], Is.EqualTo(50f).Within(0.001f),
-                "Mean 候選是第一筆，HM 1→2 後應縮為一半");
-            Assert.That(profiles.Max[1][0], Is.EqualTo(100f).Within(0.001f),
-                "MaxCMean 也必先換算；第二筆換算後排名較高");
+            Assert.That(profiles.Mean[1][0], Is.EqualTo(200f).Within(0.001f),
+                "Mean 候選是第一筆，HM 1→2 後應線性放大兩倍");
+            Assert.That(profiles.Max[1][0], Is.EqualTo(200f).Within(0.001f),
+                "MaxCMean 也必先以相同正比公式換算後排名");
         }
 
         [Test]

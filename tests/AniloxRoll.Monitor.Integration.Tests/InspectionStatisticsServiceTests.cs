@@ -227,7 +227,7 @@ namespace AniloxRoll.Monitor.Tests
                 "#CFG,2026-03-30T10:00:00.000,HessianMaxFactorV=0.5000\n" +
                 "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs,MaxCMean,MeanRPeak,MaxRPeak\n" +
                 "260330-100000,20260330_100000.000-1,0,0,0.1,0.2,3001,3001.0,149.0,0.1,0.2,0.8\n" +
-                "260330-100100,20260330_100100.000-1,0,0,0.1,0.2,3001,3001.0,149.0,0.1,0.1,0.2\n";
+                "260330-100100,20260330_100100.000-1,0,0,0.1,0.2,3001,3001.0,149.0,0.1,0.1,0.1\n";
             WriteCsv("20260330", csv);
 
             var threshold = new ThresholdContext(
@@ -237,7 +237,7 @@ namespace AniloxRoll.Monitor.Tests
                 InspectionStatisticsService.LoadSnapshot(_tempRoot, threshold);
 
             Assert.That(snapshot.DetailsByGrabId["260330-100000"].RowResult, Is.True,
-                "0.8 * (HM_V_capture 0.5 / HM_H_current 1.0) = 0.4 > 0.3");
+                "0.8 * (HM_H_current 1.0 / HM_V_capture 0.5) = 1.6 > 0.3");
             Assert.That(snapshot.DetailsByGrabId["260330-100100"].RowResult, Is.False);
         }
 

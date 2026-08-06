@@ -162,10 +162,14 @@ namespace AniloxRoll.Monitor.Core.Camera
         private IntPtr _rawResizeBuf  = IntPtr.Zero;   // 原圖縮圖
         private IntPtr _procResizeBuf = IntPtr.Zero;   // V 脊線縮圖
         private IntPtr _muraResizeBuf = IntPtr.Zero;   // H 脊線縮圖
+        private IntPtr _hessianCStandardBuf = IntPtr.Zero;
+        private IntPtr _hessianRStandardBuf = IntPtr.Zero;
         private IntPtr _resizeSlabBuf = IntPtr.Zero;
         private ulong _resizePinnedBytes;
         private int _resizeWidth  = 0;
         private int _resizeHeight = 0;
+        private int _standardWidth = 0;
+        private int _standardHeight = 0;
         // 本幀 fused 縮圖是否成功填好三塊 buffer（供 TrySaveCapture 判定；detection 失敗幀不得存舊縮圖）。
         private bool _lastFrameResized = false;
         private bool _fusedResizeLogged = false;   // 每台每次開程式只記一筆「fused 路徑已啟用」確認 log
@@ -556,7 +560,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                         && !string.IsNullOrWhiteSpace(CaptureRootPath)
                         && _saveResizeScale > 1
                         && _resizeWidth > 0 && _resizeHeight > 0
-                        && _rawResizeBuf != IntPtr.Zero && _procResizeBuf != IntPtr.Zero && _muraResizeBuf != IntPtr.Zero;
+                        && _rawResizeBuf != IntPtr.Zero && _procResizeBuf != IntPtr.Zero && _muraResizeBuf != IntPtr.Zero
+                        && _hessianCStandardBuf != IntPtr.Zero && _hessianRStandardBuf != IntPtr.Zero;
 
                     var swGpu = System.Diagnostics.Stopwatch.StartNew();
                     IntPtr backgroundColumnMean = _precomputedColMean;
@@ -585,7 +590,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                             ResizeHeight = wantResize ? _resizeHeight : 0,
                             ResizedRaw   = wantResize ? _rawResizeBuf  : IntPtr.Zero,
                             ResizedRidge = wantResize ? _procResizeBuf : IntPtr.Zero,
-                            ResizedMura  = wantResize ? _muraResizeBuf : IntPtr.Zero
+                            ResizedMura  = wantResize ? _muraResizeBuf : IntPtr.Zero,
+                            StandardWidth = wantResize ? _standardWidth : 0,
+                            StandardHeight = wantResize ? _standardHeight : 0,
+                            ResizedHessianColumnHalf = wantResize ? _hessianCStandardBuf : IntPtr.Zero,
+                            ResizedHessianRowHalf = wantResize ? _hessianRStandardBuf : IntPtr.Zero
                         },
                         Params = new AoiProcessRequest.AlgorithmParams
                         {
@@ -770,6 +779,7 @@ namespace AniloxRoll.Monitor.Core.Camera
                 int fh = _mil.FrameHeight;
 
                 byte[] rawBytes = null, procCBytes = null, procRBytes = null;
+                byte[] hessianCStandard = null, hessianRStandard = null;
                 float[] meanArr = null, maxArr = null;
                 float[] rowMeanArr = null, rowMaxArr = null;
                 int rw = _resizeWidth, rh = _resizeHeight;
@@ -785,6 +795,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                         _rawResizeBuf  != IntPtr.Zero &&
                         _procResizeBuf != IntPtr.Zero &&
                         _muraResizeBuf != IntPtr.Zero &&
+                        _hessianCStandardBuf != IntPtr.Zero &&
+                        _hessianRStandardBuf != IntPtr.Zero &&
                         rw > 0 && rh > 0)
                     {
                         hasResizeData = true;
@@ -801,6 +813,13 @@ namespace AniloxRoll.Monitor.Core.Camera
                         // Row ridge thumbnail.
                         procRBytes = new byte[pixels];
                         Marshal.Copy(_muraResizeBuf, procRBytes, 0, pixels);
+
+                        int standardPixels = checked(_standardWidth * _standardHeight);
+                        int halfBytes = checked(standardPixels * sizeof(ushort));
+                        hessianCStandard = new byte[halfBytes];
+                        hessianRStandard = new byte[halfBytes];
+                        Marshal.Copy(_hessianCStandardBuf, hessianCStandard, 0, halfBytes);
+                        Marshal.Copy(_hessianRStandardBuf, hessianRStandard, 0, halfBytes);
 
                         // Col curves（vertical ridge）
                         int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
@@ -851,9 +870,12 @@ namespace AniloxRoll.Monitor.Core.Camera
                     var ctx = new CaptureContext
                     {
                         RawBytes = rawBytes, ProcCBytes = procCBytes, ProcRBytes = procRBytes,
+                        HessianCStandard = hessianCStandard,
+                        HessianRStandard = hessianRStandard,
                         MeanC = meanArr, MaxC = maxArr,
                         MeanR = rowMeanArr, MaxR = rowMaxArr,
                         ResizeWidth = rw, ResizeHeight = rh,
+                        StandardWidth = _standardWidth, StandardHeight = _standardHeight,
                         JpgQuality = quality, ScaleForHeader = scale,
                         SaveDir = saveDir, GrabId = grabId, BaseName = baseName,
                         CameraId = camId, OrigWidth = origW, OrigHeight = origH,
@@ -956,9 +978,14 @@ namespace AniloxRoll.Monitor.Core.Camera
             _resizeHeight = fh / _saveResizeScale;
             if (_resizeWidth <= 0 || _resizeHeight <= 0) return;
 
+            _standardWidth = Math.Max(1, fw / InspectionEngineConfig.DefaultHessianStandardMapScale);
+            _standardHeight = Math.Max(1, fh / InspectionEngineConfig.DefaultHessianStandardMapScale);
+
             ulong sz = checked((ulong)_resizeWidth * (ulong)_resizeHeight);
             ulong stride = (sz + 63UL) & ~63UL;
-            _resizePinnedBytes = checked(stride * 3UL);
+            ulong standardSamples = checked((ulong)_standardWidth * (ulong)_standardHeight);
+            ulong halfStride = (checked(standardSamples * 2UL) + 63UL) & ~63UL;
+            _resizePinnedBytes = checked(stride * 3UL + halfStride * 2UL);
             _resizeSlabBuf = NativeMethods.TanukiCv_AllocPinned(_resizePinnedBytes);
             if (_resizeSlabBuf == IntPtr.Zero)
                 throw new OutOfMemoryException(
@@ -967,6 +994,10 @@ namespace AniloxRoll.Monitor.Core.Camera
             _rawResizeBuf = _resizeSlabBuf;
             _procResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)stride));
             _muraResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)(stride * 2UL)));
+            _hessianCStandardBuf = new IntPtr(
+                checked(_resizeSlabBuf.ToInt64() + (long)(stride * 3UL)));
+            _hessianRStandardBuf = new IntPtr(
+                checked(_hessianCStandardBuf.ToInt64() + (long)halfStride));
         }
 
         private void FreeResizeBuffers()
@@ -979,7 +1010,13 @@ namespace AniloxRoll.Monitor.Core.Camera
             _rawResizeBuf = IntPtr.Zero;
             _procResizeBuf = IntPtr.Zero;
             _muraResizeBuf = IntPtr.Zero;
+            _hessianCStandardBuf = IntPtr.Zero;
+            _hessianRStandardBuf = IntPtr.Zero;
             _resizePinnedBytes = 0;
+            _resizeWidth = 0;
+            _resizeHeight = 0;
+            _standardWidth = 0;
+            _standardHeight = 0;
         }
 
         // ==================== Dispose ====================

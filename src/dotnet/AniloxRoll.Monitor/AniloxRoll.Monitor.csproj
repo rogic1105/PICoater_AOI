@@ -122,6 +122,7 @@
     <Compile Include="Interop\NativeMethods.cs" />
     <Compile Include="Services\AoiService.cs" />
     <Compile Include="Services\CaptureArchiveStore.cs" />
+    <Compile Include="Services\HessianStandardMapCodec.cs" />
     <Compile Include="Services\CapturePreviewAtlasCodec.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
     <Compile Include="Services\BackgroundProfileRepository.cs" />
@@ -242,6 +243,7 @@
     <Compile Include="UI\Widgets\CurveMergeHelper.cs" />
     <Compile Include="UI\Widgets\GrabImageStitcher.cs" />
     <Compile Include="UI\Widgets\CanvasParameterTextBuilder.cs" />
+    <Compile Include="UI\Widgets\PropertyGridNumericWheelInterceptor.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
     <Compile Include="UI\Presenters\MuraProfileChartPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewChartPresenter.cs" />

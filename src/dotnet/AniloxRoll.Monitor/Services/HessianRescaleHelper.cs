@@ -3,7 +3,8 @@ using System;
 namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
-    /// 統一處理 view-time 正規值 rescale 公式：display = (bin/255) × (HM_capture / HM_current)。
+    /// 統一處理 view-time 正規值 rescale 公式：
+    /// display = (bin/255) × (HM_current / HM_capture)。
     ///
     /// 為什麼集中：rescale 邏輯原本散在 4 處（DataStatisticsPresenter / ReviewChartPresenter
     /// 各 2 份），公式雖一致但易漂移（未來改 ratio 計算邏輯必須 4 處同改）。
@@ -11,12 +12,13 @@ namespace AniloxRoll.Monitor.Core.Services
     public static class HessianRescaleHelper
     {
         /// <summary>
-        /// 計算 ratio = HM_capture / HM_current；任一為 0 或 ratio 接近 1 時回傳 1f。
+        /// 計算 ratio = HM_current / HM_capture；任一為 0 時回傳 1f。
+        /// 因此目前正規值加倍時，顯示 Curve 也線性加倍。
         /// </summary>
         public static float Ratio(float captureHm, float currentHm)
         {
             if (captureHm <= 0f || currentHm <= 0f) return 1f;
-            return captureHm / currentHm;
+            return currentHm / captureHm;
         }
 
         /// <summary>ratio 是否需要實際做 scaling（避免無謂的 O(N) 迴圈）。</summary>

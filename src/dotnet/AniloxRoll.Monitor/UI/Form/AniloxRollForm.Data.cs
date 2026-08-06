@@ -200,8 +200,12 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.ed_ErrorValueMaxV):
                 case nameof(InspectionSettings.ee_ErrorValueMeanH):
                 case nameof(InspectionSettings.ef_ErrorValueMaxH):
-                    _dataStatsPresenter?.RefreshMuraProfileForSettingsChange();  // 立即重畫曲線（坡度/閾值線即時回饋）
+                    _dataStatsPresenter?.RefreshMuraProfileForSettingsChange(name); // 記憶體內重算，保留圖表座標
                     ScheduleStatsRefresh();                                      // debounce 重算 Pass/Fail 統計 + 明細
+                    if (_settings.EnableReviewEnhance &&
+                        (name == nameof(InspectionSettings.dc_HessianMaxFactorV) ||
+                         name == nameof(InspectionSettings.dd_HessianMaxFactorH)))
+                        _ = ApplyReviewEnhance(true);
                     break;
             }
         }

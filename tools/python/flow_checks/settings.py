@@ -34,6 +34,19 @@ class SettingsFlowValidator:
         r"^live row normalize captureHm=(?P<capture>\d+(?:\.\d+)?) "
         r"rowHm=(?P<row>\d+(?:\.\d+)?) ratio=(?P<ratio>\d+(?:\.\d+)?)$"
     )
+    _report_curve_refresh_pattern = re.compile(
+        r"^DT curve refresh (?P<grab>\S+) "
+        r"reason=setting-(?P<setting>\S+) "
+        r"column=(?P<column>True|False) row=(?P<row>True|False) "
+        r"source=memory preserveRange=True "
+        r"rangeDelta=(?P<range_delta>\d+(?:\.\d+)?)$"
+    )
+    _hessian_standard_pattern = re.compile(
+        r"^RV hessian standard (?P<grab>\S+) dir=(?P<direction>C|R) "
+        r"gain=(?P<gain>\d+(?:\.\d+)?) scale=(?P<scale>\d+) "
+        r"sampleMin=(?P<minimum>\d+) sampleMax=(?P<maximum>\d+) "
+        r"sampleMean=(?P<mean>\d+(?:\.\d+)?)$"
+    )
     _live_stimulus_pattern = re.compile(
         r"^live inspection stimulus brightness=(?P<brightness>\d+) "
         r"direction=(?P<direction>col|row) "
@@ -77,6 +90,8 @@ class SettingsFlowValidator:
         self._check_routes(session, settings, report)
         self._check_live_inspection_settings(session, settings, report)
         self._check_live_row_scale(session, report)
+        self._check_report_curve_refresh(session, report)
+        self._check_hessian_standard_gain(session, report)
         self._check_live_inspection_stimulus(session, report)
         self._check_review_enhance(session, settings, report)
         self._check_live_enhance(session, settings, report)
@@ -239,7 +254,7 @@ class SettingsFlowValidator:
             capture = float(match.group("capture"))
             row = float(match.group("row"))
             ratio = float(match.group("ratio"))
-            expected = capture / row if capture > 0 and row > 0 else 1.0
+            expected = row / capture if capture > 0 and row > 0 else 1.0
             if abs(ratio - expected) > 0.0002:
                 failures.append(
                     f"capture={capture} row={row} ratio={ratio} expected={expected:.4f}"
@@ -249,6 +264,106 @@ class SettingsFlowValidator:
             "S1.row-normalize",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"samples={len(matches)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_report_curve_refresh(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        matches = [
+            self._report_curve_refresh_pattern.match(line.message)
+            for line in session.lines
+        ]
+        matches = [match for match in matches if match]
+        if not matches:
+            report.add(
+                self.domain, "S1.report-preserve-range", CheckStatus.NOT_COVERED,
+                "報表單序號未在已載入狀態變更檢出標準",
+            )
+            return
+
+        expected_axes = {
+            "dc_HessianMaxFactorV": ("True", "False"),
+            "dd_HessianMaxFactorH": ("False", "True"),
+            "ec_ErrorValueMeanV": ("True", "False"),
+            "ed_ErrorValueMaxV": ("True", "False"),
+            "ee_ErrorValueMeanH": ("False", "True"),
+            "ef_ErrorValueMaxH": ("False", "True"),
+        }
+        failures = []
+        for match in matches:
+            expected = expected_axes.get(match.group("setting"))
+            if expected is None:
+                continue
+            actual = (match.group("column"), match.group("row"))
+            if actual != expected:
+                failures.append(
+                    f"{match.group('setting')} column/row={actual} expected={expected}"
+                )
+            if float(match.group("range_delta")) > 0.01:
+                failures.append(
+                    f"{match.group('setting')} rangeDelta={match.group('range_delta')}mm"
+                )
+        report.add(
+            self.domain,
+            "S1.report-preserve-range",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"samples={len(matches)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_hessian_standard_gain(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        samples = []
+        for line in session.lines:
+            match = self._hessian_standard_pattern.match(line.message)
+            if match:
+                samples.append(match)
+
+        comparable = 0
+        failures = []
+        grouped = {}
+        for match in samples:
+            key = (match.group("grab"), match.group("direction"))
+            grouped.setdefault(key, []).append(match)
+
+        for key, observations in grouped.items():
+            for previous, current in zip(observations, observations[1:]):
+                previous_gain = float(previous.group("gain"))
+                current_gain = float(current.group("gain"))
+                if abs(current_gain - previous_gain) <= 0.000001:
+                    continue
+
+                comparable += 1
+                previous_mean = float(previous.group("mean"))
+                current_mean = float(current.group("mean"))
+                previous_max = int(previous.group("maximum"))
+                current_max = int(current.group("maximum"))
+                increasing = current_gain > previous_gain
+                mean_ok = current_mean + 0.001 >= previous_mean if increasing \
+                    else current_mean <= previous_mean + 0.001
+                max_ok = current_max >= previous_max if increasing \
+                    else current_max <= previous_max
+                if not mean_ok or not max_ok:
+                    failures.append(
+                        f"{key[0]}/{key[1]} gain={previous_gain:g}->{current_gain:g} "
+                        f"mean={previous_mean:.3f}->{current_mean:.3f} "
+                        f"max={previous_max}->{current_max}"
+                    )
+
+        if comparable == 0:
+            report.add(
+                self.domain, "S1.hessian-image-gain", CheckStatus.NOT_COVERED,
+                "同一序號、同一欄／列方向需要至少兩個不同正規值的強化圖樣本",
+            )
+            return
+
+        report.add(
+            self.domain,
+            "S1.hessian-image-gain",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"samples={len(samples)} comparisons={comparable} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 
@@ -325,6 +440,24 @@ class SettingsFlowValidator:
     def _check_review_enhance(
         self, session: FlowSession, settings, report: CheckReport
     ) -> None:
+        variant_view_pattern = re.compile(
+            r"^RV variantView keep .* maxDelta=(missing|\d+(?:\.\d+)?)$"
+        )
+
+        def variant_view_failure(lines):
+            matches = [
+                variant_view_pattern.match(item.message)
+                for item in lines
+                if item.message.startswith("RV variantView keep ")
+            ]
+            matches = [match for match in matches if match is not None]
+            if not matches:
+                return "missing physical viewport preservation evidence"
+            value = matches[-1].group(1)
+            if value == "missing" or float(value) > 0.1:
+                return f"physical viewport drift maxDelta={value}mm"
+            return None
+
         changes = [
             (index, line, match)
             for index, line, match in settings
@@ -389,6 +522,9 @@ class SettingsFlowValidator:
                     failures.append(
                         f"{line.timestamp} period 強化未保留 chart view"
                     )
+                variant_failure = variant_view_failure(window)
+                if variant_failure:
+                    failures.append(f"{line.timestamp} period {variant_failure}")
                 continue
 
             current_id = grab_id(previous_view.message)
@@ -406,16 +542,23 @@ class SettingsFlowValidator:
                     f"{line.timestamp} grab={current_id} 缺 RV loadGrab begin"
                 )
                 continue
-            if not any(
-                item.message.startswith("RV loadGrab done ")
-                and grab_id(item.message) == current_id
-                for item in window[begin_pos + 1:]
-            ):
+            done_pos = next(
+                (
+                    pos
+                    for pos in range(begin_pos + 1, len(window))
+                    if window[pos].message.startswith("RV loadGrab done ")
+                    and grab_id(window[pos].message) == current_id
+                ),
+                None,
+            )
+            if done_pos is None:
                 failures.append(
                     f"{line.timestamp} grab={current_id} 缺 RV loadGrab done"
                 )
                 continue
-            load_window = window[begin_pos + 1:]
+            # Only the matching reload belongs to this setting transition. Later drags,
+            # zooms, or navigation may legitimately publish a new main range.
+            load_window = window[begin_pos + 1:done_pos + 1]
             if not any(
                 item.message ==
                 f"RV loadGrab curves=keep source=display {current_id}"
@@ -446,6 +589,15 @@ class SettingsFlowValidator:
             ):
                 failures.append(
                     f"{line.timestamp} grab={current_id} 強化未保留 chart view"
+                )
+            variant_failure = variant_view_failure(load_window)
+            if variant_failure:
+                failures.append(
+                    f"{line.timestamp} grab={current_id} {variant_failure}"
+                )
+            if any(item.message.startswith("RV mainRange ") for item in load_window):
+                failures.append(
+                    f"{line.timestamp} grab={current_id} 圖片版本切換不應發布新視野"
                 )
 
         if exercised == 0:

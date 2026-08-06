@@ -40,7 +40,7 @@ namespace AniloxRoll.Monitor.Core.Camera
 
             string archivePath = Path.Combine(
                 ctx.SaveDir, ctx.GrabId + CaptureArchiveStore.Extension);
-            var assets = new List<CaptureArchiveAsset>(7)
+            var assets = new List<CaptureArchiveAsset>(9)
             {
                 new CaptureArchiveAsset
                 {
@@ -59,6 +59,12 @@ namespace AniloxRoll.Monitor.Core.Camera
             AddCurveAsset(assets, CaptureAssetKind.MaxColumnCurve, ctx.MaxC, ctx.ScaleForHeader);
             AddCurveAsset(assets, CaptureAssetKind.MeanRowCurve, ctx.MeanR, ctx.ScaleForHeader);
             AddCurveAsset(assets, CaptureAssetKind.MaxRowCurve, ctx.MaxR, ctx.ScaleForHeader);
+            AddStandardMapAsset(
+                assets, CaptureAssetKind.HessianColumnHalf,
+                ctx.HessianCStandard, ctx.StandardWidth, ctx.StandardHeight);
+            AddStandardMapAsset(
+                assets, CaptureAssetKind.HessianRowHalf,
+                ctx.HessianRStandard, ctx.StandardWidth, ctx.StandardHeight);
 
             long frameBytes = CaptureArchiveStore.AppendFrame(
                 archivePath,
@@ -112,6 +118,21 @@ namespace AniloxRoll.Monitor.Core.Camera
             {
                 Kind = kind,
                 Data = EncodeCurveBin(curve, scaleForHeader)
+            });
+        }
+
+        private static void AddStandardMapAsset(
+            ICollection<CaptureArchiveAsset> assets,
+            CaptureAssetKind kind,
+            byte[] halfBytes,
+            int width,
+            int height)
+        {
+            if (halfBytes == null || halfBytes.Length == 0) return;
+            assets.Add(new CaptureArchiveAsset
+            {
+                Kind = kind,
+                Data = HessianStandardMapCodec.Encode(halfBytes, width, height)
             });
         }
 
@@ -466,12 +487,16 @@ namespace AniloxRoll.Monitor.Core.Camera
         public byte[] RawBytes;
         public byte[] ProcCBytes;
         public byte[] ProcRBytes;
+        public byte[] HessianCStandard;
+        public byte[] HessianRStandard;
         public float[] MeanC;
         public float[] MaxC;
         public float[] MeanR;
         public float[] MaxR;
         public int ResizeWidth;
         public int ResizeHeight;
+        public int StandardWidth;
+        public int StandardHeight;
         public int JpgQuality;
         public int ScaleForHeader;
         public string SaveDir;

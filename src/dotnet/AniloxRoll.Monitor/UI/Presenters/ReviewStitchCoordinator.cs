@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms.DataVisualization.Charting;
@@ -247,14 +248,15 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _ctx.Settings.GetCameraOpsUmArray();
                 double[] positions = plan.Config?.CamPos ??
                     _ctx.Settings.GetCameraStartPositionMmArray();
-                int feedScale = Math.Max(
-                    1, (int)Math.Round(
-                        InspectionEngineConfig.DefaultSaveResizeScale *
-                        loaded.PixelScaleRatio));
+                double exactFeedScale =
+                    InspectionEngineConfig.DefaultSaveResizeScale *
+                    loaded.PixelScaleRatio;
+                int feedScale = Math.Max(1, (int)Math.Round(exactFeedScale));
+                double rowPitchCorrection = exactFeedScale / feedScale;
                 StitchedImagesReady?.Invoke(
                     loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights,
                     ops, positions, true, true,
-                    feedScale, loaded.PixelScaleRatio);
+                    feedScale, rowPitchCorrection);
                 Core.Services.FlowTrace.Log(
                     $"RV thumbnail done {grabId} total={watch.ElapsedMilliseconds}ms " +
                     $"decode={loaded.DecodeMs}ms images={imageCount} " +
@@ -488,7 +490,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     $"RV loadGrab curves={curveSource} {grabId}");
 
                 ReviewImageData loaded = await Task.Run(() => _imageDataLoader.Load(
-                    plan, camCount, enableProcess, ridgeDir, includeCurves: !preserveCurves));
+                    plan, camCount, enableProcess, ridgeDir,
+                    includeCurves: !preserveCurves,
+                    standardDisplayGain: ResolveStandardDisplayGain(
+                        enableProcess, ridgeDir)));
                 var newImages = loaded.Images;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
@@ -522,10 +527,30 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 }
                 _ctx.DataStatsPresenter?.SetReviewGroupBoxes(true);
 
+                double exactFeedScale =
+                    InspectionEngineConfig.DefaultSaveResizeScale *
+                    loaded.PixelScaleRatio;
+                int feedScale = Math.Max(1, (int)Math.Round(exactFeedScale));
+                double rowPitchCorrection = exactFeedScale / feedScale;
                 StitchedImagesReady?.Invoke(
                     loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights, opsEff, posEff,
                     isGlobal, keepDisplayedCurves,
-                    InspectionEngineConfig.DefaultSaveResizeScale, 1.0);
+                    feedScale,
+                    rowPitchCorrection);
+                if (enableProcess && loaded.PixelScaleRatio > 1.0)
+                {
+                    string standardAxis = ridgeDir == "r" || ridgeDir == "h" ? "R" : "C";
+                    byte sampleMin;
+                    byte sampleMax;
+                    double sampleMean;
+                    TryMeasureGrayFrames(
+                        loaded.GrayFrames, out sampleMin, out sampleMax, out sampleMean);
+                    Core.Services.FlowTrace.Log(
+                        $"RV hessian standard {grabId} dir={standardAxis} " +
+                        $"gain={ResolveStandardDisplayGain(true, ridgeDir):0.######} " +
+                        $"scale={feedScale} sampleMin={sampleMin} sampleMax={sampleMax} " +
+                        $"sampleMean={sampleMean.ToString("0.000", CultureInfo.InvariantCulture)}");
+                }
 
                 if (!preserveCurves)
                 {
@@ -686,6 +711,55 @@ namespace AniloxRoll.Monitor.UI.Presenters
             => string.Concat(
                 root ?? "", "|", grabId ?? "", "|",
                 enableProcess ? "1" : "0", "|", ridgeDirection ?? "");
+
+        private float ResolveStandardDisplayGain(bool enableProcess, string ridgeDirection)
+        {
+            if (!enableProcess) return 0f;
+            return ridgeDirection == "r" || ridgeDirection == "h"
+                ? (float)_ctx.Settings.HessianMaxFactorH
+                : (float)_ctx.Settings.HessianMaxFactorV;
+        }
+
+        private static bool TryMeasureGrayFrames(
+            byte[][] frames, out byte minimum, out byte maximum, out double mean)
+        {
+            minimum = byte.MaxValue;
+            maximum = byte.MinValue;
+            mean = 0.0;
+            if (frames == null || frames.Length == 0)
+            {
+                minimum = 0;
+                return false;
+            }
+
+            long sum = 0;
+            long count = 0;
+            for (int frameIndex = 0; frameIndex < frames.Length; frameIndex++)
+            {
+                byte[] frame = frames[frameIndex];
+                if (frame == null || frame.Length == 0) continue;
+
+                int stride = Math.Max(1, frame.Length / 4096);
+                for (int index = 0; index < frame.Length; index += stride)
+                {
+                    byte value = frame[index];
+                    if (value < minimum) minimum = value;
+                    if (value > maximum) maximum = value;
+                    sum += value;
+                    count++;
+                }
+            }
+
+            if (count == 0)
+            {
+                minimum = 0;
+                maximum = 0;
+                return false;
+            }
+
+            mean = (double)sum / count;
+            return true;
+        }
 
         private static void LogImagePlan(
             string grabId, string root, ReviewImageLoadPlan plan)

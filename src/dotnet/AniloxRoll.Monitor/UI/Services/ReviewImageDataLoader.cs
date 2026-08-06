@@ -113,7 +113,8 @@ namespace AniloxRoll.Monitor.UI.Services
             bool enableProcess,
             string ridgeDirection,
             bool includeCurves = true,
-            bool useThumbnail = false)
+            bool useThumbnail = false,
+            float standardDisplayGain = 0f)
         {
             if (plan == null) throw new ArgumentNullException(nameof(plan));
             var grouped = plan.GroupedPaths;
@@ -180,7 +181,8 @@ namespace AniloxRoll.Monitor.UI.Services
                         ? value
                         : paths;
                     images[index] = GrabImageStitcher.StitchCamera(
-                        aligned, scale, null, enableProcess, ridgeDirection, useThumbnail);
+                        aligned, scale, null, enableProcess, ridgeDirection, useThumbnail,
+                        standardDisplayGain);
                     if (includeCurves)
                     {
                         CurveMergeHelper.MergeCurves(
@@ -202,7 +204,7 @@ namespace AniloxRoll.Monitor.UI.Services
             });
 
             double pixelScaleRatio = 1.0;
-            if (useThumbnail)
+            if (useThumbnail || (enableProcess && standardDisplayGain > 0f))
             {
                 for (int i = 0; i < cameraCount; i++)
                 {
@@ -248,13 +250,14 @@ namespace AniloxRoll.Monitor.UI.Services
             bool enableProcess,
             string ridgeDirection,
             bool includeCurves = true,
-            bool useThumbnail = false)
+            bool useThumbnail = false,
+            float standardDisplayGain = 0f)
         {
             ReviewImageLoadPlan plan = Prepare(
                 root, grabId, hintFrom, hintTo, cameraCount, enableProcess, ridgeDirection);
             return Load(
                 plan, cameraCount, enableProcess, ridgeDirection,
-                includeCurves, useThumbnail);
+                includeCurves, useThumbnail, standardDisplayGain);
         }
     }
 }

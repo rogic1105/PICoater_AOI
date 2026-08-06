@@ -668,6 +668,7 @@ class DataFlowValidator:
         report_prefit_ordering_failures = []
         active = None
         lod_pattern = re.compile(r"^RV lodRebind merge (\d+)x(\d+)")
+        push_pattern = re.compile(r"^RV pushFrames .*feedScale=(\d+),")
         paint_pattern = re.compile(
             r"^RV prefitPaint (\d{6}-\d{6}) chart=(col|row) after=\d+ms "
         )
@@ -777,6 +778,7 @@ class DataFlowValidator:
                     "prefit": None,
                     "lod": None,
                     "push": None,
+                    "feed_scale": None,
                     "visible": None,
                     "paints": {},
                     "apply": None,
@@ -824,14 +826,19 @@ class DataFlowValidator:
             match = lod_pattern.match(line.message)
             if active and match and active["lod"] is None:
                 active["lod"] = (index, int(match.group(1)), int(match.group(2)))
-            if active and line.message.startswith("RV pushFrames ") and active["push"] is None:
+            push_match = push_pattern.match(line.message)
+            if active and push_match and active["push"] is None:
                 active["push"] = index
+                active["feed_scale"] = int(push_match.group(1))
                 active["push_keep"] = "chartView=keep" in line.message
             if line.message.startswith(("RV loadGrab done ", "RV loadGrab stale-drop ")):
                 completed = line.message.startswith("RV loadGrab done ")
                 if active and active["lod"]:
                     lod_index, width, height = active["lod"]
-                    actual.append((active["id"], width, height))
+                    actual.append((
+                        active["id"], width, height,
+                        active["feed_scale"] or 5,
+                    ))
                 if active and completed and (active["lod"] or active["push"]):
                     image_variant_only = active["keep_curves"] and active["push_keep"]
                     if image_variant_only:
@@ -910,11 +917,34 @@ class DataFlowValidator:
                     report_chart_drifts.append(f"{final_intent_id}:{chart}")
 
         predicted = {item_id: (width, height) for _, item_id, width, height in fits}
-        mismatches = [
-            f"{item_id}:{predicted[item_id][0]}x{predicted[item_id][1]}!={width}x{height}"
-            for item_id, width, height in actual
-            if item_id in predicted and predicted[item_id] != (width, height)
-        ]
+        mismatches = []
+        for item_id, width, height, feed_scale in actual:
+            if item_id not in predicted:
+                continue
+            predicted_width, predicted_height = predicted[item_id]
+            # Prefit dimensions are based on the normal /5 archive image. A thumbnail or
+            # Hessian standard map may use another pixel density, but its physical extent
+            # must remain identical after applying the published feedScale.
+            predicted_physical_width = predicted_width * 5
+            predicted_physical_height = predicted_height * 5
+            actual_physical_width = width * feed_scale
+            actual_physical_height = height * feed_scale
+            if feed_scale == 5:
+                same_physical_size = (
+                    predicted_width == width and predicted_height == height
+                )
+            else:
+                same_physical_size = (
+                    abs(predicted_physical_width - actual_physical_width)
+                    <= max(1, predicted_physical_width) * 0.005
+                    and abs(predicted_physical_height - actual_physical_height)
+                    <= max(1, predicted_physical_height) * 0.005
+                )
+            if not same_physical_size:
+                mismatches.append(
+                    f"{item_id}:{predicted_width}x{predicted_height}@5"
+                    f"!={width}x{height}@{feed_scale}"
+                )
         review_edges_ok = not fits or (has_main_range_edges and has_chart_range_edges)
         ok = (
             not invalid and not invalid_report_fits and final_ok and not mismatches

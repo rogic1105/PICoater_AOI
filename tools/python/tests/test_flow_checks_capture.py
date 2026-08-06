@@ -75,6 +75,46 @@ class CaptureFlowValidatorTests(unittest.TestCase):
         self.assertEqual(CheckStatus.PASS, plan.status)
         self.assertEqual(CheckStatus.PASS, finalize.status)
 
+    def test_hessian_standard_plan_passes(self):
+        session = FlowSession(
+            Path("synthetic.log"),
+            [
+                FlowLine(
+                    0,
+                    "00:00:00.000",
+                    1,
+                    "capture plan grab=260806-120000 root=D:\\Anilox\\Captures "
+                    "imageDir=x csv=y archive=260806-120000.acap "
+                    "assets=raw|proc_c|proc_r|hessian_c|hessian_r|mean_c|max_c|mean_r|max_r "
+                    "preview=1920x1080x3 scale=5 hessianScale=25",
+                ),
+            ],
+        )
+
+        report = CaptureFlowValidator().validate(session)
+        plan = next(item for item in report.results if item.rule == "C1.plan")
+        self.assertEqual(CheckStatus.PASS, plan.status)
+
+    def test_hessian_standard_plan_requires_both_assets(self):
+        session = FlowSession(
+            Path("synthetic.log"),
+            [
+                FlowLine(
+                    0,
+                    "00:00:00.000",
+                    1,
+                    "capture plan grab=260806-120000 root=D:\\Anilox\\Captures "
+                    "imageDir=x csv=y archive=260806-120000.acap "
+                    "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
+                    "preview=1920x1080x3 scale=5 hessianScale=25",
+                ),
+            ],
+        )
+
+        report = CaptureFlowValidator().validate(session)
+        plan = next(item for item in report.results if item.rule == "C1.plan")
+        self.assertEqual(CheckStatus.FAIL, plan.status)
+
     def test_finalize_failure_is_reported(self):
         session = FlowSession(
             Path("synthetic.log"),

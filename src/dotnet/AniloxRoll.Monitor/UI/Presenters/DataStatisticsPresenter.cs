@@ -952,7 +952,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         // Mura 分布圖繪圖職責已提取到 MuraProfileChartPresenter（2026-06-30）；以下為對外 public 門面轉發。
 
         /// <summary>由 PropertyGrid 變更觸發：刷新 chartDataColumn 閾值線 + view-time 正規值 rescale（不重算統計）。</summary>
-        public void RefreshMuraProfileForSettingsChange() => _muraChart?.RefreshForSettingsChange();
+        public void RefreshMuraProfileForSettingsChange(string settingName)
+            => _muraChart?.RefreshForSettingsChange(settingName);
 
         /// <summary>SingleSheet 模式：用 Review tab 已載入曲線資料更新 chartDataColumn，與 chartReviewColumn 一致。</summary>
         public void SyncMuraProfileFromReview(float[][] mean, float[][] max,

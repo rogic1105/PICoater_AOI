@@ -48,11 +48,27 @@ namespace TanukiCv.Controls
             => UpdateDataAndView(meanData, maxData, startPos, double.NaN, double.NaN);
 
         /// <summary>
+        /// Replaces curve values without changing the current physical viewport. Use when only
+        /// thresholds or display normalization changed and image geometry is still the SSoT.
+        /// </summary>
+        public void UpdateDataPreservingView(float[] meanData, float[] maxData, double startPos)
+            => UpdateDataAndViewCore(
+                meanData, maxData, startPos, double.NaN, double.NaN,
+                preservePhysicalRange: true);
+
+        /// <summary>
         /// 資料與視野範圍合為單次重繪，避免先顯示全圖再 zoom 造成的閃爍。
         /// viewLeftMm/viewRightMm 為 NaN 時退回全圖。
         /// </summary>
         public void UpdateDataAndView(float[] meanData, float[] maxData, double startPos,
                                       double viewLeftMm, double viewRightMm)
+            => UpdateDataAndViewCore(
+                meanData, maxData, startPos, viewLeftMm, viewRightMm,
+                preservePhysicalRange: false);
+
+        private void UpdateDataAndViewCore(
+            float[] meanData, float[] maxData, double startPos,
+            double viewLeftMm, double viewRightMm, bool preservePhysicalRange)
         {
             if (meanData == null || meanData.Length == 0) return;
 
@@ -115,7 +131,7 @@ namespace TanukiCv.Controls
             var area = _chart.ChartAreas[0];
 
             bool hasView = !double.IsNaN(viewLeftMm) && !double.IsNaN(viewRightMm) && viewLeftMm < viewRightMm;
-            if (hasView)
+            if (!preservePhysicalRange && hasView)
             {
                 _logicalLeftMm  = viewLeftMm;
                 _logicalRightMm = viewRightMm;
@@ -132,7 +148,7 @@ namespace TanukiCv.Controls
                     area.AxisX.ScaleView.ZoomReset();
                 }
             }
-            else
+            else if (!preservePhysicalRange)
             {
                 _logicalLeftMm  = double.NaN;
                 _logicalRightMm = double.NaN;

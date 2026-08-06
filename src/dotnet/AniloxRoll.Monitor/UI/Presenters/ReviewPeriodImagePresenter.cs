@@ -19,7 +19,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         bool isGlobal,
         bool preserveChartView,
         int feedScale,
-        double rowPitchScale);
+        double rowPitchCorrection);
 
     internal sealed class ReviewPeriodImageContext
     {

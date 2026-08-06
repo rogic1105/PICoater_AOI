@@ -568,6 +568,62 @@ namespace TanukiCv.Controls
             ViewRangeMmChanged?.Invoke(leftMm, rightMm, topMm, botMm);
         }
 
+        /// <summary>Reads the current viewport in physical millimetres without publishing an event.</summary>
+        public bool TryGetViewRangeMm(out ImageViewRange range)
+        {
+            range = default(ImageViewRange);
+            if (_canvas == null || !TryComputeViewRange(
+                _canvas.Zoom, _canvas.PanOffset,
+                out double leftMm, out double rightMm,
+                out double topMm, out double bottomMm))
+                return false;
+
+            range.ContentWidth = _canvas.ContentW;
+            range.ContentHeight = _canvas.ContentH;
+            range.LeftMm = leftMm;
+            range.RightMm = rightMm;
+            range.TopMm = topMm;
+            range.BottomMm = bottomMm;
+            return true;
+        }
+
+        /// <summary>
+        /// Restores a physical viewport after replacing the image with another pixel density.
+        /// The caller must first apply the new layout and content so the current scale is authoritative.
+        /// </summary>
+        public bool TryRestoreViewRangeMm(ImageViewRange range)
+        {
+            if (_canvas == null || _canvas.Width <= 0 || _canvas.Height <= 0 ||
+                _canvas.ContentW <= 0 || _canvas.ContentH <= 0)
+                return false;
+            if (!GetDisplayCoords(out double startMm, out double opsInMm, out double scale))
+                return false;
+
+            double widthMm = range.RightMm - range.LeftMm;
+            double yPitchMm = _rowPitchMm > 0 ? _rowPitchMm : opsInMm;
+            if (widthMm <= 0 || opsInMm <= 0 || scale <= 0 || yPitchMm <= 0)
+                return false;
+
+            double zoomValue = _canvas.Width * scale * opsInMm / widthMm;
+            if (zoomValue <= 0 || zoomValue > float.MaxValue) return false;
+            float zoom = (float)zoomValue;
+
+            double leftPixel = PixelMmMapper.MmToPixel(range.LeftMm, startMm, opsInMm) / scale;
+            float panX = (float)(-leftPixel * zoom);
+
+            double geometricTopMm = range.TopMm;
+            if (VerticalZeroAtBottom)
+            {
+                double totalMm = _canvas.ContentH * scale * yPitchMm;
+                geometricTopMm = totalMm - range.TopMm;
+            }
+            double topPixel = geometricTopMm / (scale * yPitchMm);
+            float panY = (float)(-topPixel * zoom);
+
+            _canvas.SetView(zoom, new PointF(panX, panY));
+            return true;
+        }
+
         /// <summary>影像總高（mm）＝畫布內容高 × sf × 列距——與 top/botMm 的幾何公式同基準
         /// （LOD=虛擬全解析度、非 LOD=bitmap 高，ContentH 已按模式取對），保證鏡射不偏移。</summary>
         private double TotalRowsMm(double yPitch, double sf)

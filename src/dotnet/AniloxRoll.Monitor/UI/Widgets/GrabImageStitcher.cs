@@ -42,7 +42,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
             Func<string, Bitmap> bmpLoader = null,
             bool useProcessed = false,
             string ridgeDirection = "v",
-            bool useThumbnail = false)
+            bool useThumbnail = false,
+            float standardDisplayGain = 0f)
         {
             // slot-based：保留位置（null/缺檔 = 黑布幀），讓掉偵那格補黑、各台高度一致對齊（不縮短不錯位）。
             // sortedPaths 可含 null（呼叫端對齊參考時間軸後，缺的位置塞 null）；no-null 時行為與舊版一致。
@@ -57,7 +58,8 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 {
                     var bmp = LoadCameraImage(
                         path, bmpResizeScale, bmpLoader,
-                        useProcessed, ridgeDirection, useThumbnail);
+                        useProcessed, ridgeDirection, useThumbnail,
+                        standardDisplayGain);
                     if (bmp == null) continue;
                     slots[i] = bmp; realCount++;
                     if (refW == 0) { refW = bmp.Width; refH = bmp.Height; }
@@ -151,10 +153,24 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         internal static Bitmap LoadCameraImage(string path, int bmpResizeScale,
             Func<string, Bitmap> bmpLoader, bool useProcessed, string ridgeDirection = "v",
-            bool useThumbnail = false)
+            bool useThumbnail = false, float standardDisplayGain = 0f)
         {
             if (!CaptureFileNaming.IsRawJpg(path))
                 return null;
+
+            if (useProcessed && !useThumbnail && standardDisplayGain > 0f)
+            {
+                string standardPath = CaptureFileNaming.ResolveHessianStandardMap(
+                    path, ridgeDirection);
+                byte[] standardBytes = CaptureArchiveStore.ReadAllBytes(standardPath);
+                if (standardBytes != null)
+                {
+                    HessianStandardMapData standard = HessianStandardMapCodec.Decode(standardBytes);
+                    byte[] gray = HessianStandardMapCodec.ToGray8(
+                        standard, standardDisplayGain);
+                    return GrayBitmap.From(gray, standard.Width, standard.Height);
+                }
+            }
 
             string loadPath = ResolveLoadPath(path, useProcessed, ridgeDirection);
             if (useThumbnail)

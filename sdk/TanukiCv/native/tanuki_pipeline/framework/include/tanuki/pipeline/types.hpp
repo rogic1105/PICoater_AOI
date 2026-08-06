@@ -23,6 +23,10 @@ struct OutputBuffers {
     float* mura_curve_max = nullptr;
     float* mura_row_curve_mean = nullptr; // 法向曲線 mean/max
     float* mura_row_curve_max = nullptr;
+    int standard_width = 0;
+    int standard_height = 0;
+    uint16_t* hessian_column_half = nullptr;
+    uint16_t* hessian_row_half = nullptr;
     void* stream = nullptr;
 };
 

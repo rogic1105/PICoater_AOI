@@ -20,5 +20,9 @@ namespace AniloxRoll.Monitor.Core.Services
         // 壓縮存檔預設值（InspectionRecipe.SaveResizeScale / SaveJpgQuality 的唯一參考來源）
         public const int DefaultSaveResizeScale = 5;
         public const int DefaultSaveJpgQuality  = 90;
+
+        // Seven 16K camera strips compose to roughly 4K at this scale. The standard
+        // Hessian maps keep binary16 dynamic range without duplicating JPEG resolution.
+        public const int DefaultHessianStandardMapScale = 25;
     }
 }

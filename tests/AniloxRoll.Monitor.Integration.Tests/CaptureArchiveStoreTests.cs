@@ -5,6 +5,7 @@ using System.Drawing.Imaging;
 using System.IO;
 using AniloxRoll.Monitor.Core.Camera;
 using AniloxRoll.Monitor.Core.Services;
+using AniloxRoll.Monitor.UI.Widgets;
 using NUnit.Framework;
 
 namespace AniloxRoll.Monitor.Integration.Tests
@@ -64,6 +65,8 @@ namespace AniloxRoll.Monitor.Integration.Tests
             var pixels = new byte[12];
             for (int i = 0; i < pixels.Length; i++)
                 pixels[i] = (byte)(i * 10);
+            byte[] hessianC = { 0x00, 0x00, 0x00, 0x38, 0x00, 0x3c, 0x00, 0x40 };
+            byte[] hessianR = { 0x00, 0x40, 0x00, 0x3c, 0x00, 0x38, 0x00, 0x00 };
 
             var saver = new CameraFrameSaver();
             saver.SaveCapture(new CaptureContext
@@ -71,12 +74,16 @@ namespace AniloxRoll.Monitor.Integration.Tests
                 RawBytes = pixels,
                 ProcCBytes = pixels,
                 ProcRBytes = pixels,
+                HessianCStandard = hessianC,
+                HessianRStandard = hessianR,
                 MeanC = new[] { 1f, 2f, 3f },
                 MaxC = new[] { 4f, 5f, 6f },
                 MeanR = new[] { 7f, 8f, 9f },
                 MaxR = new[] { 10f, 11f, 12f },
                 ResizeWidth = 4,
                 ResizeHeight = 3,
+                StandardWidth = 2,
+                StandardHeight = 2,
                 JpgQuality = 90,
                 ScaleForHeader = 5,
                 SaveDir = _root,
@@ -99,6 +106,8 @@ namespace AniloxRoll.Monitor.Integration.Tests
                 rawPath,
                 basePath + CaptureFileNaming.ProcC,
                 basePath + CaptureFileNaming.ProcR,
+                basePath + CaptureFileNaming.HessianC,
+                basePath + CaptureFileNaming.HessianR,
                 basePath + CaptureFileNaming.MeanC,
                 basePath + CaptureFileNaming.MaxC,
                 basePath + CaptureFileNaming.MeanR,
@@ -110,6 +119,22 @@ namespace AniloxRoll.Monitor.Integration.Tests
             Assert.That(resultGrabId, Is.EqualTo(grabId));
             foreach (string assetPath in expectedAssets)
                 Assert.That(CaptureArchiveStore.Exists(assetPath), Is.True, assetPath);
+            CollectionAssert.AreEqual(
+                hessianC,
+                HessianStandardMapCodec.Decode(CaptureArchiveStore.ReadAllBytes(
+                    basePath + CaptureFileNaming.HessianC)).HalfBytes);
+            CollectionAssert.AreEqual(
+                hessianR,
+                HessianStandardMapCodec.Decode(CaptureArchiveStore.ReadAllBytes(
+                    basePath + CaptureFileNaming.HessianR)).HalfBytes);
+            using (Bitmap remapped = GrabImageStitcher.LoadCameraImage(
+                rawPath, 5, null, true, "c", false, 0.5f))
+            {
+                Assert.That(remapped.Size, Is.EqualTo(new Size(2, 2)));
+                Assert.That(remapped.GetPixel(1, 0).R, Is.EqualTo(64).Within(1));
+                Assert.That(remapped.GetPixel(0, 1).R, Is.EqualTo(128).Within(1));
+                Assert.That(remapped.GetPixel(1, 1).R, Is.EqualTo(255));
+            }
             Assert.That(
                 Directory.GetFiles(_root, "*", SearchOption.AllDirectories),
                 Is.EqualTo(new[] { archive }));

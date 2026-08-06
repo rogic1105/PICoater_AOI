@@ -34,6 +34,8 @@ struct PipelineContext {
     // 存檔縮圖用可重用 device workspace（避免每張 resize 各 cudaMalloc/cudaFree）。
     uint8_t* d_resize = nullptr;
     size_t   resize_cap = 0;
+    uint16_t* d_standard_half = nullptr;
+    size_t standard_half_cap = 0;
 
     ~PipelineContext() { ReleaseBuffers(); }
 
@@ -47,9 +49,11 @@ struct PipelineContext {
         if (d_row_curve_mean) cudaFree(d_row_curve_mean);
         if (d_row_curve_max) cudaFree(d_row_curve_max);
         if (d_resize) cudaFree(d_resize);
+        if (d_standard_half) cudaFree(d_standard_half);
         d_input = d_background = d_mura = d_ridge = nullptr;
         d_curve_mean = d_curve_max = d_row_curve_mean = d_row_curve_max = nullptr;
         d_resize = nullptr; resize_cap = 0;
+        d_standard_half = nullptr; standard_half_cap = 0;
         width = height = 0; image_size = 0;
     }
 
@@ -59,6 +63,15 @@ struct PipelineContext {
         if (d_resize) { cudaFree(d_resize); d_resize = nullptr; resize_cap = 0; }
         if (cudaMalloc(&d_resize, bytes) != cudaSuccess) { d_resize = nullptr; return false; }
         resize_cap = bytes;
+        return true;
+    }
+
+    bool EnsureStandardHalf(size_t sample_count) {
+        size_t bytes = sample_count * 2 * sizeof(uint16_t);
+        if (d_standard_half != nullptr && standard_half_cap >= bytes) return true;
+        if (d_standard_half) { cudaFree(d_standard_half); d_standard_half = nullptr; standard_half_cap = 0; }
+        if (cudaMalloc(&d_standard_half, bytes) != cudaSuccess) return false;
+        standard_half_cap = bytes;
         return true;
     }
 
@@ -152,6 +165,22 @@ int TanukiPipeline_Process(TanukiPipelineHandle handle,
     out.mura_row_curve_max = ctx->d_row_curve_max;
     out.stream = output->stream != nullptr ? output->stream : input->stream;
 
+    bool want_standard = output->standard_width > 0 && output->standard_height > 0 &&
+        (output->resized_hessian_column_half != nullptr || output->resized_hessian_row_half != nullptr);
+    size_t standard_samples = (size_t)output->standard_width * (size_t)output->standard_height;
+    if (want_standard) {
+        if (!ctx->EnsureStandardHalf(standard_samples)) {
+            ctx->last_error = "Failed to allocate standard Hessian workspace.";
+            return -2;
+        }
+        out.standard_width = output->standard_width;
+        out.standard_height = output->standard_height;
+        out.hessian_column_half = output->resized_hessian_column_half != nullptr
+            ? ctx->d_standard_half : nullptr;
+        out.hessian_row_half = output->resized_hessian_row_half != nullptr
+            ? ctx->d_standard_half + standard_samples : nullptr;
+    }
+
     if (!ctx->pipeline->Process(in, p, &out)) { ctx->last_error = ctx->pipeline->GetLastError(); return -2; }
 
     auto d2h = [&](void* dst, const void* src, size_t bytes, const char* what) -> bool {
@@ -188,6 +217,16 @@ int TanukiPipeline_Process(TanukiPipelineHandle handle,
         if (!resize_d2h(ctx->d_input, output->resized_raw,   "raw"))   return -2;
         if (!resize_d2h(ctx->d_ridge, output->resized_ridge, "ridge")) return -2;
         if (!resize_d2h(ctx->d_mura,  output->resized_mura,  "mura"))  return -2;
+    }
+
+    if (want_standard) {
+        size_t half_bytes = standard_samples * sizeof(uint16_t);
+        if (output->resized_hessian_column_half != nullptr &&
+            !d2h(output->resized_hessian_column_half, ctx->d_standard_half,
+                 half_bytes, "standard column Hessian")) return -2;
+        if (output->resized_hessian_row_half != nullptr &&
+            !d2h(output->resized_hessian_row_half, ctx->d_standard_half + standard_samples,
+                 half_bytes, "standard row Hessian")) return -2;
     }
 
     ctx->last_error.clear();

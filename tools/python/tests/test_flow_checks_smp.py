@@ -69,14 +69,18 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
                 "action=normalization-reset",
-                "ui:設定[dd_HessianMaxFactorH]=1.0",
+                "ui:閮剖?[dd_HessianMaxFactorH]=1.0",
                 "setting route dd_HessianMaxFactorH owner=DataStats "
                 "effects=ReviewCurves+LiveInspectionCurves",
                 "live inspection apply setting=dd_HessianMaxFactorH "
                 "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
                 "action=normalization-reset",
-                "live row normalize captureHm=0.5000 rowHm=1.0000 ratio=0.5000",
+                "live row normalize captureHm=0.5000 rowHm=1.0000 ratio=2.0000",
+                "DT curve refresh 260804-135456 "
+                "reason=setting-dd_HessianMaxFactorH "
+                "column=False row=True source=memory preserveRange=True "
+                "rangeDelta=0.0000",
                 "live inspection stimulus brightness=100 direction=col "
                 "mean=0.1000 max=0.3000 threshold=0.2000/0.6000 "
                 "mode=Both verdict=O source=light-surrogate-not-mura",
@@ -94,6 +98,10 @@ class SettingsFlowValidatorTests(unittest.TestCase):
 
         self.assertEqual(CheckStatus.PASS, result(report, "S1.live-apply").status)
         self.assertEqual(CheckStatus.PASS, result(report, "S1.row-normalize").status)
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "S1.report-preserve-range").status,
+        )
         self.assertEqual(CheckStatus.PASS, result(report, "S1.light-stimulus").status)
 
     def test_live_inspection_stimulus_rejects_wrong_verdict(self):
@@ -122,6 +130,82 @@ class SettingsFlowValidatorTests(unittest.TestCase):
 
         self.assertEqual(CheckStatus.FAIL, result(report, "S1.light-stimulus").status)
 
+    def test_report_refresh_rejects_physical_range_jump(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[dd_HessianMaxFactorH]=1.0",
+                "setting route dd_HessianMaxFactorH owner=DataStats "
+                "effects=ReviewCurves+LiveInspectionCurves",
+                "DT curve refresh 260804-135456 "
+                "reason=setting-dd_HessianMaxFactorH "
+                "column=False row=True source=memory preserveRange=True "
+                "rangeDelta=12.5000",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "S1.report-preserve-range").status,
+        )
+
+    def test_hessian_standard_image_brightness_follows_gain(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[dd_HessianMaxFactorH]=0.5",
+                "setting route dd_HessianMaxFactorH owner=DataStats "
+                "effects=ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dd_HessianMaxFactorH "
+                "hm=1.0000/0.5000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-reset",
+                "RV hessian standard 260804-135456 dir=R gain=0.5 scale=25 "
+                "sampleMin=0 sampleMax=128 sampleMean=12.500",
+                "ui:設定[dd_HessianMaxFactorH]=1.0",
+                "setting route dd_HessianMaxFactorH owner=DataStats "
+                "effects=ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dd_HessianMaxFactorH "
+                "hm=1.0000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-reset",
+                "RV hessian standard 260804-135456 dir=R gain=1 scale=25 "
+                "sampleMin=0 sampleMax=255 sampleMean=25.000",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "S1.hessian-image-gain").status,
+        )
+
+    def test_hessian_standard_image_rejects_inverse_gain(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[dc_HessianMaxFactorV]=0.5",
+                "setting route dc_HessianMaxFactorV owner=DataStats "
+                "effects=InspectionService+CapturePolicy+ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dc_HessianMaxFactorV "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-reset",
+                "RV hessian standard 260804-135456 dir=C gain=0.5 scale=25 "
+                "sampleMin=0 sampleMax=255 sampleMean=30.000",
+                "ui:設定[dc_HessianMaxFactorV]=1.0",
+                "setting route dc_HessianMaxFactorV owner=DataStats "
+                "effects=InspectionService+CapturePolicy+ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dc_HessianMaxFactorV "
+                "hm=1.0000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-reset",
+                "RV hessian standard 260804-135456 dir=C gain=1 scale=25 "
+                "sampleMin=0 sampleMax=128 sampleMean=15.000",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "S1.hessian-image-gain").status,
+        )
+
     def test_direction_and_review_enhance_are_followed_by_required_updates(self):
         report = SettingsFlowValidator().validate(
             session(
@@ -131,6 +215,8 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "RV loadGrab begin 260720-120000（proc=True）",
                 "RV loadGrab curves=keep source=display 260720-120000",
                 "RV pushFrames 7/7（merge=True, feedScale=1, chartView=keep）",
+                "RV variantView keep beforeX=0.00~10.00 beforeY=20.00~0.00 "
+                "afterX=0.00~10.00 afterY=20.00~0.00 maxDelta=0.000",
                 "RV loadGrab done 260720-120000（21ms）",
                 "ui:設定[hee_VerticalDirection]=TopToBottom",
                 "setting route hee_VerticalDirection owner=LiveLayout effects=None",
@@ -316,6 +402,8 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
                 "RV period load 2026-07-21 08:00:00.000 images=7/7 proc=True cfg=yes",
                 "RV pushFrames 7/7（merge=True, feedScale=1, chartView=keep）",
+                "RV variantView keep beforeX=0.00~10.00 beforeY=20.00~0.00 "
+                "afterX=0.00~10.00 afterY=20.00~0.00 maxDelta=0.000",
                 "RV period curves=keep source=display",
             )
         )
@@ -335,6 +423,44 @@ class SettingsFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.FAIL, result(report, "S2.review-enhance").status
+        )
+
+    def test_review_enhance_physical_viewport_drift_fails(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "RV loadGrab done 260720-120000（20ms）",
+                "ui:設定[hd_EnableReviewEnhance]=True",
+                "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
+                "RV loadGrab begin 260720-120000（proc=True）",
+                "RV loadGrab curves=keep source=display 260720-120000",
+                "RV pushFrames 7/7（merge=True, feedScale=25, chartView=keep）",
+                "RV variantView keep beforeX=0.00~10.00 beforeY=20.00~0.00 "
+                "afterX=0.00~10.00 afterY=100.00~0.00 maxDelta=80.000",
+                "RV loadGrab done 260720-120000（21ms）",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "S2.review-enhance").status
+        )
+
+    def test_review_enhance_ignores_later_user_view_changes(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "RV loadGrab done 260720-120000（20ms）",
+                "ui:設定[hd_EnableReviewEnhance]=True",
+                "setting route hd_EnableReviewEnhance owner=Enhance effects=None",
+                "RV loadGrab begin 260720-120000（proc=True）",
+                "RV loadGrab curves=keep source=display 260720-120000",
+                "RV pushFrames 7/7（merge=True, feedScale=25, chartView=keep）",
+                "RV variantView keep beforeX=0.00~10.00 beforeY=20.00~0.00 "
+                "afterX=0.00~10.00 afterY=20.00~0.00 maxDelta=0.000",
+                "RV loadGrab done 260720-120000（21ms）",
+                "RV mainRange 260720-120000 viewX=2~8 viewY=18~4",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "S2.review-enhance").status
         )
 
     def test_image_variant_only_does_not_require_a_new_prefit(self):
@@ -884,6 +1010,29 @@ class DataFlowValidatorTests(unittest.TestCase):
                 "DT chartRange 260721-080001 chart=row axis=-439~17105/view=-400~17000",
                 "RV lodRebind merge 20236x15000（fit reset）",
                 "RV loadGrab done 260721-080001（100ms）",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
+
+    def test_single_fit_accepts_equivalent_hessian_standard_map_geometry(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:?銵典??? 260721-080001",
+                "DT selected 260721-080001 stats=cache list=keep ms=1",
+                "DT prefit 260721-080001 content=20000x15000 viewX=0~2000 viewY=1500~0 source=main-geometry",
+                "RV loadGrab begin 260721-080001",
+                "RV prefit 260721-080001 content=20000x15000 viewport=1000x600 viewX=0~2000 viewY=1500~0",
+                "RV prefitPaint 260721-080001 chart=col after=0ms axis=0~2000/view=0~2000",
+                "RV chartRange 260721-080001 chart=col axis=0~2000/view=0~2000",
+                "RV prefitPaint 260721-080001 chart=row after=0ms axis=0~1500/view=0~1500",
+                "RV chartRange 260721-080001 chart=row axis=0~1500/view=0~1500",
+                "RV prefitApply 260721-080001 after=0ms visible=True col=axis=0~2000/view=0~2000 row=axis=0~1500/view=0~1500",
+                "RV mainRange 260721-080001 viewX=0~2000 viewY=1500~0",
+                "DT chartRange 260721-080001 chart=col axis=0~2000/view=0~2000",
+                "DT chartRange 260721-080001 chart=row axis=0~1500/view=0~1500",
+                "RV lodRebind merge 4000x3000",
+                "RV pushFrames 2/7 merge=True, feedScale=25, chartView=publish",
+                "RV loadGrab done 260721-080001",
             )
         )
         self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)

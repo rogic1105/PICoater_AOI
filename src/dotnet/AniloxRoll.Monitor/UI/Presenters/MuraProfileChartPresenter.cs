@@ -40,6 +40,14 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private bool _rowHasData;
         private string _lastColumnRangeState;
         private string _lastRowRangeState;
+        private string _presentedGrabId;
+        private string _presentedStatsRoot;
+        private SingleGrabCurveData _presentedData;
+        private CsvConfigSnapshot _presentedConfig;
+        private double[] _presentedOps;
+        private double[] _presentedPositions;
+        private double[] _presentedView;
+        private RowCurvePhysicalScale _presentedPhysicalScale;
 
         internal event Action<string, string, SingleGrabCurveData> SingleGrabCurvePresented;
 
@@ -123,13 +131,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // 單片模式（GrpDataSingleSheet）：永遠用 cbDataId.SelectedIndex 對應 grab，不依賴 caller 傳入的 grabIds。
             // 原因：cbDataId 變更不連動 cbDataIdStart/End（範圍獨立），caller 仍可能用舊範圍呼這函式
             // → 若用 grabIds[0] 會顯示舊範圍的第一筆而非剛點的 grab。
-            // view-time 正規值 rescale（HM_capture / HM_current）讓改 PropertyGrid 正規值時曲線坡度立即變化。
+            // view-time 正規值 rescale（HM_current / HM_capture）讓改 PropertyGrid 正規值時曲線線性變化。
             var grabIdInfos = _getGrabIdInfos();
             if (_getActiveStatMode() == _ctx.GrpDataSingleSheet)
             {
                 GrabIdInfo selected = FindSelectedDataGrab(grabIdInfos);
                 if (selected != null)
-                    ScheduleSingleGrab(selected);
+                {
+                    if (!IsPresented(selected.GrabId))
+                        ScheduleSingleGrab(selected);
+                }
                 else
                     Clear();
                 return;
@@ -138,6 +149,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             // Leaving single-sheet mode invalidates a still-running single-grab load.
             // Otherwise its late result could overwrite the range curve after the mode switch.
             _singleGrabLoads.Invalidate();
+            ClearPresentedSingleGrab();
 
             if (grabIds == null || grabIds.Count == 0)
             {
@@ -247,7 +259,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         /// <summary>
         /// 用單一 grab 的 .bin（MergeCurves 合多 capture）+ 該 grab 的 CSV #CFG OPS/Pos
         /// 更新 chartDataColumn，與 chartReviewColumn 完全對齊。不依賴 camReviewMain 是否載入。
-        /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_capture / HM_current)；
+        /// 套用 view-time 正規值 rescale：display = (bin/255) × (HM_current / HM_capture)；
         /// 改 PropertyGrid 正規值會立刻反映在曲線坡度上。
         /// </summary>
         private void ScheduleSingleGrab(GrabIdInfo info)
@@ -290,13 +302,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 }
 
                 CsvConfigSnapshot grabCfg = layoutPlan?.Config ?? data.Config;
-                float captureHm = grabCfg?.HessianMaxFactorV ?? _ctx.Settings.HessianMaxFactorV;
-                float valueScale = HessianRescaleHelper.Ratio(
-                    captureHm, _ctx.Settings.HessianMaxFactorV);
                 double[] ops = grabCfg?.CamOps ?? _ctx.Settings.GetCameraOpsUmArray();
                 double[] pos = grabCfg?.CamPos ?? _ctx.Settings.GetCameraStartPositionMmArray();
-                float errMean = _ctx.Settings.ErrorValueMeanV;
-                float errMax = _ctx.Settings.ErrorValueMaxV;
                 RowCurvePhysicalScale physicalScale = RowCurvePhysicalScaleResolver.Resolve(
                     grabCfg, _ctx.Settings);
                 _rowDisplay?.SetRowPitchFromSpeed(
@@ -329,26 +336,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 {
                     FlowTrace.Dvt($"DT prefit unavailable {request.GrabId}");
                 }
-                Func<int, bool, double, double> fitViewRange = view != null && view.Length >= 4
-                    ? (Func<int, bool, double, double>)((_, isLeft, __) =>
-                        isLeft ? view[0] : view[1])
-                    : null;
-
                 long drawStartMs = sw.ElapsedMilliseconds;
-                CurveMergeHelper.UpdateOverviewChart(
-                    data.ColumnMean, data.ColumnMax, ops, pos, errMean, errMax,
-                    _muraProfileHelper, camCount,
-                    _ctx.Settings.StitchMode, fitViewRange, valueScale: valueScale,
-                    trimHeadMm: grabCfg?.TrimHeadMm ?? _ctx.Settings.TrimHeadMm,
-                    trimTailMm: grabCfg?.TrimTailMm ?? _ctx.Settings.TrimTailMm);
-                FlowTrace.Dvt(
-                    $"DT curve display {request.GrabId} " +
-                    $"mode={_ctx.Settings.ColumnCurveMode.ToString().ToLowerInvariant()} " +
-                    $"mean={_muraProfileHelper.DisplayMeanPeak:F4}/{errMean:F4} " +
-                    $"max={_muraProfileHelper.DisplayMaxPeak:F4}/{errMax:F4} " +
-                    $"scale={valueScale:F4} points={_muraProfileHelper.DisplayPointCount}");
-                UpdateRowChart(data, grabCfg, request.GrabId, view, physicalScale);
-                SingleGrabCurvePresented?.Invoke(statsRoot, request.GrabId, data);
+                CachePresentedSingleGrab(
+                    statsRoot, request.GrabId, data, grabCfg, ops, pos, view, physicalScale);
+                PresentCachedSingleGrab(updateColumn: true, updateRow: true, reason: "load");
                 FlowTrace.Log($"DT curve load {request.GrabId} captures={data.ImageCount} " +
                     $"source=shared storage={data.StorageSource} configMs={data.ConfigMs} " +
                     $"waitMs={drawStartMs} pathMs={data.LookupMs} mergeMs={data.MergeMs} " +
@@ -363,7 +354,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
 
         private void UpdateRowChart(
             SingleGrabCurveData data, CsvConfigSnapshot grabCfg,
-            string grabId, double[] view, RowCurvePhysicalScale scale)
+            string grabId, double[] view, RowCurvePhysicalScale scale,
+            bool preservePhysicalRange = false)
         {
             if (_rowDisplay == null) return;
             if (data?.MergedRowMean == null || data.MergedRowMean.Length == 0)
@@ -383,7 +375,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 scale.SpeedMPerMin, scale.LineRateHz);
             _rowDisplay.SetThresholds(
                 _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
-            if (view != null && view.Length >= 4)
+            if (preservePhysicalRange)
+                _rowDisplay.UpdateDataPreservingView(mean, max);
+            else if (view != null && view.Length >= 4)
                 _rowDisplay.UpdateDataAndViewRange(mean, max, view[2], view[3]);
             else
                 _rowDisplay.UpdateData(mean, max);
@@ -396,6 +390,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             _singleGrabLoads.Invalidate();
             _singleGrabDataLoader.Clear();
+            ClearPresentedSingleGrab();
         }
 
         public void Dispose()
@@ -408,7 +403,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabDataLoader.Dispose();
         }
 
-        public void RefreshForSettingsChange()
+        public void RefreshForSettingsChange(string settingName)
         {
             if (_muraProfileHelper == null) return;
             _muraProfileHelper.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
@@ -416,14 +411,148 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _ctx.Settings.ShowColumnMean, _ctx.Settings.ShowColumnMax);
             _rowDisplay?.SetThresholds(
                 _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
-            // 單片模式立即重載；範圍模式由 DataStatisticsPresenter 的 debounce 統一刷新。
-            var grabIdInfos = _getGrabIdInfos();
-            if (_getActiveStatMode() == _ctx.GrpDataSingleSheet)
+            // 單片模式只從記憶體中的原始 Curve 重算，不重新讀檔、不重新 prefit。
+            // 這讓正規值連續變更只改曲線高度，不改欄／列的物理座標範圍。
+            if (_getActiveStatMode() == _ctx.GrpDataSingleSheet && _presentedData != null)
             {
-                GrabIdInfo selected = FindSelectedDataGrab(grabIdInfos);
-                if (selected != null)
-                    ScheduleSingleGrab(selected);
+                bool updateColumn = settingName != nameof(InspectionSettings.dd_HessianMaxFactorH) &&
+                    settingName != nameof(InspectionSettings.ee_ErrorValueMeanH) &&
+                    settingName != nameof(InspectionSettings.ef_ErrorValueMaxH);
+                bool updateRow = settingName != nameof(InspectionSettings.dc_HessianMaxFactorV) &&
+                    settingName != nameof(InspectionSettings.ec_ErrorValueMeanV) &&
+                    settingName != nameof(InspectionSettings.ed_ErrorValueMaxV) &&
+                    settingName != nameof(InspectionSettings.eca_ColumnCurveMode);
+                PresentCachedSingleGrab(
+                    updateColumn, updateRow, "setting-" + settingName);
             }
+        }
+
+        private bool IsPresented(string grabId)
+        {
+            return _presentedData != null &&
+                string.Equals(_presentedGrabId, grabId, StringComparison.Ordinal);
+        }
+
+        private void CachePresentedSingleGrab(
+            string statsRoot, string grabId, SingleGrabCurveData data,
+            CsvConfigSnapshot config, double[] ops, double[] positions,
+            double[] view, RowCurvePhysicalScale physicalScale)
+        {
+            _presentedStatsRoot = statsRoot;
+            _presentedGrabId = grabId;
+            _presentedData = data;
+            _presentedConfig = config;
+            _presentedOps = ops;
+            _presentedPositions = positions;
+            _presentedView = view;
+            _presentedPhysicalScale = physicalScale;
+        }
+
+        private void PresentCachedSingleGrab(bool updateColumn, bool updateRow, string reason)
+        {
+            if (_presentedData == null || string.IsNullOrEmpty(_presentedGrabId)) return;
+
+            bool preservePhysicalRange = reason.StartsWith(
+                "setting-", StringComparison.Ordinal);
+
+            double[] columnRangeBefore = updateColumn ? CapturePhysicalRange(isRow: false) : null;
+            double[] rowRangeBefore = updateRow ? CapturePhysicalRange(isRow: true) : null;
+
+            if (updateColumn)
+            {
+                float captureHm = _presentedConfig?.HessianMaxFactorV ??
+                    _ctx.Settings.HessianMaxFactorV;
+                float valueScale = HessianRescaleHelper.Ratio(
+                    captureHm, _ctx.Settings.HessianMaxFactorV);
+                float errMean = _ctx.Settings.ErrorValueMeanV;
+                float errMax = _ctx.Settings.ErrorValueMaxV;
+                Func<int, bool, double, double> fitViewRange =
+                    _presentedView != null && _presentedView.Length >= 4
+                        ? (Func<int, bool, double, double>)((_, isLeft, __) =>
+                            isLeft ? _presentedView[0] : _presentedView[1])
+                        : null;
+                CurveMergeHelper.UpdateOverviewChart(
+                    _presentedData.ColumnMean, _presentedData.ColumnMax,
+                    _presentedOps, _presentedPositions, errMean, errMax,
+                    _muraProfileHelper, _ctx.CameraCount,
+                    _ctx.Settings.StitchMode, fitViewRange, valueScale: valueScale,
+                    trimHeadMm: _presentedConfig?.TrimHeadMm ?? _ctx.Settings.TrimHeadMm,
+                    trimTailMm: _presentedConfig?.TrimTailMm ?? _ctx.Settings.TrimTailMm,
+                    preservePhysicalRange: preservePhysicalRange);
+                FlowTrace.Dvt(
+                    $"DT curve display {_presentedGrabId} " +
+                    $"mode={_ctx.Settings.ColumnCurveMode.ToString().ToLowerInvariant()} " +
+                    $"mean={_muraProfileHelper.DisplayMeanPeak:F4}/{errMean:F4} " +
+                    $"max={_muraProfileHelper.DisplayMaxPeak:F4}/{errMax:F4} " +
+                    $"scale={valueScale:F4} points={_muraProfileHelper.DisplayPointCount}");
+            }
+            if (updateRow)
+            {
+                UpdateRowChart(
+                    _presentedData, _presentedConfig, _presentedGrabId,
+                    _presentedView, _presentedPhysicalScale,
+                    preservePhysicalRange);
+            }
+            SingleGrabCurvePresented?.Invoke(
+                _presentedStatsRoot, _presentedGrabId, _presentedData);
+            double columnRangeDelta = updateColumn
+                ? MeasureRangeDelta(columnRangeBefore, CapturePhysicalRange(isRow: false))
+                : 0.0;
+            double rowRangeDelta = updateRow
+                ? MeasureRangeDelta(rowRangeBefore, CapturePhysicalRange(isRow: true))
+                : 0.0;
+            FlowTrace.Dvt(
+                $"DT curve refresh {_presentedGrabId} reason={reason} " +
+                $"column={updateColumn} row={updateRow} source=memory preserveRange=True " +
+                $"rangeDelta={Math.Max(columnRangeDelta, rowRangeDelta):F4}");
+        }
+
+        private double[] CapturePhysicalRange(bool isRow)
+        {
+            var chart = isRow ? _ctx.ChartDataRow : _ctx.ChartDataPatch;
+            if (chart == null || chart.IsDisposed || chart.ChartAreas.Count == 0)
+                return null;
+
+            var axis = isRow
+                ? chart.ChartAreas[0].AxisY
+                : chart.ChartAreas[0].AxisX;
+            return new[]
+            {
+                axis.Minimum,
+                axis.Maximum,
+                axis.ScaleView.ViewMinimum,
+                axis.ScaleView.ViewMaximum
+            };
+        }
+
+        private static double MeasureRangeDelta(double[] before, double[] after)
+        {
+            if (before == null || after == null || before.Length != after.Length)
+                return double.PositiveInfinity;
+
+            double maximum = 0.0;
+            for (int i = 0; i < before.Length; i++)
+            {
+                if (double.IsNaN(before[i]) && double.IsNaN(after[i]))
+                    continue;
+                if (double.IsNaN(before[i]) || double.IsNaN(after[i]) ||
+                    double.IsInfinity(before[i]) || double.IsInfinity(after[i]))
+                    return double.PositiveInfinity;
+                maximum = Math.Max(maximum, Math.Abs(after[i] - before[i]));
+            }
+            return maximum;
+        }
+
+        private void ClearPresentedSingleGrab()
+        {
+            _presentedStatsRoot = null;
+            _presentedGrabId = null;
+            _presentedData = null;
+            _presentedConfig = null;
+            _presentedOps = null;
+            _presentedPositions = null;
+            _presentedView = null;
+            _presentedPhysicalScale = default(RowCurvePhysicalScale);
         }
 
         private GrabIdInfo FindSelectedDataGrab(List<GrabIdInfo> grabIdInfos)
@@ -473,6 +602,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         {
             if (_ctx.ChartDataPatch == null) return;
             _singleGrabLoads.Invalidate();
+            ClearPresentedSingleGrab();
             foreach (var s in _ctx.ChartDataPatch.Series)
                 s.Points.Clear();
             ClearRow("all");

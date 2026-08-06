@@ -52,7 +52,7 @@ namespace AniloxRoll.Monitor.Tests
         [Test]
         public void EvaluateColumn_RescalesCapturePeakToCurrentNormalization()
         {
-            ThresholdContext context = Create(ColumnCurveDisplayMode.Max, currentHmV: 0.5f);
+            ThresholdContext context = Create(ColumnCurveDisplayMode.Max, currentHmV: 2f);
 
             ColumnVerdictEvaluation result = context.EvaluateColumn(0.10f, 0.40f, 1f);
 

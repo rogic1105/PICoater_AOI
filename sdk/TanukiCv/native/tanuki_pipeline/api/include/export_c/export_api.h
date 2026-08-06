@@ -46,6 +46,10 @@ typedef struct TanukiPipelineOutputC {
     uint8_t* resized_raw;     // 原圖縮圖（來自 input）
     uint8_t* resized_ridge;   // V 脊線縮圖（來自 ridge）
     uint8_t* resized_mura;    // H 脊線縮圖（來自 mura）
+    int standard_width;
+    int standard_height;
+    uint16_t* resized_hessian_column_half;
+    uint16_t* resized_hessian_row_half;
 } TanukiPipelineOutputC;
 
 // 建 pipeline。pipeline_name 如 "find_stream_ridgeline"；json_options 可 NULL（如 {"ridge_method":"hessian"}）。

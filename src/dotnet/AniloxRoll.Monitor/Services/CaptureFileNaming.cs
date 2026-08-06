@@ -8,7 +8,8 @@ namespace AniloxRoll.Monitor.Core.Services
     /// 與讀端（回顧 / 統計 / 合圖 / 縮圖）共用同一套 suffix —— 改命名格式只改這裡。
     ///
     /// 一張擷取（base = "{yyyyMMdd_HHmmss.fff}-{camId}"）對應的產出：
-    ///   {base}_raw.jpg / _proc_c.jpg / _proc_r.jpg / _mean_c.bin / _max_c.bin / _mean_r.bin / _max_r.bin
+    ///   {base}_raw.jpg / _proc_c.jpg / _proc_r.jpg / _hessian_c.hsm / _hessian_r.hsm /
+    ///   _mean_c.bin / _max_c.bin / _mean_r.bin / _max_r.bin
     /// 上一代曲線格式（_mean_v/_max_v/_mean_h/_max_h）與更早格式僅供讀端 fallback。
     ///
     /// 本類只統一「檔名字串」；fallback 的「載入行為」（new ?? legacy）仍由各 caller 決定，
@@ -24,6 +25,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public const string MaxC   = "_max_c.bin";
         public const string MeanR  = "_mean_r.bin";
         public const string MaxR   = "_max_r.bin";
+        public const string HessianC = "_hessian_c.hsm";
+        public const string HessianR = "_hessian_r.hsm";
         public const string ThumbRawJpg = "_thumb_raw.jpg";
         public const string ThumbProcC  = "_thumb_proc_c.jpg";
         public const string ThumbProcR  = "_thumb_proc_r.jpg";
@@ -93,6 +96,14 @@ namespace AniloxRoll.Monitor.Core.Services
 
         public static string ResolveMaxR(string baseNoSuffix) =>
             ResolveExisting(baseNoSuffix, MaxR, MaxRPrevious, MaxRLegacy);
+
+        public static string ResolveHessianStandardMap(string rawJpgPath, string axis)
+        {
+            if (!IsRawJpg(rawJpgPath)) return null;
+            string path = StripRawJpg(rawJpgPath) +
+                (axis == "r" || axis == "h" ? HessianR : HessianC);
+            return CaptureArchiveStore.Exists(path) ? path : null;
+        }
 
         private static string ResolveExisting(
             string baseNoSuffix, string current, string previous, string legacy)
