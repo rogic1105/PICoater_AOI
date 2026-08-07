@@ -364,12 +364,36 @@ namespace AniloxRoll.Monitor.Forms
                     System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
                     UpdateIoConnectionUi(false);
                     if (_ioConnectionCoordinator == null)
+                    {
                         InitIoController();
+                        if (!_settings.IoEnabled)
+                            PresentIoDisabledState();
+                    }
                     else
-                        _ = _ioConnectionCoordinator.RestartAsync(
-                            CreateIoConnectionOptions());
+                        _ = RestartIoControllerForSettingsAsync();
                     break;
             }
+        }
+
+        private async Task RestartIoControllerForSettingsAsync()
+        {
+            await _ioConnectionCoordinator.RestartAsync(
+                CreateIoConnectionOptions());
+            SafeBeginInvoke(() =>
+            {
+                if (!_settings.IoEnabled)
+                    PresentIoDisabledState();
+                RefreshGrabButtonState();
+                UpdateStandardBgSubLockState();
+            });
+        }
+
+        private void PresentIoDisabledState()
+        {
+            lblIoConn.Text = "● IO 未啟用";
+            lblIoConn.BackColor = IecGray;
+            lblIoConn.ForeColor = Color.White;
+            UpdateIoStateLabel(IoState.Closed);
         }
 
         private async Task ShutdownIoControllerAsync()

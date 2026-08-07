@@ -39,6 +39,7 @@ namespace AniloxRoll.DvtRunner
                 "wait-log",
                 "wait-log-current-combo",
                 "verify-log-min-count",
+                "verify-log-absent",
                 "verify-range-scroll",
                 "reset-evidence",
                 "delay",
@@ -92,7 +93,8 @@ namespace AniloxRoll.DvtRunner
                 if (step.Action != "run-checker" && string.IsNullOrWhiteSpace(step.Contract))
                     throw new InvalidDataException(prefix + " must reference a verify-flow contract.");
                 if (step.Action == "wait-log" ||
-                    step.Action == "wait-log-current-combo")
+                    step.Action == "wait-log-current-combo" ||
+                    step.Action == "verify-log-absent")
                 {
                     if (string.IsNullOrWhiteSpace(step.Pattern))
                         throw new InvalidDataException(prefix + " requires a regex pattern.");

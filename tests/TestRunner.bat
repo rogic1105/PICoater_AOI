@@ -20,10 +20,11 @@ echo 11. IO/light software disconnect recovery
 echo 12. Low-disk retention in isolated TEMP
 echo 13. Repeated Grab soak, default 120 minutes
 echo 14. Inspection standards with light 100/255 surrogate
-echo 15. Exit
+echo 15. Virtual IO connect/disconnect/reconnect, no camera required
+echo 16. Exit
 echo.
 set "choice=%~1"
-if not defined choice set /p choice="Select (1-15): "
+if not defined choice set /p choice="Select (1-16): "
 
 if "%choice%"=="1" goto :functional
 if "%choice%"=="2" goto :stress
@@ -39,7 +40,8 @@ if "%choice%"=="11" goto :physical_bridge_recovery
 if "%choice%"=="12" goto :physical_retention
 if "%choice%"=="13" goto :physical_capture_soak
 if "%choice%"=="14" goto :physical_inspection_standards
-if "%choice%"=="15" goto :done
+if "%choice%"=="15" goto :virtual_io
+if "%choice%"=="16" goto :done
 goto :invalid
 
 :functional
@@ -60,6 +62,10 @@ goto :result
 
 :physical_io
 powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode PhysicalIo
+goto :result
+
+:virtual_io
+powershell -NoProfile -ExecutionPolicy Bypass -File "tests\TestRunner.ps1" -Mode VirtualIo
 goto :result
 
 :physical_capture

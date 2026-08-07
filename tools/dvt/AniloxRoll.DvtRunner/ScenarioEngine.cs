@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -306,6 +307,17 @@ namespace AniloxRoll.DvtRunner
                         step.TimeoutSeconds,
                         cancellationToken);
                     return $"count={observedCount} minimum={minimumCount}";
+
+                case "verify-log-absent":
+                    var forbidden = new Regex(
+                        step.Pattern,
+                        RegexOptions.CultureInvariant);
+                    string forbiddenLine = _log.GetEvidenceLines()
+                        .FirstOrDefault(line => forbidden.IsMatch(line));
+                    if (forbiddenLine != null)
+                        throw new InvalidOperationException(
+                            "Forbidden Flow evidence was observed: " + forbiddenLine);
+                    return "forbidden evidence count=0";
 
                 case "verify-range-scroll":
                     return RangeScrollEvidenceVerifier.Verify(
@@ -1455,12 +1467,57 @@ namespace AniloxRoll.DvtRunner
         private async Task RestoreOriginalPropertiesAsync(
             CancellationToken cancellationToken)
         {
+            const string ioEnabledProperty = "啟用 IO";
+            KeyValuePair<string, string>? originalIoEnabled = null;
+            if (_originalProperties.TryGetValue(
+                    ioEnabledProperty,
+                    out string ioEnabledValue))
+            {
+                originalIoEnabled = new KeyValuePair<string, string>(
+                    ioEnabledProperty,
+                    ioEnabledValue);
+                try
+                {
+                    Output?.Invoke("[cleanup] 先停用 IO，再還原 endpoint");
+                    await _ui.SetPropertyValueAsync(
+                        ioEnabledProperty, "否", 5, cancellationToken);
+                }
+                catch (Exception ex)
+                {
+                    Output?.Invoke(
+                        $"清理警告：安全停用 IO 失敗：{ex.Message}");
+                }
+            }
+
             foreach (KeyValuePair<string, string> pair in _originalProperties)
             {
+                if (string.Equals(
+                        pair.Key,
+                        ioEnabledProperty,
+                        StringComparison.Ordinal))
+                    continue;
                 try
                 {
                     Output?.Invoke(
                         $"[cleanup] 還原 {pair.Key}={pair.Value}");
+                    await _ui.SetPropertyValueAsync(
+                        pair.Key, pair.Value, 5, cancellationToken);
+                    Output?.Invoke($"已還原 {pair.Key}={pair.Value}");
+                }
+                catch (Exception ex)
+                {
+                    Output?.Invoke(
+                        $"清理警告：{pair.Key} 還原失敗：{ex.Message}");
+                }
+            }
+
+            if (originalIoEnabled.HasValue)
+            {
+                KeyValuePair<string, string> pair = originalIoEnabled.Value;
+                try
+                {
+                    Output?.Invoke(
+                        $"[cleanup] 最後還原 {pair.Key}={pair.Value}");
                     await _ui.SetPropertyValueAsync(
                         pair.Key, pair.Value, 5, cancellationToken);
                     Output?.Invoke($"已還原 {pair.Key}={pair.Value}");

@@ -144,7 +144,7 @@ namespace IoBridge.IoSimulator
                             options.Port = ParsePositiveInt(name, value);
                             break;
                         case "--cycles":
-                            options.Cycles = ParsePositiveInt(name, value);
+                            options.Cycles = ParseNonNegativeInt(name, value);
                             break;
                         case "--initial-delay-ms":
                             options.InitialDelayMs = ParseNonNegativeInt(name, value);

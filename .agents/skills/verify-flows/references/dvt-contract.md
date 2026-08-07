@@ -1044,12 +1044,21 @@ background apply camN grab=G mode=single source=per-frame width=W
 啟動時 `啟用 IO=否` 不建立空的 `IoConnectionCoordinator`；之後第一次啟用才建立
 乾淨的 controller generation。耐久測試每 2 秒讀取實際 label 文字，不能只驗
 handle 存活；IO、儲存電腦與光源任一文字離開綠燈即失敗。
+
+`virtual-io-recovery` 使用 `IoBridge.IoSimulator --cycles 0` 單獨驗證 H1：主程式先啟動、
+server 後上線仍須完成安全交握；server 正常退出須發布一次斷線；server 重啟後不重開
+主程式即恢復。DI-1 全程 Low，因此此情境不得出現 IO START 或 Grab 請求。
+情境必須先明確停用 IO、清除舊證據，再設定 endpoint 並重新啟用；不可假設執行前 JSON
+與測試值不同，否則相同值不會觸發 controller restart。
 ```
 Tn: ⚠ IO 斷線 ／ IO 恢復連線            ← 光源/儲存分享 同格式
 Tn: ⚠ IO 未連線（開機基線）             ← 首次觀測就不在線（拔線開機/初始化未完，恢復行會跟著出現）
 Tn: 儲存程式 heartbeat 恢復 pid=N age=Ns
 Tn: ⚠ 儲存程式 heartbeat 未回報 reason=…
 T1: IO controller start generation=N endpoint=IP:Port
+IO disabled by settings: wait for the old controller generation to stop, then show the disabled state
+and recompute the manual Grab/background gates. The Grab button must not remain disabled as
+`IO controlling` after the controller has been removed.
 穩態（DVT 每 30 秒）: IO poll state attempts=N successes=N snapshots=N connected=True state=Idle
 設定變更：IO controller stop generation=N reason=settings
         → IO controller start generation=N+1 endpoint=IP:Port

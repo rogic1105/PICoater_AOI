@@ -1,5 +1,5 @@
 param(
-    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "ReviewReport30k", "PhysicalCamera", "PhysicalInspectionStandards", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalRetention", "PhysicalSoak", "PhysicalCaptureSoak", "Stress", "Soak", "All")]
+    [ValidateSet("Functional", "Unit", "Integration", "Dvt", "VirtualIo", "ReviewReport30k", "PhysicalCamera", "PhysicalInspectionStandards", "PhysicalCapture", "PhysicalIo", "PhysicalStorage", "PhysicalRecovery", "PhysicalBridgeRecovery", "PhysicalRetention", "PhysicalSoak", "PhysicalCaptureSoak", "Stress", "Soak", "All")]
     [string]$Mode = "All",
     [double]$StressMinutes = 120,
     [double]$SoakMinutes = 120,
@@ -54,6 +54,8 @@ $acceptanceCriteria = @{
         "All discovered integration tests pass; 0 failures."
     "DVT Runner self-check" =
         "Launch the exact app, restore changed settings, close cleanly, and finish the checker with exit code 0."
+    "Virtual IO connection recovery" =
+        "The app starts before IoSimulator, completes the Modbus safety handshake when the server appears, detects a graceful server exit, reconnects after the simulator restarts, restores settings, and shuts down cleanly without any START/Grab request."
     "Review and report 30,000-record DVT" =
         "Load exactly 30,000 grab IDs; reload jumps to newest; Review rapid/period navigation, enhancement, direction, heatmap, and display crop preserve data contracts; Report single/range curves, Y-axis toggle, fail filter, cross-tab curve reuse, clean shutdown, and the full checker pass."
     "Physical camera/background smoke" =
@@ -786,6 +788,11 @@ if ($Mode -in @("ReviewReport30k", "All")) {
 if ($Mode -eq "PhysicalCamera") {
     $allPassed = (Invoke-DvtScenario "monitor-background-v1" `
         "Physical camera/background smoke" "Physical camera DVT" 900) -and $allPassed
+}
+
+if ($Mode -eq "VirtualIo") {
+    $allPassed = (Invoke-DvtScenario "virtual-io-recovery" `
+        "Virtual IO connection recovery" "Virtual IO DVT" 600) -and $allPassed
 }
 
 if ($Mode -eq "PhysicalInspectionStandards") {

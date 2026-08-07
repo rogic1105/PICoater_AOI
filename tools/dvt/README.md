@@ -32,6 +32,7 @@ Curve、正規值、閾值、欄曲線判定模式、檢出方向與 O/X 公式�
 - 情境在 `AniloxRoll.DvtRunner/Scenarios/*.json`。
 - 每個操作步驟必須填 `Contract`，指向 `dvt-contract.md` 的 flow。
 - `wait-log` 只寫該步需要的最小證據，不重複完整判定規格。
+- `verify-log-absent` 用於證明情境明確禁止的 Flow 行完全未出現，例如純待機 IO 測試不得產生 START／Grab。
 - 跨步驟、禁止行、數量與完整性仍由 `check_all_flows.py` 判定。
 - 若 checker 顯示 `NOT COVERED`，代表這次情境沒有操作到該功能，不代表 PASS。
 
@@ -61,6 +62,12 @@ Runner 會開啟主程式、執行情境、正常關閉主程式、寫入 PASS/F
 `實體 IO 五分鐘穩定測試（不 Grab）` 只驗證 `192.168.255.1:502` 的安全交握、待機輪詢、
 controller 關閉與 Flow checker；不按開始抓取。它仍會依產品協定輸出
 MURA/BUSY Low 與 PC ALIVE High。
+
+`虛擬 IO 連線與自動重連` 不需要相機、光源或實體 IO。Runner 先讓主程式建立
+`127.0.0.1:502` controller，再啟動 `IoBridge.IoSimulator.exe` 的純待機 server；
+確認安全交握後讓 server 正常退出，要求主程式判定斷線，最後重開 simulator 並要求
+主程式不重啟即可恢復。`--cycles 0` 表示 DI-0=High、DI-1=Low，僅保持
+`--initial-delay-ms` 指定的待機時間，不會觸發 Grab。測試結束會還原 IO IP、Port 與啟用狀態。
 
 `儲存電腦五分鐘穩定測試（不 Grab）` 驗證 `\\192.168.10.20\Anilox` 的 SMB 寫入探針、
 Storage app heartbeat、UI 綠燈、五分鐘穩定性及正常關閉。產品探針只建立並立刻刪除自己的

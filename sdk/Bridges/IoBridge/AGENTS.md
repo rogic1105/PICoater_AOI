@@ -100,6 +100,9 @@ DI-0 全程為 High。初始延遲用來等待 app 完成 Modbus 連線；每個
 與最後 DO 狀態會寫進 result file。此入口由 DVT Runner 的實際取相情境使用，
 不得把它當成產品 IO 時序的實作來源。
 
+`--cycles 0` 是連線生命週期 DVT 的純待機模式：server 啟動後 DI-0=High、DI-1=Low，
+保持 `--initial-delay-ms` 後正常退出，不產生 START 邊緣。
+
 ## Build
 
 一律 `Release|x64`。`sdk/Bridges/IoBridge/*.sln` 或主 `PICoater_AOI.sln`（已收四個 IoBridge sample 含 IoSimulator）。`.Core` 輸出位置不可改（共用 bin 是刻意設計）。

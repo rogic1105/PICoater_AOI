@@ -1,0 +1,186 @@
+{
+  "Id": "virtual-io-recovery",
+  "Name": "虛擬 IO 連線與自動重連",
+  "Description": "主程式先啟動、IoSimulator 後上線；驗證安全交握、server 退出斷線，以及模擬器重啟後主程式自動恢復。全程 DI-1 維持 Low，不觸發 Grab。",
+  "Steps": [
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "normalize-log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "正規化為日常運行記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "日常運行",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode",
+      "Contract": "DVT.LogMode",
+      "Title": "切換為流程驗證記錄",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "log-mode-proof",
+      "Contract": "DVT.LogMode",
+      "Title": "確認 DVT 探針已開啟",
+      "Action": "wait-log",
+      "Pattern": "log mode=FlowVerification",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "disable-io",
+      "Contract": "H1.Virtual",
+      "Title": "先關閉 IO，建立與執行前設定無關的測試起點",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "否",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "reset-io-evidence",
+      "Contract": "H1",
+      "Title": "清除啟動階段舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "io-ip",
+      "Contract": "H1",
+      "Title": "切換到本機 IO 模擬器",
+      "Action": "set-property",
+      "Target": "IO IP",
+      "Value": "127.0.0.1",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-port",
+      "Contract": "H1",
+      "Title": "使用標準 Modbus 連接埠",
+      "Action": "set-property",
+      "Target": "IO Port",
+      "Value": "502",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "enable-io",
+      "Contract": "H1",
+      "Title": "啟用 IO controller",
+      "Action": "set-property",
+      "Target": "啟用 IO",
+      "Value": "是",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "controller-before-server",
+      "Contract": "H1",
+      "Title": "確認主程式先開始等待本機 IO",
+      "Action": "wait-log",
+      "Pattern": "IO controller start generation=\\d+ endpoint=127\\.0\\.0\\.1:502",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "io-simulator-first",
+      "Contract": "H1.Virtual",
+      "Title": "模擬器延後上線並保持待機",
+      "Action": "launch-helper",
+      "Target": "bin\\x64\\Release\\tools\\io\\IoBridge.IoSimulator.exe",
+      "Value": "--auto --port 502 --cycles 0 --initial-delay-ms 12000 --exit-delay-ms 0 --result-file D:\\Anilox\\Logs\\io-simulator-virtual-first.txt",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "first-connected",
+      "Contract": "H1.Virtual",
+      "Title": "確認延後上線仍完成安全交握",
+      "Action": "wait-log",
+      "Pattern": "IO 恢復連線",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "first-server-exit",
+      "Contract": "H1.Virtual",
+      "Title": "等待第一個模擬器正常結束",
+      "Action": "wait-helper-exit",
+      "Target": "io-simulator-first",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "disconnect-detected",
+      "Contract": "H1.Virtual",
+      "Title": "確認 server 消失後主程式判定斷線",
+      "Action": "wait-log",
+      "Pattern": "⚠ IO 斷線",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "io-simulator-second",
+      "Contract": "H1.Virtual",
+      "Title": "重新啟動模擬器並保持待機",
+      "Action": "launch-helper",
+      "Target": "bin\\x64\\Release\\tools\\io\\IoBridge.IoSimulator.exe",
+      "Value": "--auto --port 502 --cycles 0 --initial-delay-ms 30000 --exit-delay-ms 0 --result-file D:\\Anilox\\Logs\\io-simulator-virtual-second.txt",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "reconnected",
+      "Contract": "H1.Virtual",
+      "Title": "確認不重開主程式即可恢復",
+      "Action": "wait-log",
+      "Pattern": "IO 恢復連線",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "no-start-edge",
+      "Contract": "H1.Virtual",
+      "Title": "確認純待機測試沒有觸發取相",
+      "Action": "verify-log-absent",
+      "Pattern": "io:DI START|IO grab request|capture gate open",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的 IO 設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "stop-second-simulator",
+      "Contract": "DVT.Cleanup",
+      "Title": "關閉第二個模擬器",
+      "Action": "stop-helper",
+      "Target": "io-simulator-second",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放完成",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行完整 Flow 檢查器",
+      "Action": "run-checker",
+      "TimeoutSeconds": 120
+    }
+  ]
+}
