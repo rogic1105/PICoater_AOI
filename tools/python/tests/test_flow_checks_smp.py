@@ -40,6 +40,38 @@ def result(report, rule: str):
 
 
 class GlobalContractValidatorTests(unittest.TestCase):
+    def test_shutdown_light_off_before_release_passes(self):
+        report = GlobalContractValidator().validate(
+            session(
+                "ui:關閉程式",
+                "shutdown light off result=sent",
+                "shutdown resources released",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "G2.light-off").status)
+
+    def test_shutdown_light_command_failure_fails(self):
+        report = GlobalContractValidator().validate(
+            session(
+                "ui:關閉程式",
+                "shutdown light off result=failed",
+                "shutdown resources released",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "G2.light-off").status)
+
+    def test_legacy_shutdown_without_light_evidence_is_not_covered(self):
+        report = GlobalContractValidator().validate(
+            session(
+                "ui:關閉程式",
+                "shutdown resources released",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.NOT_COVERED,
+            result(report, "G2.light-off").status,
+        )
+
     def test_overlay_restore_and_synchronized_change_pass(self):
         report = GlobalContractValidator().validate(
             session(

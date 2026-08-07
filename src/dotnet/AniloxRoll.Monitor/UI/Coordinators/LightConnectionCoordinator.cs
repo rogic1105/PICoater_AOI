@@ -5,6 +5,14 @@ using LightBridge.Core;
 
 namespace AniloxRoll.Monitor.UI.Coordinators
 {
+    internal enum LightShutdownResult
+    {
+        Sent,
+        NotConnected,
+        AlreadyDisposed,
+        Failed
+    }
+
     internal sealed class LightConnectionSnapshot
     {
         public LightConnectionSnapshot(
@@ -177,6 +185,61 @@ namespace AniloxRoll.Monitor.UI.Coordinators
         {
             LightController controller = GetConnectedController();
             controller?.TurnOff(channel);
+        }
+
+        public LightShutdownResult Shutdown()
+        {
+            LightController staleController;
+            int channel;
+            lock (_sync)
+            {
+                if (_disposed)
+                    return LightShutdownResult.AlreadyDisposed;
+
+                _disposed = true;
+                ++_generation;
+                _enabled = false;
+                _probeInFlight = false;
+                channel = _channel;
+                staleController = _controller;
+                _controller = null;
+                _pendingProbe = null;
+            }
+
+            _probeSignal.Set();
+            bool workerStopped =
+                Thread.CurrentThread == _probeThread ||
+                _probeThread.Join(15000);
+            if (!workerStopped)
+            {
+                Trace.TraceWarning(
+                    "[Light.Shutdown] timed out waiting for probe worker");
+            }
+
+            LightShutdownResult result = LightShutdownResult.NotConnected;
+            try
+            {
+                if (staleController != null && staleController.IsConnected)
+                {
+                    result = staleController.TurnOff(channel)
+                        ? LightShutdownResult.Sent
+                        : LightShutdownResult.Failed;
+                }
+            }
+            catch (Exception ex)
+            {
+                result = LightShutdownResult.Failed;
+                Trace.TraceWarning(
+                    $"[Light.Shutdown] {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                DisposeController(staleController);
+                if (workerStopped)
+                    _probeSignal.Dispose();
+            }
+
+            return result;
         }
 
         public void SetBrightness(int channel, int brightness)
@@ -405,32 +468,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
 
         public void Dispose()
         {
-            LightController staleController;
-            lock (_sync)
-            {
-                if (_disposed) return;
-                _disposed = true;
-                ++_generation;
-                _enabled = false;
-                _probeInFlight = false;
-                staleController = _controller;
-                _controller = null;
-                _pendingProbe = null;
-            }
-
-            _probeSignal.Set();
-            bool workerStopped =
-                Thread.CurrentThread == _probeThread ||
-                _probeThread.Join(15000);
-            if (!workerStopped)
-            {
-                Trace.TraceWarning(
-                    "[Light.Dispose] timed out waiting for probe worker");
-            }
-
-            DisposeController(staleController);
-            if (workerStopped)
-                _probeSignal.Dispose();
+            Shutdown();
         }
 
         private static void DisposeController(LightController controller)

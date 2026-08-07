@@ -28,6 +28,7 @@ class GlobalContractValidator:
         else:
             report.add(self.domain, "G1", CheckStatus.PASS, "未出現契約違規行")
         self._check_shutdown(session, report)
+        self._check_light_shutdown(session, report)
         self._check_overlay_state(session, report)
         return report
 
@@ -110,4 +111,59 @@ class GlobalContractValidator:
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"關閉={len(closing)}；failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_light_shutdown(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        closing = [
+            index
+            for index, line in enumerate(session.lines)
+            if line.message == "ui:關閉程式"
+        ]
+        if not closing:
+            report.add(
+                self.domain,
+                "G2.light-off",
+                CheckStatus.NOT_COVERED,
+                "本 session 未正常關閉",
+            )
+            return
+
+        evidence = [
+            line
+            for line in session.lines[closing[-1] + 1:]
+            if line.message.startswith("shutdown light off result=")
+        ]
+        if not evidence:
+            report.add(
+                self.domain,
+                "G2.light-off",
+                CheckStatus.NOT_COVERED,
+                "session predates shutdown light-off evidence",
+            )
+            return
+
+        allowed = {"sent", "not-connected", "not-configured", "already-disposed"}
+        outcomes = [line.message.split("=", 1)[1] for line in evidence]
+        complete_index = next(
+            (
+                index
+                for index, line in enumerate(session.lines)
+                if line.message == "shutdown resources released"
+            ),
+            None,
+        )
+        evidence_index = session.lines.index(evidence[0])
+        ok = (
+            len(evidence) == 1
+            and outcomes[0] in allowed
+            and complete_index is not None
+            and evidence_index < complete_index
+        )
+        report.add(
+            self.domain,
+            "G2.light-off",
+            CheckStatus.PASS if ok else CheckStatus.FAIL,
+            f"events={len(evidence)} outcomes={','.join(outcomes)}",
         )

@@ -263,6 +263,7 @@ namespace AniloxRoll.Monitor.Forms
 
         private async Task ReleaseRuntimeResourcesAsync()
         {
+            Task lightShutdownTask = ShutdownLightControllerAsync();
             await ShutdownIoControllerAsync();
 
             try { FreePrecomputedColMeanBuffers(); }
@@ -283,8 +284,7 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             try { _inspectionService?.Dispose(); } catch { }
-            try { _lightConnectionCoordinator?.Dispose(); } catch { }
-            _lightConnectionCoordinator = null;
+            await lightShutdownTask;
             try { _storageHealthCoordinator?.Dispose(); } catch { }
             _storageHealthCoordinator = null;
             try { _storageHeartbeatService?.Dispose(); } catch { }
@@ -295,6 +295,51 @@ namespace AniloxRoll.Monitor.Forms
             _retentionService = null;
             try { _remoteCopyService?.Dispose(); } catch { }
             _remoteCopyService = null;
+        }
+
+        private async Task ShutdownLightControllerAsync()
+        {
+            LightConnectionCoordinator coordinator = _lightConnectionCoordinator;
+            if (coordinator == null)
+            {
+                FlowTrace.Log("shutdown light off result=not-configured");
+                return;
+            }
+
+            LightShutdownResult result;
+            try
+            {
+                result = await Task.Run(() => coordinator.Shutdown());
+            }
+            catch (Exception ex)
+            {
+                result = LightShutdownResult.Failed;
+                Trace.TraceWarning(
+                    $"[Shutdown.Light] {ex.GetType().Name}: {ex.Message}");
+            }
+            finally
+            {
+                if (ReferenceEquals(_lightConnectionCoordinator, coordinator))
+                    _lightConnectionCoordinator = null;
+            }
+
+            string outcome;
+            switch (result)
+            {
+                case LightShutdownResult.Sent:
+                    outcome = "sent";
+                    break;
+                case LightShutdownResult.NotConnected:
+                    outcome = "not-connected";
+                    break;
+                case LightShutdownResult.AlreadyDisposed:
+                    outcome = "already-disposed";
+                    break;
+                default:
+                    outcome = "failed";
+                    break;
+            }
+            FlowTrace.Log($"shutdown light off result={outcome}");
         }
 
         /// <summary>

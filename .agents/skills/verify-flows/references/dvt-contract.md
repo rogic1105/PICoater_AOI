@@ -878,14 +878,27 @@ fit/1x 手勢（合法視野重設主人）：OnMouseDown@ImageCanvas.cs → Mul
 **log-flow（執行期腳印＝判準）**
 ```
 T1: ui:關閉程式
+Tbg: shutdown light off result={sent|not-connected|not-configured|already-disposed|failed}
 Tbg: FreeCameras（cams=M）
 Tbg: TeardownImageDisplay / TeardownWaterfall（有哪個拆哪個）
 T1: shutdown resources released
 T1: （再配置時）F1 全序重跑——view 必須重建+重訂閱新相機批次
 ```
 
+`shutdown light off` 必須早於 `shutdown resources released` 且每次關閉恰一行。光源已連線時只接受
+`sent`；未啟用或未連線可記 `not-configured`／`not-connected`，`failed` 一律是契約失敗。
+關燈與序列埠釋放由 `LightConnectionCoordinator.Shutdown` 同一責任鏈完成，Form 不可只 Dispose COM Port。
+
 **code-flow（靜態地圖＝責任鏈＋載重點；audit 時兩者都要對）**
 ```
+OnFormClosing@AniloxRollForm.cs
+ → ReleaseRuntimeResourcesAsync
+ → ShutdownLightControllerAsync（與 IO／camera 收尾並行，避免相機釋放延遲關燈）
+ → Task.Run(LightConnectionCoordinator.Shutdown)
+    ├ 停止 probe generation＋等待 worker 收尾
+    ├ LightController.TurnOff(channel)
+    └ LightController.Dispose（關閉 COM Port）
+
 ReleaseAsync@LiveCameraManager.cs
  ├ 呼叫端先 _cameraStatusTimer.Stop ＋ IsReleasing=true
  ├ await allocation gate（配置中的 native call 返回前不得釋放）
