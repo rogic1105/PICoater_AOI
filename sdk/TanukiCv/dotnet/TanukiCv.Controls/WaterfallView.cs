@@ -98,6 +98,7 @@ namespace TanukiCv.Controls
         private readonly List<BufFrame> _preBuffer = new List<BufFrame>(); // 週期學到前緩衝（學到才依 tick 入槽）
         private readonly SortedDictionary<long, Slot> _pending = new SortedDictionary<long, Slot>(); // 開啟槽（依 seq）
         private readonly HashSet<int> _seenCams = new HashSet<int>(); // 曾出過幀的相機
+        private readonly HashSet<int> _expectedCams = new HashSet<int>(); // 本輪擷取預期加入每個 band 的相機
         private readonly long[] _perCamLastTick;     // 各相機上一幀 tick（估週期 + 偵掉幀）
         private readonly long[] _perCamLastWall;     // 各相機上一幀 wall-clock（估週期 wall）
         private readonly long[] _perCamSeq;          // 各相機目前 seq（watermark；初值 -1=尚無幀）
@@ -456,10 +457,20 @@ namespace TanukiCv.Controls
         /// 重 grab 時呼叫 → 舊圖清空（符合預期）+ 避免新幀接在舊網格上、兩台重啟相位不一而錯位。</summary>
         public void Reset()
         {
+            Reset(null);
+        }
+
+        /// <summary>
+        /// 重置瀑布並固定本輪預期相機集合。提供集合時，band 不會因固定 grace 到期而把
+        /// 尚在複製影像的相機誤判成缺幀；只有相機真的越過該序號或 stale 才允許補黑。
+        /// </summary>
+        public void Reset(IEnumerable<int> expectedCameraIds)
+        {
             int generation;
             int pendingDropped;
             int queuedDropped;
             bool writerWasRunning;
+            string expectedCameras;
             lock (_lock)
             {
                 pendingDropped = _pending.Count + _preBuffer.Count;
@@ -471,6 +482,14 @@ namespace TanukiCv.Controls
                 _writeRow = 0;
                 _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear();
                 _seenCams.Clear();
+                _expectedCams.Clear();
+                if (expectedCameraIds != null)
+                {
+                    foreach (int cameraId in expectedCameraIds)
+                        if (cameraId >= 1 && cameraId <= _camCount)
+                            _expectedCams.Add(cameraId);
+                }
+                expectedCameras = FormatCameraIds(_expectedCams);
                 for (int i = 0; i < _camCount; i++) { _perCamLastTick[i] = 0; _perCamLastWall[i] = 0; _perCamSeq[i] = -1; }
                 _periodTicks = _expectedPeriodTicks;
                 _periodWallMs = _expectedPeriodWallMs;
@@ -481,7 +500,7 @@ namespace TanukiCv.Controls
                 _clearVisibleTileOnNextRefresh = true;
             }
             FlowLog?.Invoke(
-                $"reset generation={generation} pendingDropped={pendingDropped} " +
+                $"reset generation={generation} expected={expectedCameras} pendingDropped={pendingDropped} " +
                 $"queuedDropped={queuedDropped} writerActive={writerWasRunning} clearTile=True");
             _lodContentDirty = true;
             PushLodRefresh();
@@ -617,10 +636,13 @@ namespace TanukiCv.Controls
                 {
                     long firstSeq = FirstPendingSeq();
                     var s = _pending[firstSeq];
-                    // complete：每台 seen 相機都在此 seq 或已越過；但啟動期（集合未穩）要等 join grace，
-                    // 讓晚到/剛上線的相機加入同 seq（防 cam1 先到就把 slot flush 成單台、cam2 另開一條＝錯位一格）。
-                    bool complete = _seenCams.Count > 0 && AllSeenInOrPast(s.Seq)
-                                    && (stable || (nowMs - s.FirstWallMs) >= JoinGraceMs);
+                    // App 已提供預期集合時，必須等每台到達或 watermark 證明真掉幀。
+                    // 沒有提供集合的通用 SDK 呼叫者才沿用 seen + join grace 的推測模式。
+                    bool hasExpectedSet = _expectedCams.Count > 0;
+                    bool complete = hasExpectedSet
+                        ? AllExpectedInOrPast(s.Seq)
+                        : _seenCams.Count > 0 && AllSeenInOrPast(s.Seq)
+                          && (stable || (nowMs - s.FirstWallMs) >= JoinGraceMs);
                     bool isStale = (nowMs - s.FirstWallMs) >= stale;
                     if (!(complete || isStale)) break;
                     s.FlushReason = complete ? "complete" : "stale";
@@ -640,7 +662,17 @@ namespace TanukiCv.Controls
         // 每台 seen 相機：要嘛此 seq 有幀，要嘛已推進過此 seq（_perCamSeq>seq＝它已產出更後面的幀→此格它沒幀=真掉幀）。
         private bool AllSeenInOrPast(long seq)
         {
-            foreach (var c in _seenCams)
+            return AllCamerasInOrPast(_seenCams, seq);
+        }
+
+        private bool AllExpectedInOrPast(long seq)
+        {
+            return AllCamerasInOrPast(_expectedCams, seq);
+        }
+
+        private bool AllCamerasInOrPast(IEnumerable<int> cameras, long seq)
+        {
+            foreach (var c in cameras)
             {
                 if (_pending.TryGetValue(seq, out var s) && s.Frames.ContainsKey(c)) continue;
                 if (_perCamSeq[c - 1] > seq) continue; // 已越過 → 此格該台真掉幀（補黑）
@@ -731,7 +763,8 @@ namespace TanukiCv.Controls
                 _logFirstBandAfterReset = false;
                 FlowLog?.Invoke(
                     $"band first generation={_contentGeneration} seq={slot.Seq} " +
-                    $"ticks={minTick}~{maxTick} startRow={bandStart} height={bandH}");
+                    $"cams={FormatCameraIds(slot.Frames.Keys)} expected={FormatCameraIds(_expectedCams)} " +
+                    $"ticks={minTick}~{maxTick} startRow={bandStart} height={bandH} reason={slot.FlushReason}");
             }
             FlowState();   // 狀態快照（每秒一行）：占用/總高+畫面端＝方向可判量
 
@@ -971,6 +1004,16 @@ namespace TanukiCv.Controls
                     layers[layer][camera] = new byte[nChunks][];
             }
             return layers;
+        }
+
+        private static string FormatCameraIds(IEnumerable<int> cameraIds)
+        {
+            if (cameraIds == null) return "none";
+            var values = new List<int>();
+            foreach (int cameraId in cameraIds) values.Add(cameraId);
+            if (values.Count == 0) return "none";
+            values.Sort();
+            return string.Join(",", values);
         }
 
         private float[][][] CreateCameraLayerSourceGains()

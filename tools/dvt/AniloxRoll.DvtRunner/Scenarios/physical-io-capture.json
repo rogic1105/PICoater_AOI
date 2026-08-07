@@ -1,7 +1,7 @@
 {
   "Id": "physical-io-capture",
   "Name": "IO 實際取相三循環",
-  "Description": "用本機 IO 模擬器送出三次 10 秒 START High，驗證實體相機、光源、Curve、尾幀排水、封裝與遠端待傳鏈。",
+  "Description": "用本機 IO 模擬器送出三次 10 秒 START High，驗證實體相機、瀑布第一列相機集合、光源、Curve、尾幀排水、封裝與遠端待傳鏈。",
   "Steps": [
     {
       "Id": "launch",
@@ -43,6 +43,15 @@
       "Action": "set-property",
       "Target": "啟用光源",
       "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "waterfall-mode",
+      "Contract": "F2.IO",
+      "Title": "固定以瀑布驗證每輪第一列",
+      "Action": "set-property",
+      "Target": "主畫面顯示",
+      "Value": "瀑布",
       "TimeoutSeconds": 10
     },
     {
@@ -173,6 +182,14 @@
       "TimeoutSeconds": 30
     },
     {
+      "Id": "cycle1-waterfall-band",
+      "Contract": "F2.IO",
+      "Title": "第一輪瀑布第一列相機集合完整",
+      "Action": "wait-log",
+      "Pattern": "WF band first .*cams=.* expected=.* reason=complete",
+      "TimeoutSeconds": 30
+    },
+    {
       "Id": "cycle1-curve",
       "Contract": "F2.IO",
       "Title": "第一輪 Curve 晚於影像上畫",
@@ -230,6 +247,14 @@
       "TimeoutSeconds": 30
     },
     {
+      "Id": "cycle2-waterfall-band",
+      "Contract": "F2.IO",
+      "Title": "第二輪瀑布第一列相機集合完整",
+      "Action": "wait-log",
+      "Pattern": "WF band first .*cams=.* expected=.* reason=complete",
+      "TimeoutSeconds": 30
+    },
+    {
       "Id": "cycle2-curve",
       "Contract": "F2.IO",
       "Title": "第二輪 Curve 晚於影像上畫",
@@ -284,6 +309,14 @@
       "Title": "第三輪首組影像到齊",
       "Action": "wait-log",
       "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "cycle3-waterfall-band",
+      "Contract": "F2.IO",
+      "Title": "第三輪瀑布第一列相機集合完整",
+      "Action": "wait-log",
+      "Pattern": "WF band first .*cams=.* expected=.* reason=complete",
       "TimeoutSeconds": 30
     },
     {

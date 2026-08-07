@@ -254,7 +254,11 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             if (!WaterfallMode || _waterfallView == null) return;
             SeedWaterfallFramePeriod();
-            _waterfallView.Reset();
+            var expectedCameraIds = new List<int>();
+            foreach (var camera in Cameras)
+                if (camera != null && camera.IsConnected)
+                    expectedCameraIds.Add(camera.CameraId);
+            _waterfallView.Reset(expectedCameraIds);
         }
 
         public void RefireMainViewRange(string reason)

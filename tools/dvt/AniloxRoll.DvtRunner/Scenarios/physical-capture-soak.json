@@ -1,7 +1,7 @@
 {
   "Id": "physical-capture-soak",
   "Name": "反覆 Grab 耐久測試",
-  "Description": "本機 IO 模擬器持續送出 High 10 秒／Low 4 秒；每輪都必須完成取相、Curve、尾幀排水、封裝與遠端待傳，並持續量測 UI 與資源。",
+  "Description": "本機 IO 模擬器持續送出 High 10 秒／Low 4 秒；每輪都必須完成取相、完整瀑布第一列、Curve、尾幀排水、封裝與遠端待傳，並持續量測 UI 與資源。",
   "Steps": [
     {
       "Id": "launch",
@@ -43,6 +43,15 @@
       "Action": "set-property",
       "Target": "COM Port",
       "Value": "COM17",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "waterfall-mode",
+      "Contract": "F2.IO",
+      "Title": "固定以瀑布驗證每輪第一列",
+      "Action": "set-property",
+      "Target": "主畫面顯示",
+      "Value": "瀑布",
       "TimeoutSeconds": 15
     },
     {
@@ -204,6 +213,15 @@
       "Title": "每輪首組影像都完整對齊",
       "Action": "verify-log-min-count",
       "Pattern": "capture first-set ready .*aligned=True",
+      "Value": "{cycles:14000}",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "waterfall-bands-complete",
+      "Contract": "F2.IO",
+      "Title": "每輪瀑布第一列都包含全部預期相機",
+      "Action": "verify-log-min-count",
+      "Pattern": "WF band first .*cams=.* expected=.* reason=complete",
       "Value": "{cycles:14000}",
       "TimeoutSeconds": 15
     },

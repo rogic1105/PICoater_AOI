@@ -471,7 +471,7 @@ T1: acquisition sync complete reason=start attempts=A cams=P phase=True
 T1: capture charts reset reason=start-grab
 T1: StartGrab（cams=M）
 T1: ApplyMainDisplayMode → 同模式    ← 冪等：不得出現 create/teardown 行
-T1: WF reset generation=G pendingDropped=N queuedDropped=N writerActive=B clearTile=True
+T1: WF reset generation=G expected=1,2,... pendingDropped=N queuedDropped=N writerActive=B clearTile=True
 T1: viewRange refire reason=capture-start mode=WF|IC
     ← 清除上一輪 Curve 視野後，用主畫面既有幾何主動重發；不得等滑鼠或首幀才補
 T1: capture output begin grab=… date=yyyyMMdd
@@ -484,7 +484,8 @@ T1: capture gate open cams=P warm=True   ← P=在線數；必晚於同步完成
 Tn: capture first-set ready ... aligned=True
 Tn: grab stop armed condition=Time limit=Ns configured=Ns grace=0s source=io|manual
     start=first-set grab=…                  ← Time 真正起算點；前面的跨邊界丟幀不算入擷取時間
-Tn: WF band first generation=G seq=S ticks=A~B startRow=0 height=H
+Tn: WF band first generation=G seq=S cams=1,2,... expected=1,2,... ticks=A~B startRow=0 height=H reason=complete
+    ← 第一列的 cams 必須等於 expected；缺一台即代表即時瀑布把同一組相機拆成兩列，DVT 直接 FAIL。
 Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線」相機恰一行，順序不定
 （首幀齊後進入穩態 → 適用「穩態靜默通則」：無互動下不得再有顯示狀態**變更**行。
   狀態**快照**行〔rowChart/WF state/IC state/stats，見§狀態快照儀器〕＝儀器輸出，穩態每秒出現正常）
@@ -518,7 +519,8 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │      │  └ 同板 spread≤5ms 才成功；超限最多重試 3 次，失敗不進產品狀態
  │      ├ ResetFlowFirstFrame@LiveDisplayCoordinator.cs（每輪 grab 重驗「幀有流到 view」）
  │      ├ ApplyMainDisplayMode@LiveDisplayCoordinator.cs   ← 冪等（view 已存在早退）＝本 flow 不得出現 create/teardown 行
- │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset@WaterfallView.cs（清舊圖＋重置 tick 對齊，防新幀接舊網格錯位）
+ │      ├ ResetWaterfallIfActive@LiveDisplayCoordinator.cs → Reset(expectedCameraIds)@WaterfallView.cs
+ │      │  （清舊圖＋固定本輪在線相機集合＋重置 tick 對齊；第一列不得以固定 grace 提前缺相機 flush）
  │      ├ OnCaptureSequenceReset → ResetLiveChartsForDisplayTransition@AniloxRollForm.Live.cs
  │      │  → 清列曲線累積位置、待上畫資料及欄／列相機快取
  │      │  → `capture charts reset reason=start-grab`
@@ -2046,6 +2048,7 @@ T1: live inspection apply setting={name} hm=C/R thresholdC=Mean/Max
 （dc_／dd_ 快速連續改變，停止 80 ms 後只套最後值；不得先清空 Curve）
 Tn: live curve applied setting={name} generation=G hm=C/R
     colMeanPeak=… colMaxPeak=… rowMeanPeak=… rowMaxPeak=…
+    rowAction={rescale-current|replace-current|none} rowWrite=A->B
 
 （正規值改變即套用目前監控影像，不等待下一幀）
 Tn: live image scale source=adaptive-standard-half captureHm=B currentHm=C/R scale=C,R
@@ -2080,7 +2083,9 @@ SettingsHub.Changed
  → SettingImpactClassifier：S1 全部帶 LiveInspectionCurves
  → ApplyLiveInspectionSettings@AniloxRollForm.Live.cs
     ├ 閾值／欄曲線模式／方向：保留資料，立即更新線與下一幀 O/X
-    └ 欄／列正規值：保存 raw Curve，80 ms latest-only 重算欄列顯示；不得清空造成閃白
+    └ 欄／列正規值：保存 raw／neutral Curve，80 ms latest-only 重算欄列顯示；不得清空造成閃白
+       ├ 即時模式：replace-current，只替換目前列 Curve
+       └ 瀑布模式：rescale-current，重算已累積列 Curve，禁止 append 新 band
 
 ProcessImage@AniloxCamera.cs
  ├ captureHmC 在一輪 Grab 開始後固定；Grab 中改正規值只改 view，不改 native／存檔基準
@@ -2088,7 +2093,9 @@ ProcessImage@AniloxCamera.cs
  │  → Live 顯示欄值 = raw × frameHmC × currentHmC
  ├ OnLiveRowCurveData(cam, rawMean, rawMax, frameHmC)
  │  → Live 顯示列值 = raw × frameHmC × currentHmR
- ├ CheckLiveMura（使用換算後值）→ pending row → chart
+ ├ CheckLiveMura（使用換算後值）＋ pending neutral row
+ │  ├ 即時模式：依 currentHmR 產生目前 Curve
+ │  └ 瀑布模式：append neutral band；正規值變更由 WaterfallRowCurveAccumulator 原地重算 display history
  └ Hessian C/R neutral half standard map 每幀產生，不受存檔 gate 影響
     → HessianStandardMapCodec.ComputeAdaptiveByteGain（每幀最大 neutral sample → 255）
     → HessianStandardMapCodec.FillGray8Expanded(gain=sourceGain) 寫入既有 full-size host buffer
@@ -2113,7 +2120,9 @@ neutral Hessian × current，且不能先被固定 byte 基準截斷。
 
 `live curve applied` 的 `hm` 必須等於前面最後一筆 `live inspection apply`；快速滾輪造成的
 中間 generation 可以略過，但停止輸入後最後 generation 必須套用。瀑布模式的 row peak 必須量
-本次重算後送往瀑布列圖表的資料，不得因即時模式 cache 為空而假報 0。`live image scale` 的 source 必須為 `adaptive-standard-half`，C/R scale
+本次重算後送往瀑布列圖表的資料，不得因即時模式 cache 為空而假報 0；且
+`rowAction=rescale-current` 時 `rowWrite` 前後必須相同，否則代表把重算結果錯接到曲線尾端。
+`live image scale` 的 source 必須為 `adaptive-standard-half`，C/R scale
 必須分別等於 current HM；每筆 probe 必須帶該幀 `sourceGain`；
 最後 `RV normalization queued` generation 必須有同代 settle。三者分別抓過期 Curve 上畫、
 監控只換模式卻未重繪現有影像，以及回顧每格都啟動重讀或最後值未落地。
@@ -2237,7 +2246,7 @@ T1: WF layer raw|column|row->raw|column|row writeRow=N history=preserved   ← �
   避免清空後殘留一條舊來源影像。`ImageCanvas.ApplyLodTile` 是 LOD generation 的最後守門。
   新 Grab Reset 還必須以 `RefreshLod(clearCurrentTile:true)` 立即清除目前可見 tile；一般串流更新維持
   `clearCurrentTile:false`，保留上一 tile 等新內容完成，兩種語意不得混用。首個 `WF band first`
-  的 generation 必須等於該輪 Reset，且 `startRow=0`。
+  的 generation 必須等於該輪 Reset、`startRow=0`、`cams=expected` 且 `reason=complete`。
 - 新配置相機由 `AllocateCamerasAsync(enableEnhance)` 取得同一設定，不能另有預設值。
 
 ### S5 強化熱力圖（hda_EnhanceHeatmap）

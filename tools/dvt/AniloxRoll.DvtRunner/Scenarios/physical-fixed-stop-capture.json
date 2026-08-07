@@ -1,7 +1,7 @@
 {
   "Id": "physical-fixed-stop-capture",
   "Name": "時間與高度實際取相",
-  "Description": "用本機 IO 模擬器提早送出 START Low，驗證時間與高度停止條件仍由各自的固定目標決定，並完成 Curve、封裝與遠端待傳鏈。",
+  "Description": "用本機 IO 模擬器提早送出 START Low，驗證時間與高度停止條件、瀑布第一列相機集合，並完成 Curve、封裝與遠端待傳鏈。",
   "Steps": [
     {
       "Id": "launch",
@@ -43,6 +43,15 @@
       "Action": "set-property",
       "Target": "啟用光源",
       "Value": "是",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "waterfall-mode",
+      "Contract": "F2",
+      "Title": "固定以瀑布驗證每輪第一列",
+      "Action": "set-property",
+      "Target": "主畫面顯示",
+      "Value": "瀑布",
       "TimeoutSeconds": 10
     },
     {
@@ -180,6 +189,14 @@
       "TimeoutSeconds": 30
     },
     {
+      "Id": "time-waterfall-band",
+      "Contract": "F2.Time",
+      "Title": "時間模式瀑布第一列相機集合完整",
+      "Action": "wait-log",
+      "Pattern": "WF band first .*cams=.* expected=.* reason=complete",
+      "TimeoutSeconds": 30
+    },
+    {
       "Id": "time-armed",
       "Contract": "F2.Time",
       "Title": "首幀後啟動十秒計時",
@@ -282,6 +299,14 @@
       "Title": "高度模式首幀集合對齊",
       "Action": "wait-log",
       "Pattern": "capture first-set ready .*aligned=True",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "height-waterfall-band",
+      "Contract": "F2.Height",
+      "Title": "高度模式瀑布第一列相機集合完整",
+      "Action": "wait-log",
+      "Pattern": "WF band first .*cams=.* expected=.* reason=complete",
       "TimeoutSeconds": 30
     },
     {

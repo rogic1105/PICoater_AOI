@@ -181,7 +181,7 @@
       "Contract": "S1",
       "Title": "確認欄列 Curve 套用最後正規值",
       "Action": "wait-log",
-      "Pattern": "live curve applied setting=dd_HessianMaxFactorH .*hm=0\\.4700/0\\.8300",
+      "Pattern": "live curve applied setting=dd_HessianMaxFactorH .*hm=0\\.4700/0\\.8300 .*rowAction=rescale-current rowWrite=(\\d+)->\\1",
       "TimeoutSeconds": 30
     },
     {

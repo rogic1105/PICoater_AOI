@@ -1,7 +1,7 @@
 {
   "Id": "monitor-background-v1",
   "Name": "監控與背景 V1",
-  "Description": "依 F1/F2/F3/F8 自動取得背景、預覽、正常 Grab/Stop，最後執行完整 Flow checker。",
+  "Description": "依 F1/F2/F3/F8 自動取得背景、預覽、瀑布 Grab/Stop，逐輪驗證第一列相機集合完整，最後執行完整 Flow checker。",
   "Steps": [
     {
       "Id": "launch",
@@ -43,6 +43,15 @@
       "Action": "set-property",
       "Target": "啟用 IO",
       "Value": "否",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "waterfall-mode",
+      "Contract": "F2",
+      "Title": "固定以瀑布驗證第一列相機集合",
+      "Action": "set-property",
+      "Target": "主畫面顯示",
+      "Value": "瀑布",
       "TimeoutSeconds": 10
     },
     {
@@ -213,6 +222,14 @@
       "Action": "wait-log",
       "Pattern": "capture first-set ready .*aligned=True",
       "TimeoutSeconds": 180
+    },
+    {
+      "Id": "waterfall-first-band",
+      "Contract": "F2",
+      "Title": "確認瀑布第一列包含全部預期相機",
+      "Action": "wait-log",
+      "Pattern": "WF band first .*cams=.* expected=.* reason=complete",
+      "TimeoutSeconds": 30
     },
     {
       "Id": "curve-after-image",

@@ -36,7 +36,9 @@ class SettingsFlowValidator:
         r"colMeanPeak=(?P<col_mean>\d+(?:\.\d+)?) "
         r"colMaxPeak=(?P<col_max>\d+(?:\.\d+)?) "
         r"rowMeanPeak=(?P<row_mean>\d+(?:\.\d+)?) "
-        r"rowMaxPeak=(?P<row_max>\d+(?:\.\d+)?)$"
+        r"rowMaxPeak=(?P<row_max>\d+(?:\.\d+)?) "
+        r"rowAction=(?P<row_action>rescale-current|replace-current|none) "
+        r"rowWrite=(?P<row_write_before>\d+)->(?P<row_write_after>\d+)$"
     )
     _live_image_scale_pattern = re.compile(
         r"^live image scale source=(?P<source>[\w-]+) "
@@ -379,6 +381,14 @@ class SettingsFlowValidator:
                         f"hm={actual_hm_c:g}/{actual_hm_r:g} "
                         f"latest={latest_hm_c:g}/{latest_hm_r:g}"
                     )
+                if (curve_match.group("row_action") == "rescale-current"):
+                    write_before = int(curve_match.group("row_write_before"))
+                    write_after = int(curve_match.group("row_write_after"))
+                    if write_before != write_after:
+                        failures.append(
+                            "waterfall row normalization appended data "
+                            f"write={write_before}->{write_after}"
+                        )
                 continue
 
             image_match = self._live_image_scale_pattern.match(line.message)

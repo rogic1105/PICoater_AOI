@@ -181,7 +181,8 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "action=normalization-latest",
                 "live curve applied setting=dc_HessianMaxFactorV generation=2 "
                 "hm=1.0000/0.5000 colMeanPeak=0.2000 colMaxPeak=0.7000 "
-                "rowMeanPeak=0.1000 rowMaxPeak=0.3000",
+                "rowMeanPeak=0.1000 rowMaxPeak=0.3000 "
+                "rowAction=rescale-current rowWrite=3000->3000",
                 "live image scale source=adaptive-standard-half captureHm=0.5000 "
                 "currentHm=1.0000/0.5000 scale=1.0000/0.5000",
                 "RV normalization queued generation=1 setting=dc_HessianMaxFactorV",
@@ -208,12 +209,35 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "action=normalization-latest",
                 "live curve applied setting=dd_HessianMaxFactorH generation=4 "
                 "hm=0.5000/0.5000 colMeanPeak=0.2000 colMaxPeak=0.7000 "
-                "rowMeanPeak=0.1000 rowMaxPeak=0.3000",
+                "rowMeanPeak=0.1000 rowMaxPeak=0.3000 "
+                "rowAction=rescale-current rowWrite=3000->3000",
                 "live image scale source=adaptive-standard-half captureHm=0.5000 currentHm=0.5000/1.0000 "
                 "scale=1.0000/1.0000",
                 "RV normalization queued generation=4 setting=dd_HessianMaxFactorH",
                 "RV normalization settle generation=3 setting=dd_HessianMaxFactorH "
                 "hm=0.5000/1.0000",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "S1.live-normalization-output").status,
+        )
+
+    def test_live_normalization_output_rejects_waterfall_append(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "set:[dd_HessianMaxFactorH]=1.0",
+                "setting route dd_HessianMaxFactorH owner=DataStats "
+                "effects=ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dd_HessianMaxFactorH "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-latest",
+                "live curve applied setting=dd_HessianMaxFactorH generation=4 "
+                "hm=0.5000/1.0000 colMeanPeak=0.2000 colMaxPeak=0.7000 "
+                "rowMeanPeak=0.1000 rowMaxPeak=0.3000 "
+                "rowAction=rescale-current rowWrite=3000->6000",
             )
         )
 
@@ -2068,6 +2092,30 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.FAIL, result(report, "F2.waterfall-bootstrap").status
+        )
+
+    def test_waterfall_first_band_requires_every_expected_camera(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "WF band first generation=16 seq=0 cams=2 expected=1,2 "
+                "ticks=1002~1002 startRow=0 height=3000 reason=complete",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F2.waterfall-first-band").status,
+        )
+
+    def test_waterfall_first_band_complete_camera_set_passes(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "WF band first generation=16 seq=0 cams=1,2 expected=1,2 "
+                "ticks=1000~1002 startRow=0 height=3000 reason=complete",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F2.waterfall-first-band").status,
         )
 
     def test_row_chart_without_main_image_presentation_fails(self):

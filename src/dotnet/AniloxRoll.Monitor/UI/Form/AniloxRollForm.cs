@@ -73,14 +73,13 @@ namespace AniloxRoll.Monitor.Forms
         private readonly Dictionary<int, float[]> _liveRowRawMax = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float> _liveRowCaptureHm = new Dictionary<int, float>();
         private readonly object _pendingLiveRowCurveLock = new object();
-        private readonly Dictionary<int, float[]> _pendingLiveRowMean = new Dictionary<int, float[]>();
-        private readonly Dictionary<int, float[]> _pendingLiveRowMax = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _pendingLiveRowNeutralMean = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _pendingLiveRowNeutralMax = new Dictionary<int, float[]>();
         private int _liveRowPresentationCameraCount;
         private readonly Dictionary<int, float[]> _waterfallRowMeanPending = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _waterfallRowMaxPending  = new Dictionary<int, float[]>();
-        private float[] _waterfallRowMean;
-        private float[] _waterfallRowMax;
-        private int _waterfallRowWrite;
+        private readonly WaterfallRowCurveAccumulator _waterfallRowCurves =
+            new WaterfallRowCurveAccumulator();
         private ProportionalScaler _scaler;
         private MainWorkspaceLayoutController _workspaceLayout;
         private bool _syncingCanvasOverlayMode;

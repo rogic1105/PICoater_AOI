@@ -303,7 +303,7 @@ namespace AniloxRoll.Monitor.Tests
                     new[] { 1000000.0, 1000000.0 },
                     refOpsMm: 1.0);
                 view.SetExpectedFramePeriod(periodTicks: 500, periodMs: 500);
-                view.Reset();
+                view.Reset(new[] { 1, 2 });
 
                 view.PushFrame(1, new byte[] { 10, 11, 12, 13 }, 2, 2, tick: 1000);
                 view.PushFrame(2, new byte[] { 20, 21, 22, 23 }, 2, 2, tick: 1002);
@@ -314,6 +314,43 @@ namespace AniloxRoll.Monitor.Tests
                     SpinWait.SpinUntil(() => ReadPrivate<int>(view, "_writeRow") >= 2, 1000),
                     Is.True,
                     "the first aligned camera set should not wait for a second frame to learn its period");
+            }
+        }
+
+        [Test]
+        public void ExpectedCameraSet_DoesNotFlushFirstBandWhileAnotherCameraIsCopying()
+        {
+            using (var host = new Panel { Size = new Size(320, 240) })
+            using (var view = new WaterfallView(
+                host,
+                camCount: 2,
+                totalHeight: 1000,
+                fullMode: WaterfallFullMode.Restart,
+                screenMmPerPx: 0.264))
+            {
+                var flow = new List<string>();
+                view.FlowLog = flow.Add;
+                view.SetLayout(
+                    new[] { 0.0, 2.0 },
+                    new[] { 1000000.0, 1000000.0 },
+                    refOpsMm: 1.0);
+                view.SetExpectedFramePeriod(periodTicks: 500, periodMs: 500);
+                view.Reset(new[] { 1, 2 });
+
+                view.PushFrame(2, new byte[] { 20, 21, 22, 23 }, 2, 2, tick: 1002);
+                Thread.Sleep(250);
+                Application.DoEvents();
+                Assert.That(ReadPrivate<int>(view, "_writeRow"), Is.EqualTo(0));
+
+                view.PushFrame(1, new byte[] { 10, 11, 12, 13 }, 2, 2, tick: 1000);
+                Assert.That(
+                    SpinWait.SpinUntil(() => ReadPrivate<int>(view, "_writeRow") >= 2, 1000),
+                    Is.True);
+                Assert.That(ReadPrivate<int>(view, "_writeRow"), Is.EqualTo(2));
+                Assert.That(
+                    flow.Exists(line => line.Contains(
+                        "band first generation=1 seq=0 cams=1,2 expected=1,2")),
+                    Is.True);
             }
         }
 

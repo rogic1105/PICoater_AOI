@@ -59,13 +59,13 @@ $acceptanceCriteria = @{
     "Review and report 30,000-record DVT" =
         "Load exactly 30,000 grab IDs; reload jumps to newest; Review rapid/period navigation, enhancement, direction, heatmap, and display crop preserve data contracts; Report single/range curves, Y-axis toggle, fail filter, cross-tab curve reuse, clean shutdown, and the full checker pass."
     "Physical camera/background smoke" =
-        "Connected cameras become ready; background capture, preview, Grab/Stop, image-before-curve order, cleanup, and the full checker pass."
+        "Connected cameras become ready; background capture, preview, waterfall first-band cameras equal the expected set, Grab/Stop, image-before-curve order, cleanup, and the full checker pass."
     "Physical inspection-standard smoke" =
         "With cameras and light connected, brightness 100 and 255 produce measurable column and row responses; live normalization, mean/max thresholds, metric mode, direction, threshold lines, and O/X formulas match the configured inspection standards. This surrogate stimulus does not validate real Mura detection rate."
     "Physical IO capture cycles" =
-        "Three 10-second START High cycles each open the product gate, produce an aligned first set and image-before-curve evidence, drain one tail frame per camera on Low, close cleanly, finalize an archive, and enqueue remote output."
+        "Three 10-second START High cycles each open the product gate, produce an aligned first set, compose a complete waterfall first band, and emit image-before-curve evidence, drain one tail frame per camera on Low, close cleanly, finalize an archive, and enqueue remote output."
     "Physical fixed-stop capture modes" =
-        "Time mode ignores an early START Low and runs 10 seconds from the aligned first set; Height mode ignores an early START Low and stops only after all connected cameras complete 15,000 rows; both finalize archives and remote output."
+        "Time mode ignores an early START Low and runs 10 seconds from the aligned first set; Height mode ignores an early START Low and stops only after all connected cameras complete 15,000 rows; both compose a complete waterfall first band, finalize archives, and enqueue remote output."
     "Physical IO five-minute stability" =
         "Physical IO remains connected and Idle for 5 minutes; controller and shutdown flows complete."
     "Physical storage five-minute stability" =
@@ -79,7 +79,7 @@ $acceptanceCriteria = @{
     "Physical IO and storage soak" =
         "Fixed hardware topology; IO and storage stay green; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown."
     "Physical repeated capture soak" =
-        "High 10 seconds / Low 4 seconds for the configured duration; every High produces one request, gate, aligned first set, image-before-curve result, clean gate close, archive, and remote enqueue; storage and light remain green; UI and resource guards pass; clean shutdown."
+        "High 10 seconds / Low 4 seconds for the configured duration; every High produces one request, gate, aligned first set, complete waterfall first band, image-before-curve result, clean gate close, archive, and remote enqueue; storage and light remain green; UI and resource guards pass; clean shutdown."
     "Offline stress tests" =
         "All 9 high-frequency and mock Bridge cases pass for the configured wall-clock budget."
     "Offline endurance tests" =

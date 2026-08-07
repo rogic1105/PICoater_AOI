@@ -725,6 +725,10 @@ namespace AniloxRoll.Monitor.Forms
                 _liveRowRawMax[camId] = maxArr;
                 _liveRowCaptureHm[camId] = frameHessianMaxFactor;
             }
+            float[] neutralMean = HessianRescaleHelper.CloneAndRescale1D(
+                meanArr, frameHessianMaxFactor, 1f);
+            float[] neutralMax = HessianRescaleHelper.CloneAndRescale1D(
+                maxArr, frameHessianMaxFactor, 1f);
             float[] displayMean = HessianRescaleHelper.CloneAndRescale1D(
                 meanArr, frameHessianMaxFactor, currentRowFactor);
             float[] displayMax = HessianRescaleHelper.CloneAndRescale1D(
@@ -748,8 +752,8 @@ namespace AniloxRoll.Monitor.Forms
 
             lock (_pendingLiveRowCurveLock)
             {
-                _pendingLiveRowMean[camId] = displayMean;
-                _pendingLiveRowMax[camId] = displayMax;
+                _pendingLiveRowNeutralMean[camId] = neutralMean;
+                _pendingLiveRowNeutralMax[camId] = neutralMax;
             }
         }
 
@@ -766,8 +770,8 @@ namespace AniloxRoll.Monitor.Forms
             {
                 lock (_pendingLiveRowCurveLock)
                 {
-                    _pendingLiveRowMean.Clear();
-                    _pendingLiveRowMax.Clear();
+                    _pendingLiveRowNeutralMean.Clear();
+                    _pendingLiveRowNeutralMax.Clear();
                 }
                 return;
             }
@@ -776,22 +780,28 @@ namespace AniloxRoll.Monitor.Forms
             Dictionary<int, float[]> readyMax;
             lock (_pendingLiveRowCurveLock)
             {
-                if (_pendingLiveRowMean.Count == 0) return;
-                readyMean = new Dictionary<int, float[]>(_pendingLiveRowMean);
-                readyMax = new Dictionary<int, float[]>(_pendingLiveRowMax);
-                _pendingLiveRowMean.Clear();
-                _pendingLiveRowMax.Clear();
+                if (_pendingLiveRowNeutralMean.Count == 0) return;
+                readyMean = new Dictionary<int, float[]>(_pendingLiveRowNeutralMean);
+                readyMax = new Dictionary<int, float[]>(_pendingLiveRowNeutralMax);
+                _pendingLiveRowNeutralMean.Clear();
+                _pendingLiveRowNeutralMax.Clear();
             }
 
             _liveRowPresentationCameraCount = readyMean.Count;
+            float rowFactor = (float)_settings.HessianMaxFactorH;
             var swRow = System.Diagnostics.Stopwatch.StartNew();
             try
             {
                 for (int camId = 1; camId <= CameraCount; camId++)
                 {
-                    if (!readyMean.TryGetValue(camId, out float[] meanArr)) continue;
-                    if (!readyMax.TryGetValue(camId, out float[] maxArr)) continue;
-                    OnLiveRowCurveDataUi(camId, meanArr, maxArr);
+                    if (!readyMean.TryGetValue(camId, out float[] neutralMean)) continue;
+                    if (!readyMax.TryGetValue(camId, out float[] neutralMax)) continue;
+                    float[] displayMean = HessianRescaleHelper.CloneAndRescale1D(
+                        neutralMean, 1f, rowFactor);
+                    float[] displayMax = HessianRescaleHelper.CloneAndRescale1D(
+                        neutralMax, 1f, rowFactor);
+                    OnLiveRowCurveDataUi(
+                        camId, displayMean, displayMax, neutralMean, neutralMax);
                 }
             }
             finally
@@ -808,13 +818,18 @@ namespace AniloxRoll.Monitor.Forms
                 $"mode={(_settings?.he_MainDisplay == MainDisplayMode.Waterfall ? "WF" : "IC")}");
         }
 
-        private void OnLiveRowCurveDataUi(int camId, float[] meanArr, float[] maxArr)
+        private void OnLiveRowCurveDataUi(
+            int camId,
+            float[] displayMean,
+            float[] displayMax,
+            float[] neutralMean,
+            float[] neutralMax)
         {
             if (_liveRowDisplay == null) return;
 
             if (_settings?.he_MainDisplay == MainDisplayMode.Waterfall)
             {
-                UpdateLiveWaterfallRowChart(camId, meanArr, maxArr);
+                UpdateLiveWaterfallRowChart(camId, neutralMean, neutralMax);
                 return;
             }
 
@@ -824,8 +839,8 @@ namespace AniloxRoll.Monitor.Forms
             if (isGlobal)
             {
                 // 全域模式：快取每台相機資料，合併後更新（mean 取 mean, max 取 max）
-                _liveRowMeanCache[camId] = meanArr;
-                _liveRowMaxCache[camId]  = maxArr;
+                _liveRowMeanCache[camId] = displayMean;
+                _liveRowMaxCache[camId]  = displayMax;
                 if (!TryMergeLiveRowCurve(out float[] mergedMean, out float[] mergedMax)) return;
                 UpdateLiveRowDataAndViewRange(mergedMean, mergedMax);
             }
@@ -833,7 +848,7 @@ namespace AniloxRoll.Monitor.Forms
             {
                 // 合圖未啟用（啟用失敗/尚未啟用）：只顯示選中相機
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                UpdateLiveRowDataAndViewRange(meanArr, maxArr);
+                UpdateLiveRowDataAndViewRange(displayMean, displayMax);
             }
         }
 
@@ -873,9 +888,7 @@ namespace AniloxRoll.Monitor.Forms
             _liveRowSync?.ClearPending();
             _waterfallRowMeanPending.Clear();
             _waterfallRowMaxPending.Clear();
-            _waterfallRowMean = null;
-            _waterfallRowMax = null;
-            _waterfallRowWrite = 0;
+            _waterfallRowCurves.Reset();
         }
 
         private void ResetLiveChartsForDisplayTransition()
@@ -883,8 +896,8 @@ namespace AniloxRoll.Monitor.Forms
             ResetLiveWaterfallRowChart();
             lock (_pendingLiveRowCurveLock)
             {
-                _pendingLiveRowMean.Clear();
-                _pendingLiveRowMax.Clear();
+                _pendingLiveRowNeutralMean.Clear();
+                _pendingLiveRowNeutralMax.Clear();
                 _liveRowRawMean.Clear();
                 _liveRowRawMax.Clear();
                 _liveRowCaptureHm.Clear();
@@ -985,33 +998,59 @@ namespace AniloxRoll.Monitor.Forms
             _liveOverviewDirty = true;
             LiveOverviewTimer_Tick(null, EventArgs.Empty);
 
-            lock (_pendingLiveRowCurveLock)
+            string rowAction = "none";
+            int rowWriteBefore = _waterfallRowCurves.WritePosition;
+            if (!IsBgPreviewActive &&
+                _settings?.he_MainDisplay == MainDisplayMode.Waterfall)
             {
-                foreach (KeyValuePair<int, float[]> item in _liveRowRawMean)
+                _waterfallRowCurves.Rescale(rowFactor);
+                if (_waterfallRowCurves.HasData)
+                {
+                    UpdateLiveRowDataAndViewRange(
+                        _waterfallRowCurves.Mean, _waterfallRowCurves.Max);
+                    rowMeanPeak = FindCurvePeakNormalized(_waterfallRowCurves.Mean);
+                    rowMaxPeak = FindCurvePeakNormalized(_waterfallRowCurves.Max);
+                }
+                rowAction = "rescale-current";
+            }
+            else if (!IsBgPreviewActive)
+            {
+                Dictionary<int, float[]> rawMeanByCamera;
+                Dictionary<int, float[]> rawMaxByCamera;
+                Dictionary<int, float> captureHmByCamera;
+                lock (_pendingLiveRowCurveLock)
+                {
+                    rawMeanByCamera = new Dictionary<int, float[]>(_liveRowRawMean);
+                    rawMaxByCamera = new Dictionary<int, float[]>(_liveRowRawMax);
+                    captureHmByCamera = new Dictionary<int, float>(_liveRowCaptureHm);
+                }
+
+                foreach (KeyValuePair<int, float[]> item in rawMeanByCamera)
                 {
                     int camId = item.Key;
-                    if (!_liveRowRawMax.TryGetValue(camId, out float[] rawMax) ||
-                        !_liveRowCaptureHm.TryGetValue(camId, out float captureHm) ||
+                    if (!rawMaxByCamera.TryGetValue(camId, out float[] rawMax) ||
+                        !captureHmByCamera.TryGetValue(camId, out float captureHm) ||
                         captureHm <= 0f)
                         continue;
                     float[] displayMean = HessianRescaleHelper.CloneAndRescale1D(
                         item.Value, captureHm, rowFactor);
                     float[] displayMax = HessianRescaleHelper.CloneAndRescale1D(
                         rawMax, captureHm, rowFactor);
-                    _pendingLiveRowMean[camId] = displayMean;
-                    _pendingLiveRowMax[camId] = displayMax;
+                    OnLiveRowCurveDataUi(camId, displayMean, displayMax, null, null);
                     rowMeanPeak = Math.Max(rowMeanPeak, FindCurvePeakNormalized(displayMean));
                     rowMaxPeak = Math.Max(rowMaxPeak, FindCurvePeakNormalized(displayMax));
                 }
+                rowAction = "replace-current";
             }
-            PresentPendingLiveRowCurves();
             _lastLiveRowScaleTrace = null;
+            int rowWriteAfter = _waterfallRowCurves.WritePosition;
 
             string actualTrace = string.Format(
                 CultureInfo.InvariantCulture,
                 "setting={0} generation={1} hm={2:F4}/{3:F4} " +
                 "colMeanPeak={4:F4} colMaxPeak={5:F4} " +
-                "rowMeanPeak={6:F4} rowMaxPeak={7:F4}",
+                "rowMeanPeak={6:F4} rowMaxPeak={7:F4} " +
+                "rowAction={8} rowWrite={9}->{10}",
                 settingName,
                 generation,
                 columnFactor,
@@ -1019,7 +1058,10 @@ namespace AniloxRoll.Monitor.Forms
                 FindCurvePeakNormalized(_liveCurveMean),
                 FindCurvePeakNormalized(_liveCurveMax),
                 rowMeanPeak,
-                rowMaxPeak);
+                rowMaxPeak,
+                rowAction,
+                rowWriteBefore,
+                rowWriteAfter);
             if (!string.Equals(_lastLiveCurveAppliedTrace, actualTrace, StringComparison.Ordinal))
             {
                 _lastLiveCurveAppliedTrace = actualTrace;
@@ -1054,8 +1096,8 @@ namespace AniloxRoll.Monitor.Forms
             ResetLiveWaterfallRowChart();
             lock (_pendingLiveRowCurveLock)
             {
-                _pendingLiveRowMean.Clear();
-                _pendingLiveRowMax.Clear();
+                _pendingLiveRowNeutralMean.Clear();
+                _pendingLiveRowNeutralMax.Clear();
                 _liveRowRawMean.Clear();
                 _liveRowRawMax.Clear();
                 _liveRowCaptureHm.Clear();
@@ -1066,20 +1108,23 @@ namespace AniloxRoll.Monitor.Forms
             FlowTrace.Log("background preview rowChart clear");
         }
 
-        private void UpdateLiveWaterfallRowChart(int camId, float[] meanArr, float[] maxArr)
+        private void UpdateLiveWaterfallRowChart(
+            int camId,
+            float[] neutralMean,
+            float[] neutralMax)
         {
-            if (meanArr == null || meanArr.Length == 0 || _liveRowDisplay == null) return;
+            if (neutralMean == null || neutralMean.Length == 0 || _liveRowDisplay == null) return;
 
             bool isGlobal = _liveCameraManager?.IsGlobalMergeActive == true;
             if (!isGlobal)
             {
                 if (camId != _liveCameraManager.SelectedMainCameraId) return;
-                AppendLiveWaterfallRowBand(meanArr, maxArr);
+                AppendLiveWaterfallRowBand(neutralMean, neutralMax);
                 return;
             }
 
-            _waterfallRowMeanPending[camId] = meanArr;
-            _waterfallRowMaxPending[camId] = maxArr;
+            _waterfallRowMeanPending[camId] = neutralMean;
+            _waterfallRowMaxPending[camId] = neutralMax;
 
             int expected = Math.Max(1, _liveCameraManager?.ConnectedCameraCount ?? CameraCount);
             if (_waterfallRowMeanPending.Count < expected) return;
@@ -1100,39 +1145,20 @@ namespace AniloxRoll.Monitor.Forms
             AppendLiveWaterfallRowBand(mergedMean, mergedMax);
         }
 
-        private void AppendLiveWaterfallRowBand(float[] meanBand, float[] maxBand)
+        private void AppendLiveWaterfallRowBand(float[] neutralMeanBand, float[] neutralMaxBand)
         {
             int capacity = _settings?.ImageView?.WaterfallTotalHeight ?? InspectionDefaults.WaterfallTotalHeight;
             capacity = Math.Max(1000, capacity);
-            if (_waterfallRowMean == null || _waterfallRowMean.Length != capacity)
-            {
-                _waterfallRowMean = new float[capacity];
-                _waterfallRowMax = new float[capacity];
-                _waterfallRowWrite = 0;
-            }
-
-            int bandLen = Math.Min(meanBand.Length, capacity);
             bool ring = (_settings?.ImageView?.WaterfallFullMode ?? InspectionDefaults.WaterfallFullMode) == WaterfallFullMode.Ring;
-            if (!ring && _waterfallRowWrite + bandLen > capacity)
-            {
-                Array.Clear(_waterfallRowMean, 0, _waterfallRowMean.Length);
-                Array.Clear(_waterfallRowMax, 0, _waterfallRowMax.Length);
-                _waterfallRowWrite = 0;
-            }
+            _waterfallRowCurves.Append(
+                neutralMeanBand,
+                neutralMaxBand,
+                capacity,
+                ring,
+                (float)_settings.HessianMaxFactorH);
 
-            for (int i = 0; i < bandLen; i++)
-            {
-                int dst = ring ? (_waterfallRowWrite + i) % capacity : _waterfallRowWrite + i;
-                if (dst < 0 || dst >= capacity) break;
-                _waterfallRowMean[dst] = meanBand[i];
-                _waterfallRowMax[dst] = maxBand != null && i < maxBand.Length ? maxBand[i] : 0;
-            }
-
-            _waterfallRowWrite = ring
-                ? (_waterfallRowWrite + bandLen) % capacity
-                : Math.Min(capacity, _waterfallRowWrite + bandLen);
-
-            if (UpdateLiveRowDataAndViewRange(_waterfallRowMean, _waterfallRowMax)) return;
+            if (UpdateLiveRowDataAndViewRange(
+                _waterfallRowCurves.Mean, _waterfallRowCurves.Max)) return;
         }
 
         /// <summary>用 A輪速度 和選中相機的取樣頻率（Line Rate）更新列圖表座標。</summary>

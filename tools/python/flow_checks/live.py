@@ -17,6 +17,7 @@ class LiveFlowValidator:
         self._check_capture_head_guard(session, report)
         self._check_time_stop_origin(session, report)
         self._check_waterfall_bootstrap(session, report)
+        self._check_waterfall_first_band(session, report)
         self._check_capture_chart_reset(session, report)
         self._check_capture_view_refire(session, report)
         self._check_row_presentation(session, report)
@@ -694,6 +695,49 @@ class LiveFlowValidator:
             "F2.waterfall-bootstrap",
             CheckStatus.PASS if starts > 0 and not failures else CheckStatus.FAIL,
             f"starts={starts} bootstrap={len(bootstrap_lines)} failures={len(failures)}"
+            + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_waterfall_first_band(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^WF band first generation=(\d+) seq=(-?\d+) "
+            r"cams=([\d,]+) expected=([\d,]+) "
+            r"ticks=(-?\d+)~(-?\d+) startRow=(\d+) height=(\d+) reason=(\w+)$"
+        )
+        samples = []
+        failures = []
+        for line in session.lines:
+            if not line.message.startswith("WF band first "):
+                continue
+            match = pattern.match(line.message)
+            if match is None:
+                continue  # 舊版 log 沒有相機集合，不能據此判定。
+            actual = {int(value) for value in match.group(3).split(",")}
+            expected = {int(value) for value in match.group(4).split(",")}
+            reason = match.group(9)
+            samples.append((actual, expected, reason))
+            if not expected or actual != expected or reason != "complete":
+                failures.append(
+                    f"{line.timestamp} first band cameras={sorted(actual)} "
+                    f"expected={sorted(expected)} reason={reason}"
+                )
+
+        if not samples:
+            report.add(
+                self.domain,
+                "F2.waterfall-first-band",
+                CheckStatus.NOT_COVERED,
+                "本 session 無新版瀑布第一列相機集合儀器",
+            )
+            return
+
+        report.add(
+            self.domain,
+            "F2.waterfall-first-band",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"samples={len(samples)} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

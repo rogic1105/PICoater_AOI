@@ -235,6 +235,7 @@
     <Compile Include="UI\Managers\LiveDisplayCoordinator.cs" />
     <Compile Include="UI\Managers\RowCurveDisplayAdapter.cs" />
     <Compile Include="UI\Managers\RowCurveSyncCoordinator.cs" />
+    <Compile Include="UI\Managers\WaterfallRowCurveAccumulator.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.CaptureBoundary.cs" />
     <Compile Include="UI\Managers\LiveCameraManager.Display.cs" />
