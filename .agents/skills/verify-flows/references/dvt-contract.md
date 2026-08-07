@@ -1989,13 +1989,18 @@ T1: setting route {屬性名} owner={owner|None} effects={effect+effect|None}
     ← 每個 setting intent 的下一行；分類一次後才執行副作用
 （之後的反應行歸此 intent 管）
 ```
-PropertyGrid「檢出標準」的數值列可用滑鼠滾輪調整：欄／列正規值與欄／列平均、最大閾值
-每格 `0.1`，細線濾除每格 `1`，最小值各為一格。第一次點選數值列才啟用滾輪，
+PropertyGrid 所有可編輯數值列可用滑鼠滾輪調整。第一次點選數值列才啟用滾輪，
 再點同一列即取消；切到其他列時原列必須解除，避免一般捲動誤改設定。狀態行為：
 `property wheel {armed|disarmed} setting={name}`。滾輪入口不得另建設定旁路：
 `WM_MOUSEWHEEL → PropertyGridNumericWheelInterceptor → PropertyDescriptor.SetValue
 → SettingsHub.NotifyExternalChange`，之後必須產生與鍵盤輸入完全相同的 `ui:設定 → setting route`。
-非上述數值列不得攔截滾輪，仍由 PropertyGrid 正常捲動畫面。
+各欄位步進由 `Config/ui-interaction-settings.json` 定義；缺檔時由 `UiInteractionDefaults` 產生完整預設檔。
+欄／列正規值及四個閾值分開設定，操作手感不得寫入 inspection recipe 或每筆 CSV `#CFG`。
+界限仍由 `NumericWheelRule` 的產品規則守門；JSON 步進若為零或負數，載入時回復該欄預設值。
+預設步進：OPS／正規值／閾值 `0.1`；Start／Crop／秒數／GB／Log 小時／光源與 IO 整數 `1`；
+總高度 `1000`；月／日／時產量上限依規模為 `1000/100/10`。
+Start 允許負值，Crop 與亮度允許 `0`；細線濾除限制 `1..50`、亮度 `0..255`、通道 `1..4`、
+IO Port `1..65535`。非數值列不得攔截滾輪，仍由 PropertyGrid 正常捲動畫面。
 
 **⚠ 非 PropertyGrid 的使用者入口（點 label/chart 走 Hub.Set）會被記成 set:（程式來源）**——
 這類入口必須自帶 `ui:` intent 行（如【暫停Mura檢測】【IO暫停】），否則盲測會認錯兇手身份

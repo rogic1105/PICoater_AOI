@@ -107,6 +107,9 @@
     <Compile Include="Settings\Models\Defaults\AcquisitionDefaults.cs" />
     <Compile Include="Settings\Models\Defaults\AppModeDefaults.cs" />
     <Compile Include="Settings\Models\Defaults\SystemDefaults.cs" />
+    <Compile Include="Settings\Models\Defaults\UiInteractionDefaults.cs" />
+    <Compile Include="Settings\Models\PropertyGridWheelSettings.cs" />
+    <Compile Include="Settings\Stores\PropertyGridWheelSettingsStore.cs" />
     <Compile Include="Settings\Utilities\DcfPathHelper.cs" />
     <Compile Include="Settings\Models\PropertyGrid\LeftAlignNumericConverter.cs" />
     <Compile Include="Settings\Models\PropertyGrid\ExpandableLeftAlignConverter.cs" />

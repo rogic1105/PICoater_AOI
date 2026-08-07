@@ -7,6 +7,25 @@ using System.Windows.Forms;
 
 namespace AniloxRoll.Monitor.UI.Widgets
 {
+    internal sealed class NumericWheelRule
+    {
+        public NumericWheelRule(decimal step, decimal? minimum = null, decimal? maximum = null)
+        {
+            if (step <= 0m)
+                throw new ArgumentOutOfRangeException(nameof(step));
+            if (minimum.HasValue && maximum.HasValue && minimum.Value > maximum.Value)
+                throw new ArgumentException("Minimum cannot exceed maximum.");
+
+            Step = step;
+            Minimum = minimum;
+            Maximum = maximum;
+        }
+
+        public decimal Step { get; }
+        public decimal? Minimum { get; }
+        public decimal? Maximum { get; }
+    }
+
     /// <summary>
     /// Changes explicitly opted-in numeric PropertyGrid values with the mouse wheel.
     /// Non-opted-in rows retain the PropertyGrid's normal scrolling behavior.
@@ -14,11 +33,11 @@ namespace AniloxRoll.Monitor.UI.Widgets
     internal sealed class PropertyGridNumericWheelInterceptor : NativeWindow
     {
         private const int WmMouseWheel = 0x020A;
-        private const int WmLeftButtonDown = 0x0201;
+        private const int WmLeftButtonUp = 0x0202;
         private const int WheelDelta = 120;
 
         private readonly PropertyGrid _grid;
-        private readonly IDictionary<string, decimal> _steps;
+        private readonly IDictionary<string, NumericWheelRule> _rules;
         private readonly Action<string, object, object> _valueChanged;
         private readonly Action<string, bool> _armedChanged;
         private Control _gridView;
@@ -27,12 +46,12 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         public PropertyGridNumericWheelInterceptor(
             PropertyGrid grid,
-            IDictionary<string, decimal> steps,
+            IDictionary<string, NumericWheelRule> rules,
             Action<string, object, object> valueChanged,
             Action<string, bool> armedChanged = null)
         {
             _grid = grid ?? throw new ArgumentNullException(nameof(grid));
-            _steps = steps ?? throw new ArgumentNullException(nameof(steps));
+            _rules = rules ?? throw new ArgumentNullException(nameof(rules));
             _valueChanged = valueChanged;
             _armedChanged = armedChanged;
 
@@ -43,15 +62,23 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
         protected override void WndProc(ref Message m)
         {
-            if (m.Msg == WmLeftButtonDown)
+            if (m.Msg == WmLeftButtonUp)
             {
                 base.WndProc(ref m);
                 ToggleSelectedProperty();
                 return;
             }
 
-            if (m.Msg == WmMouseWheel && TryApplyWheelDelta(GetWheelDelta(m.WParam)))
+            if (m.Msg == WmMouseWheel)
+            {
+                if (TryApplyWheelDelta(GetWheelDelta(m.WParam)))
+                    return;
+
+                base.WndProc(ref m);
+                if (string.IsNullOrEmpty(_armedPropertyName))
+                    ClearActiveSelectionHighlight(_grid);
                 return;
+            }
 
             base.WndProc(ref m);
         }
@@ -62,7 +89,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
             PropertyDescriptor descriptor = item?.PropertyDescriptor;
             if (descriptor == null || descriptor.IsReadOnly ||
                 !string.Equals(_armedPropertyName, descriptor.Name, StringComparison.Ordinal) ||
-                !_steps.TryGetValue(descriptor.Name, out decimal step))
+                !_rules.TryGetValue(descriptor.Name, out NumericWheelRule rule))
             {
                 _wheelRemainder = 0;
                 return false;
@@ -76,7 +103,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
 
             object component = _grid.SelectedObject;
             object oldValue = descriptor.GetValue(component);
-            if (!TryCalculateNext(oldValue, descriptor.PropertyType, step, notches, out object newValue))
+            if (!TryCalculateNext(oldValue, descriptor.PropertyType, rule, notches, out object newValue))
                 return true;
 
             try
@@ -96,7 +123,7 @@ namespace AniloxRoll.Monitor.UI.Widgets
         {
             PropertyDescriptor descriptor = _grid.SelectedGridItem?.PropertyDescriptor;
             string clickedName = descriptor != null && !descriptor.IsReadOnly &&
-                _steps.ContainsKey(descriptor.Name)
+                _rules.ContainsKey(descriptor.Name)
                 ? descriptor.Name
                 : null;
             string next = ResolveArmedProperty(_armedPropertyName, clickedName);
@@ -110,6 +137,18 @@ namespace AniloxRoll.Monitor.UI.Widgets
                 _armedChanged?.Invoke(previous, false);
             if (!string.IsNullOrEmpty(next))
                 _armedChanged?.Invoke(next, true);
+            else
+                ClearActiveSelectionHighlight(_grid);
+        }
+
+        internal static void ClearActiveSelectionHighlight(PropertyGrid grid)
+        {
+            if (grid == null || !grid.ContainsFocus)
+                return;
+
+            Form form = grid.FindForm();
+            if (form != null)
+                form.ActiveControl = null;
         }
 
         internal static string ResolveArmedProperty(string armedPropertyName, string clickedPropertyName)
@@ -128,17 +167,34 @@ namespace AniloxRoll.Monitor.UI.Widgets
             int notches,
             out object nextValue)
         {
+            return TryCalculateNext(
+                currentValue,
+                propertyType,
+                new NumericWheelRule(step, step),
+                notches,
+                out nextValue);
+        }
+
+        internal static bool TryCalculateNext(
+            object currentValue,
+            Type propertyType,
+            NumericWheelRule rule,
+            int notches,
+            out object nextValue)
+        {
             nextValue = currentValue;
-            if (currentValue == null || step <= 0 || notches == 0)
+            if (currentValue == null || rule == null || notches == 0)
                 return false;
 
             try
             {
                 decimal current = Convert.ToDecimal(currentValue, CultureInfo.InvariantCulture);
-                decimal next = current + step * notches;
-                if (next < step)
-                    next = step;
-                next = decimal.Round(next, DecimalPlaces(step), MidpointRounding.AwayFromZero);
+                decimal next = current + rule.Step * notches;
+                if (rule.Minimum.HasValue && next < rule.Minimum.Value)
+                    next = rule.Minimum.Value;
+                if (rule.Maximum.HasValue && next > rule.Maximum.Value)
+                    next = rule.Maximum.Value;
+                next = decimal.Round(next, DecimalPlaces(rule.Step), MidpointRounding.AwayFromZero);
 
                 if (propertyType == typeof(float)) nextValue = (float)next;
                 else if (propertyType == typeof(double)) nextValue = (double)next;

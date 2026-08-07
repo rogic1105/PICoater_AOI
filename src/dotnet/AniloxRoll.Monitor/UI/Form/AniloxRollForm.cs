@@ -776,6 +776,51 @@ namespace AniloxRoll.Monitor.Forms
         }
 
         /// <summary>UI 層：Presenter、Helper、PropertyGrid、Canvas 事件。</summary>
+        internal static Dictionary<string, NumericWheelRule> CreatePropertyGridNumericWheelRules(
+            PropertyGridWheelSettings wheelSettings = null)
+        {
+            wheelSettings = wheelSettings ?? new PropertyGridWheelSettings();
+            wheelSettings.Validate();
+            return new Dictionary<string, NumericWheelRule>(StringComparer.Ordinal)
+            {
+                { nameof(InspectionSettings.ab_OpsCam1), new NumericWheelRule(wheelSettings.CamOpsStep, 0.1m) },
+                { nameof(InspectionSettings.ac_OpsCam2), new NumericWheelRule(wheelSettings.CamOpsStep, 0.1m) },
+                { nameof(InspectionSettings.ad_OpsCam3), new NumericWheelRule(wheelSettings.CamOpsStep, 0.1m) },
+                { nameof(InspectionSettings.ae_OpsCam4), new NumericWheelRule(wheelSettings.CamOpsStep, 0.1m) },
+                { nameof(InspectionSettings.af_OpsCam5), new NumericWheelRule(wheelSettings.CamOpsStep, 0.1m) },
+                { nameof(InspectionSettings.ag_OpsCam6), new NumericWheelRule(wheelSettings.CamOpsStep, 0.1m) },
+                { nameof(InspectionSettings.ah_OpsCam7), new NumericWheelRule(wheelSettings.CamOpsStep, 0.1m) },
+                { nameof(InspectionSettings.ai_OpsSpeed), new NumericWheelRule(wheelSettings.RollSpeedStep, 1m) },
+                { nameof(InspectionSettings.bb_StartCam1), new NumericWheelRule(wheelSettings.CameraStartStep) },
+                { nameof(InspectionSettings.bc_StartCam2), new NumericWheelRule(wheelSettings.CameraStartStep) },
+                { nameof(InspectionSettings.bd_StartCam3), new NumericWheelRule(wheelSettings.CameraStartStep) },
+                { nameof(InspectionSettings.be_StartCam4), new NumericWheelRule(wheelSettings.CameraStartStep) },
+                { nameof(InspectionSettings.bf_StartCam5), new NumericWheelRule(wheelSettings.CameraStartStep) },
+                { nameof(InspectionSettings.bg_StartCam6), new NumericWheelRule(wheelSettings.CameraStartStep) },
+                { nameof(InspectionSettings.bh_StartCam7), new NumericWheelRule(wheelSettings.CameraStartStep) },
+                { nameof(InspectionSettings.cb_CropHead), new NumericWheelRule(wheelSettings.CropStep, 0m) },
+                { nameof(InspectionSettings.cc_CropTail), new NumericWheelRule(wheelSettings.CropStep, 0m) },
+                { nameof(InspectionSettings.fb_BackgroundSampleSeconds), new NumericWheelRule(wheelSettings.BackgroundSampleSecondsStep, 1m) },
+                { nameof(InspectionSettings.dc_HessianMaxFactorV), new NumericWheelRule(wheelSettings.ColumnNormalizationStep, 0.1m) },
+                { nameof(InspectionSettings.dd_HessianMaxFactorH), new NumericWheelRule(wheelSettings.RowNormalizationStep, 0.1m) },
+                { nameof(InspectionSettings.de_RidgeSigma), new NumericWheelRule(wheelSettings.ThinLineRemovalStep, 1m, 50m) },
+                { nameof(InspectionSettings.ec_ErrorValueMeanV), new NumericWheelRule(wheelSettings.ColumnMeanThresholdStep, 0.1m) },
+                { nameof(InspectionSettings.ed_ErrorValueMaxV), new NumericWheelRule(wheelSettings.ColumnMaxThresholdStep, 0.1m) },
+                { nameof(InspectionSettings.ee_ErrorValueMeanH), new NumericWheelRule(wheelSettings.RowMeanThresholdStep, 0.1m) },
+                { nameof(InspectionSettings.ef_ErrorValueMaxH), new NumericWheelRule(wheelSettings.RowMaxThresholdStep, 0.1m) },
+                { nameof(InspectionSettings.fc_GrabLimitSeconds), new NumericWheelRule(wheelSettings.CaptureDurationSecondsStep, 1m) },
+                { nameof(InspectionSettings.hg_WaterfallTotalHeight), new NumericWheelRule(wheelSettings.WaterfallHeightStep, 1000m) },
+                { nameof(InspectionSettings.gc_YearlyYMax), new NumericWheelRule(wheelSettings.YearlyYieldStep, 1000m) },
+                { nameof(InspectionSettings.gd_MonthlyYMax), new NumericWheelRule(wheelSettings.MonthlyYieldStep, 100m) },
+                { nameof(InspectionSettings.ge_DailyYMax), new NumericWheelRule(wheelSettings.DailyYieldStep, 10m) },
+                { nameof(InspectionSettings.LocalMinFreeGB), new NumericWheelRule(wheelSettings.LocalFreeSpaceGbStep, 1m) },
+                { nameof(InspectionSettings.LogRetentionHours), new NumericWheelRule(wheelSettings.LogRetentionHoursStep, 1m) },
+                { nameof(InspectionSettings.LightChannel), new NumericWheelRule(wheelSettings.LightChannelStep, 1m, 4m) },
+                { nameof(InspectionSettings.LightBrightness), new NumericWheelRule(wheelSettings.LightBrightnessStep, 0m, 255m) },
+                { nameof(InspectionSettings.IoPort), new NumericWheelRule(wheelSettings.IoPortStep, 1m, 65535m) }
+            };
+        }
+
         private void InitUiLayer()
         {
             _dateTimeNavigator = new DateTimeNavigator(
@@ -880,16 +925,7 @@ namespace AniloxRoll.Monitor.Forms
             propertyGridSettings.SelectedGridItemChanged += PropertyGridSettings_SelectedGridItemChanged;
             _wheelInterceptors.Add(new PropertyGridNumericWheelInterceptor(
                 propertyGridSettings,
-                new Dictionary<string, decimal>(StringComparer.Ordinal)
-                {
-                    { nameof(InspectionSettings.dc_HessianMaxFactorV), 0.1m },
-                    { nameof(InspectionSettings.dd_HessianMaxFactorH), 0.1m },
-                    { nameof(InspectionSettings.de_RidgeSigma), 1m },
-                    { nameof(InspectionSettings.ec_ErrorValueMeanV), 0.1m },
-                    { nameof(InspectionSettings.ed_ErrorValueMaxV), 0.1m },
-                    { nameof(InspectionSettings.ee_ErrorValueMeanH), 0.1m },
-                    { nameof(InspectionSettings.ef_ErrorValueMaxH), 0.1m }
-                },
+                CreatePropertyGridNumericWheelRules(PropertyGridWheelSettingsStore.Load()),
                 (name, oldValue, newValue) =>
                     _settingsHub.NotifyExternalChange(name, oldValue, newValue),
                 (name, armed) =>
