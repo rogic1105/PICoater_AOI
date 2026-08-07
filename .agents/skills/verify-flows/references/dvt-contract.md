@@ -1422,6 +1422,9 @@ Tn: capture layout final grab=… ops=… start=… speed=N head=H tail=T path=�
   `#CURVE-C,1,grabId,camId,HM_V,meanPeak,maxPeak`：`meanPeak` 是該序號顯示用
   `CurveMean` 的實際峰值，僅比較欄平均閾值；`maxPeak` 是顯示用 `CurveMax` 的實際峰值，
   僅比較欄最大閾值。此摘要覆蓋同 grab/cam 的逐幀暫定結果；監控即時告警仍維持逐幀判定。
+  `#CURVE-C` 與 CSV peak 已經是拍攝當時的正規化值，使用目前 PropertyGrid 重判時必須套
+  `currentHm / captureHm`；只有 `.bin` raw Curve 才套 `captureHm * currentHm`。兩種公式不得共用
+  同一個無語意 `ratio` API，否則畫面可正確但 O/X 與範圍候選排序會漂移。
   `MaxCMean`＝該幀 `MaxC`（column curve）全點平均後除以 255（0~1），是報表範圍 `CurveMax` 候選排序值，**不是 MaxPeak**。
   `MeanRPeak/MaxRPeak`＝同幀 Row curve 峰值除以 255，供報表用當前列正規值／門檻重判 O/X。
 - CSV 讀取唯一格式入口＝`InspectionCsvReader.TryParseRecord`（統計／回顧影像查詢／curve 候選共用）；
@@ -2025,10 +2028,29 @@ T1: ui:設定[{name}]={value}
 T1: setting route {name} owner=DataStats effects=…+LiveInspectionCurves
 T1: live inspection apply setting={name} hm=C/R thresholdC=Mean/Max
     thresholdR=Mean/Max mode={Mean|Max|Both} direction={Vertical|Horizontal|Both}
-    action={normalization-reset|refresh}
+    action={normalization-latest|refresh}
+
+（dc_／dd_ 快速連續改變，停止 80 ms 後只套最後值；不得先清空 Curve）
+Tn: live curve applied setting={name} generation=G hm=C/R
+    colMeanPeak=… colMaxPeak=… rowMeanPeak=… rowMaxPeak=…
+
+（正規值改變即套用目前監控影像，不等待下一幀）
+Tn: live image scale source=adaptive-standard-half captureHm=B currentHm=C/R scale=C,R
+Tn: live pixel-curve probe camN tick=K axis={C|R} captureHm=B currentHm=H sourceGain=G
+    imagePeak=I curveMeanPeak=M curveMaxPeak=X delta=D
+    sourceImageMax=SI sourceCurveMax=SC verdict={match|mismatch}
+    reason={none|quantized-zero|max-delta}
+
+`imagePeak` 是同一 native frame **送入顯示層、尚未經 LOD／調色盤繪製**的完整影像資料最大值，
+不是螢幕截圖像素；最終畫面仍由上機視覺煙測驗收。`quantized-zero` 表示 Curve 最大值非零，但送入監控畫面的 8-bit
+強化圖最大值已是零；即使正規化後差值小，也必須 FAIL，因為後續顯示倍率無法還原已遺失資訊。
+
+（回顧快速連續改值：100 ms settle，只允許最後 generation 完成 Curve 與強化圖）
+Tn: RV normalization queued generation=G setting={dc_|dd_}
+Tn: RV normalization settle generation=G setting={dc_|dd_} hm=C/R
 
 （dc_／dd_ 改變後，下一筆監控列 Curve）
-Tn: live row normalize captureHm=C rowHm=R ratio=R/C
+Tn: live row normalize captureHm=C rowHm=R ratio=C*R
 
 （報表單序號已載入時）
 Tn: DT curve refresh {grabId} reason=setting-{name}
@@ -2045,12 +2067,43 @@ SettingsHub.Changed
  → SettingImpactClassifier：S1 全部帶 LiveInspectionCurves
  → ApplyLiveInspectionSettings@AniloxRollForm.Live.cs
     ├ 閾值／欄曲線模式／方向：保留資料，立即更新線與下一幀 O/X
-    └ 欄／列正規值：清除舊尺度 Live Curve 緩衝，禁止同圖混用兩種尺度
+    └ 欄／列正規值：保存 raw Curve，80 ms latest-only 重算欄列顯示；不得清空造成閃白
 
 ProcessImage@AniloxCamera.cs
- → OnLiveRowCurveData(cam, rawMean, rawMax, frameHmC)
- → Live 顯示列值 = raw × currentHmR / frameHmC
- → CheckLiveMura（使用換算後值）→ pending row → chart
+ ├ captureHmC 在一輪 Grab 開始後固定；Grab 中改正規值只改 view，不改 native／存檔基準
+ ├ OnLiveCurveData(cam, rawMean, rawMax, frameHmC)
+ │  → Live 顯示欄值 = raw × frameHmC × currentHmC
+ ├ OnLiveRowCurveData(cam, rawMean, rawMax, frameHmC)
+ │  → Live 顯示列值 = raw × frameHmC × currentHmR
+ ├ CheckLiveMura（使用換算後值）→ pending row → chart
+ └ Hessian C/R neutral half standard map 每幀產生，不受存檔 gate 影響
+    → HessianStandardMapCodec.ComputeAdaptiveByteGain（每幀最大 neutral sample → 255）
+    → HessianStandardMapCodec.FillGray8Expanded(gain=sourceGain) 寫入既有 full-size host buffer
+    → OnDisplayFrame／OnWaterfallFrame 隨幀攜帶 sourceGain（瀑布逐列保存）
+    → LiveDisplayCoordinator.SetEnhanceIntensityScales
+    → ImageDisplayView／WaterfallView／ThumbStrip 共用 GrayIntensity
+    → 實際顯示像素 = adaptive byte × currentHm{C|R}/sourceGain（clamp 0～255）
+    → LivePixelCurveProbe（僅流程驗證模式、每台每秒最多一次）
+       同一 native frame 比較送入顯示層的影像資料最大值與 max Curve 全域最大值；影像為 8-bit、
+       Curve 為 float，因此允許一個灰階階距 `delta <= 1/255` 才可記為 `match`。
+       mean Curve 最大值只留作診斷，不參與相等判定。
+
+Review 正規值變更
+ → ScheduleReviewNormalizationRefresh@AniloxRollForm.Review.cs（100 ms latest-only）
+ → 最後 generation 才 RefreshChartsForSettingsChange＋ApplyReviewEnhance
+ → HessianStandardMapCodec.ToGray8（neutral half map × currentHm）
+
+監控與回顧使用同一個線性增益語意：正規值提高，Curve 與強化圖都同比提高。監控把
+neutral half map 依每幀最大值編成 byte，並保存 `sourceGain`；顯示乘 `current/sourceGain`。
+Curve 的 native 值含 `1/capture`，顯示時乘 `capture*current`；兩者最後都等於
+neutral Hessian × current，且不能先被固定 byte 基準截斷。
+
+`live curve applied` 的 `hm` 必須等於前面最後一筆 `live inspection apply`；快速滾輪造成的
+中間 generation 可以略過，但停止輸入後最後 generation 必須套用。瀑布模式的 row peak 必須量
+本次重算後送往瀑布列圖表的資料，不得因即時模式 cache 為空而假報 0。`live image scale` 的 source 必須為 `adaptive-standard-half`，C/R scale
+必須分別等於 current HM；每筆 probe 必須帶該幀 `sourceGain`；
+最後 `RV normalization queued` generation 必須有同代 settle。三者分別抓過期 Curve 上畫、
+監控只換模式卻未重繪現有影像，以及回顧每格都啟動重讀或最後值未落地。
 
 Report 單序號設定重畫
  → RefreshForSettingsChange(name)@MuraProfileChartPresenter.cs
@@ -2071,7 +2124,8 @@ Report 單序號設定重畫
 live inspection stimulus brightness=B direction={col|row} mean=M max=X
 threshold=TM/TX mode={Mean|Max|Both} verdict={O|X} source=light-surrogate-not-mura
 ```
-checker 必須驗證兩個亮度都有欄／列資料、數值確實改變且 verdict 符合公式。
+checker 必須驗證兩個亮度都有欄／列資料、數值在 log 記錄精度（0.0001）內確實改變，
+且 verdict 符合公式；不得另設沒有物理依據的最小變化幅度。
 這只證明「檢測標準接線與計算會對穩定輸入變化作出反應」，**不是正式 Mura 模擬，
 不得拿來宣稱真實瑕疵檢出率或光學準確度**。
 

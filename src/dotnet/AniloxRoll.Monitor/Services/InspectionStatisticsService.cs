@@ -139,7 +139,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public ColumnVerdictEvaluation EvaluateColumn(
             float meanPeak, float maxPeak, float captureHmV)
         {
-            float ratio = HessianRescaleHelper.Ratio(captureHmV, CurrentHmV);
+            float ratio = HessianRescaleHelper.NormalizedValueToDisplayScale(
+                captureHmV, CurrentHmV);
             float displayMeanPeak = float.IsNaN(meanPeak) ? float.NaN : meanPeak * ratio;
             float displayMaxPeak = float.IsNaN(maxPeak) ? float.NaN : maxPeak * ratio;
             bool meanEnabled = ColumnCurveMode != ColumnCurveDisplayMode.Max;
@@ -195,7 +196,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public bool? IsRowFail(float meanPeak, float maxPeak, float captureHmV)
         {
             if (float.IsNaN(meanPeak) || float.IsNaN(maxPeak)) return null;
-            float ratio = HessianRescaleHelper.Ratio(captureHmV, CurrentHmH);
+            float ratio = HessianRescaleHelper.NormalizedValueToDisplayScale(
+                captureHmV, CurrentHmH);
             return meanPeak * ratio > CurrentRowErrMean ||
                    maxPeak * ratio > CurrentRowErrMax;
         }

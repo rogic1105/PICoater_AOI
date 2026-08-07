@@ -470,6 +470,7 @@ namespace AniloxRoll.Monitor.Forms
         private int _liveInspectionStimulusBrightness = -1;
         private long _liveInspectionStimulusReadyAtTicks;
         private string _lastLiveRowScaleTrace;
+        private string _lastLiveCurveAppliedTrace;
 
         private void ArmLiveInspectionStimulusProbe(int brightness)
         {
@@ -676,14 +677,24 @@ namespace AniloxRoll.Monitor.Forms
             return _liveRowSync?.UpdateData(mean, max, requireViewRange) ?? true;
         }
 
-        private void OnLiveCurveData(int camId, float[] meanArr, float[] maxArr)
+        private void OnLiveCurveData(
+            int camId,
+            float[] meanArr,
+            float[] maxArr,
+            float frameHessianMaxFactor)
         {
             // 快取每台相機最新曲線（callback 執行緒，只是 ref 賦值）
             int cameraIndex = camId - 1;
             if (cameraIndex >= 0 && cameraIndex < CameraCount)
             {
-                _liveCurveMean[cameraIndex] = meanArr;
-                _liveCurveMax[cameraIndex]  = maxArr;
+                _liveCurveRawMean[cameraIndex] = meanArr;
+                _liveCurveRawMax[cameraIndex] = maxArr;
+                _liveCurveCaptureHm[cameraIndex] = frameHessianMaxFactor;
+                float currentColumnFactor = (float)_settings.HessianMaxFactorV;
+                _liveCurveMean[cameraIndex] = HessianRescaleHelper.CloneAndRescale1D(
+                    meanArr, frameHessianMaxFactor, currentColumnFactor);
+                _liveCurveMax[cameraIndex] = HessianRescaleHelper.CloneAndRescale1D(
+                    maxArr, frameHessianMaxFactor, currentColumnFactor);
                 // M8: memory barrier 確保 UI thread 透過 volatile _liveOverviewDirty 讀到 dirty=true 時，
                 // array reference 寫入已完成（避免讀到舊指標）
                 System.Threading.Interlocked.MemoryBarrier();
@@ -691,7 +702,12 @@ namespace AniloxRoll.Monitor.Forms
             }
 
             // Live Mura 判斷（callback 執行緒，所有相機都檢查）
-            CheckLiveMura(meanArr, maxArr, "v");
+            CheckLiveMura(
+                cameraIndex >= 0 && cameraIndex < CameraCount
+                    ? _liveCurveMean[cameraIndex] : meanArr,
+                cameraIndex >= 0 && cameraIndex < CameraCount
+                    ? _liveCurveMax[cameraIndex] : maxArr,
+                "v");
             // 單台欄 chart（chartLiveColumn 舊版）已刪除：全覽圖（接位後的 chartLiveColumn）
             // 由 _liveOverviewDirty + UpdateOverviewChart 路徑更新（boundary 唯一歸屬、與影像對齊）。
         }
@@ -703,6 +719,12 @@ namespace AniloxRoll.Monitor.Forms
             float frameHessianMaxFactor)
         {
             float currentRowFactor = (float)_settings.HessianMaxFactorH;
+            lock (_pendingLiveRowCurveLock)
+            {
+                _liveRowRawMean[camId] = meanArr;
+                _liveRowRawMax[camId] = maxArr;
+                _liveRowCaptureHm[camId] = frameHessianMaxFactor;
+            }
             float[] displayMean = HessianRescaleHelper.CloneAndRescale1D(
                 meanArr, frameHessianMaxFactor, currentRowFactor);
             float[] displayMax = HessianRescaleHelper.CloneAndRescale1D(
@@ -712,7 +734,8 @@ namespace AniloxRoll.Monitor.Forms
                 "captureHm={0:F4} rowHm={1:F4} ratio={2:F4}",
                 frameHessianMaxFactor,
                 currentRowFactor,
-                HessianRescaleHelper.Ratio(frameHessianMaxFactor, currentRowFactor));
+                HessianRescaleHelper.RawCurveToDisplayScale(
+                    frameHessianMaxFactor, currentRowFactor));
             if (FlowTrace.DvtEnabled && !string.Equals(
                 _lastLiveRowScaleTrace, scaleTrace, StringComparison.Ordinal))
             {
@@ -862,6 +885,9 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _pendingLiveRowMean.Clear();
                 _pendingLiveRowMax.Clear();
+                _liveRowRawMean.Clear();
+                _liveRowRawMax.Clear();
+                _liveRowCaptureHm.Clear();
             }
             _liveRowMeanCache.Clear();
             _liveRowMaxCache.Clear();
@@ -869,6 +895,9 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _liveCurveMean[i] = null;
                 _liveCurveMax[i] = null;
+                _liveCurveRawMean[i] = null;
+                _liveCurveRawMax[i] = null;
+                _liveCurveCaptureHm[i] = 0f;
             }
             _liveOverviewDirty = false;
             _liveOverviewHelper?.Clear();
@@ -879,6 +908,9 @@ namespace AniloxRoll.Monitor.Forms
 
         private void ApplyLiveInspectionSettings(string settingName)
         {
+            _liveCameraManager?.SetHessianDisplayFactors(
+                _settings.HessianMaxFactorV,
+                _settings.HessianMaxFactorH);
             _liveOverviewHelper?.SetThresholds(
                 _settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             _liveOverviewHelper?.SetVisibleMetrics(
@@ -892,30 +924,9 @@ namespace AniloxRoll.Monitor.Forms
                 settingName == nameof(InspectionSettings.dd_HessianMaxFactorH);
             bool normalizationChanged =
                 columnNormalizationChanged || rowNormalizationChanged;
-            string action = normalizationChanged ? "normalization-reset" : "refresh";
+            string action = normalizationChanged ? "normalization-latest" : "refresh";
             if (normalizationChanged)
-            {
-                ResetLiveWaterfallRowChart();
-                lock (_pendingLiveRowCurveLock)
-                {
-                    _pendingLiveRowMean.Clear();
-                    _pendingLiveRowMax.Clear();
-                }
-                _liveRowMeanCache.Clear();
-                _liveRowMaxCache.Clear();
-                _liveRowDisplay?.Clear();
-                if (columnNormalizationChanged)
-                {
-                    for (int i = 0; i < CameraCount; i++)
-                    {
-                        _liveCurveMean[i] = null;
-                        _liveCurveMax[i] = null;
-                    }
-                    _liveOverviewDirty = false;
-                    _liveOverviewHelper?.Clear();
-                }
-                _lastLiveRowScaleTrace = null;
-            }
+                ScheduleLiveNormalizationRefresh(settingName);
 
             FlowTrace.Log(string.Format(
                 CultureInfo.InvariantCulture,
@@ -934,6 +945,110 @@ namespace AniloxRoll.Monitor.Forms
                 action));
         }
 
+        private void ScheduleLiveNormalizationRefresh(string settingName)
+        {
+            _pendingLiveNormalizationSetting = settingName;
+            _liveNormalizationGeneration++;
+            if (_liveNormalizationTimer == null)
+            {
+                _liveNormalizationTimer = new System.Windows.Forms.Timer { Interval = 80 };
+                _liveNormalizationTimer.Tick += (sender, args) =>
+                {
+                    _liveNormalizationTimer.Stop();
+                    ApplySettledLiveNormalization();
+                };
+            }
+            _liveNormalizationTimer.Stop();
+            _liveNormalizationTimer.Start();
+        }
+
+        private void ApplySettledLiveNormalization()
+        {
+            string settingName = _pendingLiveNormalizationSetting ?? string.Empty;
+            int generation = _liveNormalizationGeneration;
+            float columnFactor = (float)_settings.HessianMaxFactorV;
+            float rowFactor = (float)_settings.HessianMaxFactorH;
+            float rowMeanPeak = 0f;
+            float rowMaxPeak = 0f;
+
+            for (int i = 0; i < CameraCount; i++)
+            {
+                float[] rawMean = _liveCurveRawMean[i];
+                float[] rawMax = _liveCurveRawMax[i];
+                float captureHm = _liveCurveCaptureHm[i];
+                if (rawMean == null || rawMax == null || captureHm <= 0f) continue;
+                _liveCurveMean[i] = HessianRescaleHelper.CloneAndRescale1D(
+                    rawMean, captureHm, columnFactor);
+                _liveCurveMax[i] = HessianRescaleHelper.CloneAndRescale1D(
+                    rawMax, captureHm, columnFactor);
+            }
+            _liveOverviewDirty = true;
+            LiveOverviewTimer_Tick(null, EventArgs.Empty);
+
+            lock (_pendingLiveRowCurveLock)
+            {
+                foreach (KeyValuePair<int, float[]> item in _liveRowRawMean)
+                {
+                    int camId = item.Key;
+                    if (!_liveRowRawMax.TryGetValue(camId, out float[] rawMax) ||
+                        !_liveRowCaptureHm.TryGetValue(camId, out float captureHm) ||
+                        captureHm <= 0f)
+                        continue;
+                    float[] displayMean = HessianRescaleHelper.CloneAndRescale1D(
+                        item.Value, captureHm, rowFactor);
+                    float[] displayMax = HessianRescaleHelper.CloneAndRescale1D(
+                        rawMax, captureHm, rowFactor);
+                    _pendingLiveRowMean[camId] = displayMean;
+                    _pendingLiveRowMax[camId] = displayMax;
+                    rowMeanPeak = Math.Max(rowMeanPeak, FindCurvePeakNormalized(displayMean));
+                    rowMaxPeak = Math.Max(rowMaxPeak, FindCurvePeakNormalized(displayMax));
+                }
+            }
+            PresentPendingLiveRowCurves();
+            _lastLiveRowScaleTrace = null;
+
+            string actualTrace = string.Format(
+                CultureInfo.InvariantCulture,
+                "setting={0} generation={1} hm={2:F4}/{3:F4} " +
+                "colMeanPeak={4:F4} colMaxPeak={5:F4} " +
+                "rowMeanPeak={6:F4} rowMaxPeak={7:F4}",
+                settingName,
+                generation,
+                columnFactor,
+                rowFactor,
+                FindCurvePeakNormalized(_liveCurveMean),
+                FindCurvePeakNormalized(_liveCurveMax),
+                rowMeanPeak,
+                rowMaxPeak);
+            if (!string.Equals(_lastLiveCurveAppliedTrace, actualTrace, StringComparison.Ordinal))
+            {
+                _lastLiveCurveAppliedTrace = actualTrace;
+                FlowTrace.Dvt("live curve applied " + actualTrace);
+            }
+        }
+
+        private static float FindCurvePeakNormalized(IEnumerable<float[]> curves)
+        {
+            float peak = 0f;
+            if (curves == null) return peak;
+            foreach (float[] curve in curves)
+            {
+                if (curve == null) continue;
+                for (int i = 0; i < curve.Length; i++)
+                    if (curve[i] > peak) peak = curve[i];
+            }
+            return peak / 255f;
+        }
+
+        private static float FindCurvePeakNormalized(float[] curve)
+        {
+            float peak = 0f;
+            if (curve == null) return peak;
+            for (int i = 0; i < curve.Length; i++)
+                if (curve[i] > peak) peak = curve[i];
+            return peak / 255f;
+        }
+
         private void ClearLiveRowChartForBackgroundPreview()
         {
             ResetLiveWaterfallRowChart();
@@ -941,6 +1056,9 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _pendingLiveRowMean.Clear();
                 _pendingLiveRowMax.Clear();
+                _liveRowRawMean.Clear();
+                _liveRowRawMax.Clear();
+                _liveRowCaptureHm.Clear();
             }
             _liveRowMeanCache.Clear();
             _liveRowMaxCache.Clear();

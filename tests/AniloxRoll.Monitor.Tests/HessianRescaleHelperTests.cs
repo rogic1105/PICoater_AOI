@@ -15,7 +15,7 @@ namespace AniloxRoll.Monitor.Tests
                 raw, captureHm: 0.5f, currentHm: 1.0f);
 
             CollectionAssert.AreEqual(
-                new[] { 0f, 128f, 256f, 510f },
+                new[] { 0f, 32f, 64f, 127.5f },
                 display);
             CollectionAssert.AreEqual(
                 new[] { 0f, 64f, 128f, 255f },
@@ -24,18 +24,33 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
-        public void Ratio_InvalidFactorFallsBackToOne()
+        public void Scale_InvalidFactorFallsBackToOne()
         {
-            Assert.That(HessianRescaleHelper.Ratio(0.5f, 0f), Is.EqualTo(1f));
-            Assert.That(HessianRescaleHelper.Ratio(0f, 0.5f), Is.EqualTo(1f));
+            Assert.That(HessianRescaleHelper.RawCurveToDisplayScale(0.5f, 0f),
+                Is.EqualTo(1f));
+            Assert.That(HessianRescaleHelper.NormalizedValueToDisplayScale(0f, 0.5f),
+                Is.EqualTo(1f));
         }
 
         [Test]
-        public void Ratio_CurrentNormalizationIsLinearGain()
+        public void RawCurveScale_CurrentNormalizationIsLinearGain()
         {
-            Assert.That(HessianRescaleHelper.Ratio(0.5f, 0.5f), Is.EqualTo(1f));
-            Assert.That(HessianRescaleHelper.Ratio(0.5f, 1.0f), Is.EqualTo(2f));
-            Assert.That(HessianRescaleHelper.Ratio(0.5f, 1.5f), Is.EqualTo(3f));
+            Assert.That(HessianRescaleHelper.RawCurveToDisplayScale(0.5f, 0.5f),
+                Is.EqualTo(0.25f));
+            Assert.That(HessianRescaleHelper.RawCurveToDisplayScale(0.5f, 1.0f),
+                Is.EqualTo(0.5f));
+            Assert.That(HessianRescaleHelper.RawCurveToDisplayScale(0.5f, 1.5f),
+                Is.EqualTo(0.75f));
         }
+
+        [Test]
+        public void NormalizedValueScale_PreservesCaptureValueAtSameNormalization()
+        {
+            Assert.That(HessianRescaleHelper.NormalizedValueToDisplayScale(0.5f, 0.5f),
+                Is.EqualTo(1f));
+            Assert.That(HessianRescaleHelper.NormalizedValueToDisplayScale(0.5f, 1.0f),
+                Is.EqualTo(2f));
+        }
+
     }
 }

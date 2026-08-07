@@ -146,6 +146,51 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void ColumnIntensityScale_RecolorsStoredHistoryUsingItsFrameSourceGain()
+        {
+            using (var host = new Panel { Size = new Size(320, 240) })
+            using (var view = new WaterfallView(
+                host,
+                camCount: 1,
+                totalHeight: 1000,
+                fullMode: WaterfallFullMode.Restart,
+                screenMmPerPx: 0.264))
+            {
+                view.SetLayout(new[] { 0.0 }, new[] { 1000000.0 }, 1.0);
+                view.SetExpectedFramePeriod(periodTicks: 100, periodMs: 100);
+                view.SetDisplayLayer(WaterfallFrameLayer.Column);
+                view.SetLayerIntensityScale(WaterfallFrameLayer.Column, 0.5f);
+
+                byte[] raw = { 0, 0, 0, 0 };
+                byte[] column = { 255, 255, 255, 255 };
+                view.PushFrameVariants(
+                    1, raw, column, raw, 2, 2, tick: 100,
+                    columnSourceGain: 2f, rowSourceGain: 0f);
+                view.PushFrameVariants(
+                    1, raw, column, raw, 2, 2, tick: 200,
+                    columnSourceGain: 2f, rowSourceGain: 0f);
+
+                Thread.Sleep(200);
+                Application.DoEvents();
+                Assert.That(
+                    SpinWait.SpinUntil(
+                        () => ReadPrivate<int>(view, "_writeRow") >= 2 &&
+                              !ReadPrivate<bool>(view, "_writerRunning"),
+                        2000),
+                    Is.True,
+                    "waterfall writer did not persist the source gain with the aligned band");
+
+                using (Bitmap halfScale = ReadRegion(view, width: 2))
+                    Assert.That(halfScale.GetPixel(0, 0).R, Is.EqualTo(64).Within(1));
+
+                view.SetLayerIntensityScale(WaterfallFrameLayer.Column, 1f);
+
+                using (Bitmap fullScale = ReadRegion(view, width: 2))
+                    Assert.That(fullScale.GetPixel(0, 0).R, Is.EqualTo(128).Within(1));
+            }
+        }
+
+        [Test]
         public void HorizontalCrop_PreservesWaterfallHistoryAndWriteHead()
         {
             using (var host = new Panel { Size = new Size(320, 240) })

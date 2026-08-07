@@ -16,7 +16,16 @@ namespace TanukiCv.Controls
     /// </summary>
     public sealed class ThumbStrip : IDisposable
     {
-        private sealed class Frame { public readonly byte[] Bytes; public readonly int W, H; public Frame(byte[] b, int w, int h) { Bytes = b; W = w; H = h; } }
+        private sealed class Frame
+        {
+            public readonly byte[] Bytes;
+            public readonly int W, H;
+            public readonly float SourceGain;
+            public Frame(byte[] b, int w, int h, float sourceGain)
+            {
+                Bytes = b; W = w; H = h; SourceGain = sourceGain;
+            }
+        }
 
         private readonly ThumbView[] _thumbs;
         private readonly Frame[] _latest;
@@ -45,6 +54,20 @@ namespace TanukiCv.Controls
 
         /// <summary>建縮圖時 stride 降採樣到此寬以下（小圖、便宜）。預設 320。</summary>
         public int ThumbMaxW { get; set; } = 320;
+
+        public float IntensityScale
+        {
+            get => _intensityScale;
+            set
+            {
+                float normalized = value > 0f ? value : 1f;
+                if (Math.Abs(_intensityScale - normalized) < 0.0001f) return;
+                _intensityScale = normalized;
+                for (int i = 0; i < _dirty.Length; i++)
+                    if (_latest[i] != null) _dirty[i] = true;
+            }
+        }
+        private float _intensityScale = 1f;
 
         /// <summary>上下翻轉（線掃由下往上拍 / GPU 輸出 bottom-up 時）。</summary>
         public bool FlipVertical { get; set; }
@@ -76,12 +99,15 @@ namespace TanukiCv.Controls
 
         /// <summary>相機每幀（可能背景執行緒）：存灰階快照 + 標 dirty。**不在此建圖/換圖**（避免每幀每台 BeginInvoke → 閃）。</summary>
         public void PushFrame(int idx, byte[] gray, int w, int h)
+            => PushFrame(idx, gray, w, h, 1f);
+
+        public void PushFrame(int idx, byte[] gray, int w, int h, float sourceGain)
         {
             if (_disposed || idx < 0 || idx >= _count || gray == null || w <= 0 || h <= 0) return;
             int n = w * h;
             var copy = new byte[n];
             Array.Copy(gray, copy, Math.Min(gray.Length, n));
-            _latest[idx] = new Frame(copy, w, h);
+            _latest[idx] = new Frame(copy, w, h, sourceGain);
             _dirty[idx] = true;
         }
 
@@ -114,17 +140,24 @@ namespace TanukiCv.Controls
         {
             int cap = ThumbMaxW > 0 ? ThumbMaxW : 320;
             int ds = Math.Max(1, (f.W + cap - 1) / cap);
-            if (ds == 1) return GrayBitmap.From(f.Bytes, f.W, f.H, FlipVertical);
+            if (ds == 1)
+                return GrayBitmap.From(
+                    GrayIntensity.ScaleCopy(f.Bytes, EffectiveScale(f)),
+                    f.W, f.H, FlipVertical);
             int dw = Math.Max(1, f.W / ds), dh = Math.Max(1, f.H / ds);
             var small = new byte[dw * dh];
             byte[] src = f.Bytes; int w = f.W;
             for (int y = 0; y < dh; y++)
             {
                 int srow = (y * ds) * w, drow = y * dw;
-                for (int x = 0; x < dw; x++) small[drow + x] = src[srow + x * ds];
+                for (int x = 0; x < dw; x++)
+                    small[drow + x] = GrayIntensity.Scale(src[srow + x * ds], EffectiveScale(f));
             }
             return GrayBitmap.From(small, dw, dh, FlipVertical);
         }
+
+        private float EffectiveScale(Frame frame)
+            => frame == null || frame.SourceGain <= 0f ? 1f : _intensityScale / frame.SourceGain;
 
         public void Dispose()
         {

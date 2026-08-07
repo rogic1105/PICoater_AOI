@@ -36,6 +36,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         private WaterfallView _waterfallView;
         private ThumbStrip _waterfallThumbs;   // 顯示鐵則1：縮圖在瀑布模式也一律即時影像（與即時模式同源 CPU ThumbStrip）
         private WaterfallFrameLayer _waterfallDisplayLayer = WaterfallFrameLayer.Raw;
+        private float _columnIntensityScale = 1f;
+        private float _rowIntensityScale = 1f;
         private CanvasOverlayMode _overlayMode = CanvasOverlayMode.Coordinates;
         private bool _applyingOverlayMode;
 
@@ -298,7 +300,38 @@ namespace AniloxRoll.Monitor.UI.Managers
         {
             _waterfallDisplayLayer = layer;
             _waterfallView?.SetDisplayLayer(layer);
+            ApplyEnhanceIntensityScales();
             RefreshEnhanceColorMap();
+        }
+
+        public void SetEnhanceIntensityScales(float columnScale, float rowScale)
+        {
+            _columnIntensityScale = columnScale > 0f ? columnScale : 1f;
+            _rowIntensityScale = rowScale > 0f ? rowScale : 1f;
+            ApplyEnhanceIntensityScales();
+        }
+
+        private void ApplyEnhanceIntensityScales()
+        {
+            float activeScale = _waterfallDisplayLayer == WaterfallFrameLayer.Column
+                ? _columnIntensityScale
+                : _waterfallDisplayLayer == WaterfallFrameLayer.Row
+                    ? _rowIntensityScale
+                    : 1f;
+            if (_imageDisplay != null)
+            {
+                _imageDisplay.IntensityScale = activeScale;
+                _imageDisplay.RefreshNow();
+            }
+            if (_waterfallView != null)
+            {
+                _waterfallView.SetLayerIntensityScale(
+                    WaterfallFrameLayer.Column, _columnIntensityScale);
+                _waterfallView.SetLayerIntensityScale(
+                    WaterfallFrameLayer.Row, _rowIntensityScale);
+            }
+            if (_waterfallThumbs != null)
+                _waterfallThumbs.IntensityScale = activeScale;
         }
 
         /// <summary>
@@ -337,6 +370,10 @@ namespace AniloxRoll.Monitor.UI.Managers
             _waterfallView.InformationTextProvider = () =>
                 CanvasParameterTextBuilder.FromCurrentSettings(_getSettings());
             _waterfallView.SetDisplayLayer(_waterfallDisplayLayer);
+            _waterfallView.SetLayerIntensityScale(
+                WaterfallFrameLayer.Column, _columnIntensityScale);
+            _waterfallView.SetLayerIntensityScale(
+                WaterfallFrameLayer.Row, _rowIntensityScale);
             _waterfallView.ColorMap = ResolveWaterfallColorMap();
             _waterfallView.FlipVertical = ShouldFlipVertical;
             _waterfallView.SetRowPitch(RowPitchMm);
@@ -351,6 +388,11 @@ namespace AniloxRoll.Monitor.UI.Managers
 
             // 顯示鐵則1：瀑布模式的 7 台縮圖也一律即時影像（CPU ThumbStrip，與即時模式同源；點選/高亮一致）。
             _waterfallThumbs = new ThumbStrip(_cameraPanels);
+            _waterfallThumbs.IntensityScale = _waterfallDisplayLayer == WaterfallFrameLayer.Column
+                ? _columnIntensityScale
+                : _waterfallDisplayLayer == WaterfallFrameLayer.Row
+                    ? _rowIntensityScale
+                    : 1f;
             _waterfallThumbs.FlipVertical = ShouldFlipVertical;
             _waterfallThumbs.SetSelectedColor(Color.Orange);   // 與即時模式一致（選中框唯一樣式＝橘色）
             _waterfallThumbs.SelectRequested += idx => SwitchMainDisplay(idx + 1, centerView: true);
@@ -406,7 +448,8 @@ namespace AniloxRoll.Monitor.UI.Managers
         }
 
         private void OnCameraWaterfallFrame(
-            int camId, byte[] raw, byte[] column, byte[] row, int w, int h, long tick)
+            int camId, byte[] raw, byte[] column, byte[] row, int w, int h, long tick,
+            float columnSourceGain, float rowSourceGain)
         {
             if (ImageCanvasMode && !_warnFrameToWfInIc)
             {
@@ -414,11 +457,15 @@ namespace AniloxRoll.Monitor.UI.Managers
                 Flow("⚠ 契約違規：即時模式下幀流入瀑布路徑（訂閱錯掛/殘留）");
             }
             FlowFirstFrame(camId, w, h, "Waterfall");
-            _waterfallView?.PushFrameVariants(camId, raw, column, row, w, h, tick);
+            _waterfallView?.PushFrameVariants(
+                camId, raw, column, row, w, h, tick, columnSourceGain, rowSourceGain);
             byte[] thumb = _waterfallDisplayLayer == WaterfallFrameLayer.Column ? column
                 : _waterfallDisplayLayer == WaterfallFrameLayer.Row ? row
                 : raw;
-            _waterfallThumbs?.PushFrame(camId - 1, thumb ?? raw, w, h);
+            float thumbSourceGain = _waterfallDisplayLayer == WaterfallFrameLayer.Column
+                ? columnSourceGain
+                : _waterfallDisplayLayer == WaterfallFrameLayer.Row ? rowSourceGain : 0f;
+            _waterfallThumbs?.PushFrame(camId - 1, thumb ?? raw, w, h, thumbSourceGain);
         }
 
         private void OnWaterfallSelectRequested(int camId)
@@ -450,6 +497,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _imageDisplay.Canvas.InformationTextProvider = () =>
                 CanvasParameterTextBuilder.FromCurrentSettings(_getSettings());
             ApplyImageDisplayOptions(_globalMerge.IsActive);
+            ApplyEnhanceIntensityScales();
             _imageDisplay.SelectRequested += ImageSelectCamera;
             _imageDisplay.SelectedCamChanged += camId =>
             {
@@ -521,7 +569,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void PushStaticFrame(int camId, byte[] gray, int w, int h)
         {
             Flow($"bgPreview push cam{camId} {w}x{h}（view={(_imageDisplay != null)}）");
-            _imageDisplay?.PushFrame(camId, gray, w, h);
+            _imageDisplay?.PushFrame(camId, gray, w, h, 0f);
         }
 
         public void SetLodMode(LiveLodMode mode)
@@ -598,7 +646,7 @@ namespace AniloxRoll.Monitor.UI.Managers
             _gpuResizeProvider.Release();
         }
 
-        private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick)
+        private void OnCameraDisplayFrame(int camId, byte[] bytes, int w, int h, long tick, float sourceGain)
         {
             // 背景預覽期間相機幀不進 view（預覽=靜態幀來源）：取得背景自動停後的「排水殘幀」
             // 晚到 ~1s 會蓋掉剛推的背景（2026-07-09 log 定罪 29.585 firstFrame→IC）。Exit 即恢復。
@@ -609,7 +657,7 @@ namespace AniloxRoll.Monitor.UI.Managers
                 Flow("⚠ 契約違規：瀑布模式下幀流入 IC 路徑（訂閱錯掛/殘留）");
             }
             FlowFirstFrame(camId, w, h, "ImageDisplayView");
-            _imageDisplay?.PushFrame(camId, bytes, w, h);
+            _imageDisplay?.PushFrame(camId, bytes, w, h, sourceGain);
         }
 
         public void ClearCameraFrame(int camId)

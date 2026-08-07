@@ -33,8 +33,14 @@ description: Modify image-processing pipelines, native processing calls, buffer 
 - Settings 拆分為 `HessianMaxFactorV`（垂直）+ `HessianMaxFactorH`（水平），native 端介面（`AoiAlgorithmParams.HessianMaxFactor`）維持單一欄位
 - **Capture 時** 送進 native 的單一 HM = `HessianMaxFactorV` → bin 中 baked-in 的縮放係數是 `255/HessianMaxFactorV`
 - **View 時** rescale 公式：
-  - V/欄曲線（`chartLiveColumn` / `chartReviewColumn` / `chartDataColumn`）：`display = (bin/255) × (HM_V_capture / HM_V_current)` — 改 V 即時生效
-  - H/列曲線（`chartLiveRow` / `chartReviewRow`）：`display = (bin/255) × (HM_V_capture / HM_H_current)` — 改 H 即時生效；公式 numerator 用 V_capture 因為 bin 是被 V baked-in
+  - V/欄曲線（`chartLiveColumn` / `chartReviewColumn` / `chartDataColumn`）：`display = (bin/255) × HM_V_capture × HM_V_current` — 先還原 neutral Hessian，再套目前欄正規值
+  - H/列曲線（`chartLiveRow` / `chartReviewRow`）：`display = (bin/255) × HM_V_capture × HM_H_current` — bin 仍以 V_capture 寫入，但顯示套目前列正規值
+  - CSV 與 `#CURVE-C` 已保存拍攝當時的正規化摘要，不可再套 raw bin 公式；摘要換算為
+    `displaySummary = capturedSummary × HM_current / HM_capture`。兩種表示由
+    `HessianRescaleHelper.RawCurveToDisplayScale` 與 `NormalizedValueToDisplayScale` 明確分流。
+- **Live 強化圖**：neutral half map 每幀依自身最大值編成 8-bit，並把 `sourceGain` 隨幀送到
+  `ImageDisplayView` / `WaterfallView` / `ThumbStrip`；顯示倍率為 `currentHm/sourceGain`。不得以 capture HM
+  當固定 byte 基準，否則高峰會先截成 255、低峰則受量化誤差放大。
 - 改 PropertyGrid 正規值 V/H 時，Form 的 `_propertyGrid_PropertyValueChanged` 呼叫 `RefreshMuraProfileForSettingsChange` + `_stitchCoordinator.UpdateStitchedOverviewChart` 立即重畫
 - CSV `#CFG` 記錄 `HessianMaxFactorV`、`HessianMaxFactorH` 與 capture-time `RidgeSigma`；
   細線濾除變更必須產生新版快照。舊資料缺少 `RidgeSigma` 時維持可讀，該值視為未知（0）。
@@ -54,7 +60,8 @@ description: Modify image-processing pipelines, native processing calls, buffer 
 - 改成：`TryApplyPicoaterRidge` 呼 `ProcessImage` 時，output struct 帶 3 個 pinned dst（raw/V/H）+ 目標尺寸 →
   pipeline（`export_api.cpp`）在**檢測同一次 device 停留**、用 resident `d_input/d_ridge/d_mura` + 可重用 `d_resize`
   就地縮 → D2H。`TrySaveCapture` 直接讀預縮好的 buffer。
-- **grab-level gate**：`wantResize = EnableAutoCapture && !SuppressCapture && CaptureRootPath && scale>1 && buffers`；
+- **兩個獨立 gate**：存檔縮圖仍由 `wantResize = EnableAutoCapture && !SuppressCapture && CaptureRootPath && scale>1 && buffers` 決定；
+  neutral half Hessian 標準圖則每個成功處理幀都產生，監控與回顧共用相同來源，不得綁在存檔開關；
   純 live 幀傳 0 → pipeline 跳過縮圖（不浪費）。存/不存以 grab 為單位決定，不做 per-frame。
 - **防呆**：`_lastFrameResized`（TryApplyPicoaterRidge 開頭清 false、ProcessImage 成功才設 wantResize）→
   detection 失敗幀不讀舊縮圖。resize 失敗 pipeline 回 -2（該幀不存，不崩）。

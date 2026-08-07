@@ -4,7 +4,9 @@ namespace AniloxRoll.Monitor.Core.Services
 {
     /// <summary>
     /// 統一處理 view-time 正規值 rescale 公式：
-    /// display = (bin/255) × (HM_current / HM_capture)。
+    /// display = (bin/255) × HM_capture × HM_current。
+    /// Native curve bins contain neutral Hessian × 255 / HM_capture; multiplying by the
+    /// capture factor first restores the neutral value, then HM_current is the display gain.
     ///
     /// 為什麼集中：rescale 邏輯原本散在 4 處（DataStatisticsPresenter / ReviewChartPresenter
     /// 各 2 份），公式雖一致但易漂移（未來改 ratio 計算邏輯必須 4 處同改）。
@@ -12,10 +14,20 @@ namespace AniloxRoll.Monitor.Core.Services
     public static class HessianRescaleHelper
     {
         /// <summary>
-        /// 計算 ratio = HM_current / HM_capture；任一為 0 時回傳 1f。
-        /// 因此目前正規值加倍時，顯示 Curve 也線性加倍。
+        /// 計算 view scale = HM_capture × HM_current；任一為 0 時回傳 1f。
+        /// 因此目前正規值加倍時，顯示 Curve 也線性加倍，並與 neutral Hessian map 一致。
         /// </summary>
-        public static float Ratio(float captureHm, float currentHm)
+        public static float RawCurveToDisplayScale(float captureHm, float currentHm)
+        {
+            if (captureHm <= 0f || currentHm <= 0f) return 1f;
+            return captureHm * currentHm;
+        }
+
+        /// <summary>
+        /// Scales a value that was already normalized with the capture-time HM.
+        /// CSV and #CURVE summaries use this representation.
+        /// </summary>
+        public static float NormalizedValueToDisplayScale(float captureHm, float currentHm)
         {
             if (captureHm <= 0f || currentHm <= 0f) return 1f;
             return currentHm / captureHm;
@@ -28,7 +40,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public static void RescaleInPlace2D(float[][] allMean, float[][] allMax,
             float captureHm, float currentHm)
         {
-            float ratio = Ratio(captureHm, currentHm);
+            float ratio = RawCurveToDisplayScale(captureHm, currentHm);
             if (IsNoOp(ratio)) return;
             ApplyRatio2D(allMean, ratio);
             ApplyRatio2D(allMax,  ratio);
@@ -38,7 +50,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public static void RescaleInPlace1D(float[] data, float captureHm, float currentHm)
         {
             if (data == null) return;
-            float ratio = Ratio(captureHm, currentHm);
+            float ratio = RawCurveToDisplayScale(captureHm, currentHm);
             if (IsNoOp(ratio)) return;
             for (int i = 0; i < data.Length; i++) data[i] *= ratio;
         }
@@ -47,7 +59,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public static float[][] CloneAndRescale2D(float[][] src, float captureHm, float currentHm)
         {
             if (src == null) return null;
-            float ratio = Ratio(captureHm, currentHm);
+            float ratio = RawCurveToDisplayScale(captureHm, currentHm);
             bool noOp = IsNoOp(ratio);
             var dst = new float[src.Length][];
             for (int i = 0; i < src.Length; i++)
@@ -64,7 +76,7 @@ namespace AniloxRoll.Monitor.Core.Services
         public static float[] CloneAndRescale1D(float[] src, float captureHm, float currentHm)
         {
             if (src == null) return null;
-            float ratio = Ratio(captureHm, currentHm);
+            float ratio = RawCurveToDisplayScale(captureHm, currentHm);
             bool noOp = IsNoOp(ratio);
             var dst = new float[src.Length];
             if (noOp) { Array.Copy(src, dst, src.Length); return dst; }

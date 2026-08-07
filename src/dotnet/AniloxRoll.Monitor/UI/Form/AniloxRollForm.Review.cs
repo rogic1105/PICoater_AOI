@@ -174,6 +174,58 @@ namespace AniloxRoll.Monitor.Forms
             catch (Exception ex) { Trace.WriteLine($"[ApplyReviewEnhance] {ex}"); }
         }
 
+        private void ScheduleReviewNormalizationRefresh(string settingName)
+        {
+            _pendingReviewNormalizationSetting = settingName;
+            int generation = ++_reviewNormalizationGeneration;
+            if (_reviewNormalizationTimer == null)
+            {
+                _reviewNormalizationTimer = new System.Windows.Forms.Timer { Interval = 100 };
+                _reviewNormalizationTimer.Tick += ReviewNormalizationTimer_Tick;
+            }
+            _reviewNormalizationTimer.Stop();
+            _reviewNormalizationTimer.Start();
+            FlowTrace.Dvt($"RV normalization queued generation={generation} setting={settingName}");
+        }
+
+        private async void ReviewNormalizationTimer_Tick(object sender, EventArgs e)
+        {
+            _reviewNormalizationTimer.Stop();
+            if (_reviewNormalizationApplying)
+            {
+                _reviewNormalizationTimer.Start();
+                return;
+            }
+
+            int generation = _reviewNormalizationGeneration;
+            string settingName = _pendingReviewNormalizationSetting ?? string.Empty;
+            _reviewNormalizationApplying = true;
+            try
+            {
+                _stitchCoordinator?.UpdateStitchedOverviewChart();
+                _stitchCoordinator?.RefreshChartsForSettingsChange();
+                if (_settings.EnableReviewEnhance)
+                    await ApplyReviewEnhance(true);
+
+                FlowTrace.Dvt(string.Format(
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    "RV normalization settle generation={0} setting={1} hm={2:F4}/{3:F4}",
+                    generation,
+                    settingName,
+                    _settings.HessianMaxFactorV,
+                    _settings.HessianMaxFactorH));
+            }
+            finally
+            {
+                _reviewNormalizationApplying = false;
+                if (generation != _reviewNormalizationGeneration)
+                {
+                    _reviewNormalizationTimer.Stop();
+                    _reviewNormalizationTimer.Start();
+                }
+            }
+        }
+
         private async Task ReloadCurrentStitchedView(bool enableProcess)
         {
             int idx = cbReviewId.SelectedIndex;

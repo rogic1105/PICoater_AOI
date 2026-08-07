@@ -241,6 +241,32 @@
       "TimeoutSeconds": 300
     },
     {
+      "Id": "review-column-normalization",
+      "Contract": "S1",
+      "Title": "調整回顧欄正規值",
+      "Action": "set-property",
+      "Target": "欄正規值",
+      "Value": "0.47",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-row-normalization",
+      "Contract": "S1",
+      "Title": "調整回顧列正規值",
+      "Action": "set-property",
+      "Target": "列正規值",
+      "Value": "0.83",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-normalization-proof",
+      "Contract": "S1",
+      "Title": "確認回顧圖片與 Curve 套用最後一筆正規值",
+      "Action": "wait-log",
+      "Pattern": "RV normalization settle generation=\\d+ setting=dd_HessianMaxFactorH hm=0\\.4700/0\\.8300",
+      "TimeoutSeconds": 300
+    },
+    {
       "Id": "review-enhance-off",
       "Contract": "S2",
       "Title": "再點同一圖表還原原圖",

@@ -177,6 +177,22 @@
       "TimeoutSeconds": 10
     },
     {
+      "Id": "normalization-curve-proof",
+      "Contract": "S1",
+      "Title": "確認欄列 Curve 套用最後正規值",
+      "Action": "wait-log",
+      "Pattern": "live curve applied setting=dd_HessianMaxFactorH .*hm=0\\.4700/0\\.8300",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "monitor-image-proof",
+      "Contract": "S1",
+      "Title": "確認監控現有強化影像立即套用欄列正規值",
+      "Action": "wait-log",
+      "Pattern": "live image scale source=adaptive-standard-half captureHm=.* currentHm=0\\.4700/0\\.8300 scale=0\\.4700/0\\.8300",
+      "TimeoutSeconds": 30
+    },
+    {
       "Id": "column-mean-threshold",
       "Contract": "S1",
       "Title": "套用欄平均閾值",
@@ -225,7 +241,7 @@
       "Contract": "S1",
       "Title": "確認列 Curve 使用欄列正規值換算",
       "Action": "wait-log",
-      "Pattern": "live row normalize captureHm=0\\.4700 rowHm=0\\.8300 ratio=",
+      "Pattern": "live row normalize captureHm=[0-9.]+ rowHm=0\\.8300 ratio=",
       "TimeoutSeconds": 30
     },
     {

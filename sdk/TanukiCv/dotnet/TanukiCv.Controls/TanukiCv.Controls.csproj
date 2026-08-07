@@ -64,6 +64,7 @@
     <Compile Include="EnumDescriptionConverter.cs" />
     <Compile Include="RowCurveChartHelper.cs" />
     <Compile Include="GrayBitmap.cs" />
+    <Compile Include="GrayIntensity.cs" />
     <Compile Include="GrayResizeCpu.cs" />
     <Compile Include="LiveDisplayOptions.cs" />
     <Compile Include="ImageDisplayView.cs" />

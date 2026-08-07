@@ -117,6 +117,104 @@ namespace AniloxRoll.Monitor.Core.Services
             return gray;
         }
 
+        public static byte[] ToGray8Expanded(
+            byte[] halfBytes,
+            int sourceWidth,
+            int sourceHeight,
+            int targetWidth,
+            int targetHeight,
+            float displayGain)
+        {
+            int sourceSamples = ValidateDimensions(sourceWidth, sourceHeight);
+            var small = new byte[sourceSamples];
+            var expanded = new byte[checked(targetWidth * targetHeight)];
+            FillGray8Expanded(
+                halfBytes, sourceWidth, sourceHeight,
+                targetWidth, targetHeight, displayGain,
+                small, expanded);
+            return expanded;
+        }
+
+        public static void FillGray8Expanded(
+            byte[] halfBytes,
+            int sourceWidth,
+            int sourceHeight,
+            int targetWidth,
+            int targetHeight,
+            float displayGain,
+            byte[] sourceGray,
+            byte[] targetGray)
+        {
+            if (halfBytes == null) throw new ArgumentNullException(nameof(halfBytes));
+            if (sourceGray == null) throw new ArgumentNullException(nameof(sourceGray));
+            if (targetGray == null) throw new ArgumentNullException(nameof(targetGray));
+            if (!(displayGain > 0f)) throw new ArgumentOutOfRangeException(nameof(displayGain));
+            int sourceSamples = ValidateDimensions(sourceWidth, sourceHeight);
+            int targetSamples = ValidateDimensions(targetWidth, targetHeight);
+            if (halfBytes.Length != checked(sourceSamples * 2))
+                throw new ArgumentException("Half map byte count does not match dimensions.", nameof(halfBytes));
+            if (sourceGray.Length < sourceSamples)
+                throw new ArgumentException("Source gray buffer is too small.", nameof(sourceGray));
+            if (targetGray.Length < targetSamples)
+                throw new ArgumentException("Target gray buffer is too small.", nameof(targetGray));
+
+            float scale = 255f * displayGain;
+            for (int i = 0; i < sourceSamples; i++)
+            {
+                ushort bits = (ushort)(halfBytes[i * 2] | (halfBytes[i * 2 + 1] << 8));
+                float value = HalfToSingle(bits) * scale;
+                if (float.IsNaN(value) || value <= 0f) sourceGray[i] = 0;
+                else if (value >= 255f) sourceGray[i] = 255;
+                else sourceGray[i] = (byte)(value + 0.5f);
+            }
+
+            if (sourceWidth == targetWidth && sourceHeight == targetHeight)
+            {
+                Buffer.BlockCopy(sourceGray, 0, targetGray, 0, targetSamples);
+                return;
+            }
+
+            var expandedRow = new byte[targetWidth];
+            int previousSourceY = -1;
+            for (int y = 0; y < targetHeight; y++)
+            {
+                int sourceY = (int)((long)y * sourceHeight / targetHeight);
+                if (sourceY != previousSourceY)
+                {
+                    int sourceOffset = sourceY * sourceWidth;
+                    for (int x = 0; x < targetWidth; x++)
+                    {
+                        int sourceX = (int)((long)x * sourceWidth / targetWidth);
+                        expandedRow[x] = sourceGray[sourceOffset + sourceX];
+                    }
+                    previousSourceY = sourceY;
+                }
+                Buffer.BlockCopy(expandedRow, 0, targetGray, y * targetWidth, targetWidth);
+            }
+        }
+
+        /// <summary>
+        /// Chooses a per-frame gain that maps the largest finite positive sample to byte 255.
+        /// The gain must travel with the encoded frame so display can apply currentGain/sourceGain.
+        /// </summary>
+        public static float ComputeAdaptiveByteGain(byte[] halfBytes, int sourceWidth, int sourceHeight)
+        {
+            if (halfBytes == null) throw new ArgumentNullException(nameof(halfBytes));
+            int sourceSamples = ValidateDimensions(sourceWidth, sourceHeight);
+            if (halfBytes.Length != checked(sourceSamples * 2))
+                throw new ArgumentException("Half map byte count does not match dimensions.", nameof(halfBytes));
+
+            float max = 0f;
+            for (int i = 0; i < sourceSamples; i++)
+            {
+                ushort bits = (ushort)(halfBytes[i * 2] | (halfBytes[i * 2 + 1] << 8));
+                float value = HalfToSingle(bits);
+                if (!float.IsNaN(value) && !float.IsInfinity(value) && value > max)
+                    max = value;
+            }
+            return max > 0f ? 1f / max : 1f;
+        }
+
         internal static float HalfToSingle(ushort half)
         {
             uint sign = (uint)(half & 0x8000) << 16;

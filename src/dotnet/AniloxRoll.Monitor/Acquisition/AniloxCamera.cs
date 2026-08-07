@@ -68,6 +68,8 @@ namespace AniloxRoll.Monitor.Core.Camera
         // 細線濾除（ridge_sigma）。實際值由 LiveCameraManager 從設定注入；此處預設＝唯一來源常數（勿寫誤導死值）。
         public double HessianSigma { get; set; } = InspectionEngineConfig.DefaultRidgeSigma;
         public double HessianFixedMax { get; set; } = 1.0;
+        public float HessianColumnDisplayFactor { get; set; } = InspectionEngineConfig.DefaultHessianMaxFactor;
+        public float HessianRowDisplayFactor { get; set; } = InspectionEngineConfig.DefaultHessianMaxFactor;
         public string RidgeMode { get; set; } = "vertical";
         /// <summary>Live 顯示方向："v" = vertical ridge, "h" = horizontal ridge。</summary>
         public string LiveDisplayDirection { get; set; } = "v";
@@ -170,6 +172,12 @@ namespace AniloxRoll.Monitor.Core.Camera
         private int _resizeHeight = 0;
         private int _standardWidth = 0;
         private int _standardHeight = 0;
+        private byte[] _hostColumnStandardHalfBuffer;
+        private byte[] _hostRowStandardHalfBuffer;
+        private byte[] _hostColumnStandardGrayBuffer;
+        private byte[] _hostRowStandardGrayBuffer;
+        private float _columnFrameSourceGain = 1f;
+        private float _rowFrameSourceGain = 1f;
         // 本幀 fused 縮圖是否成功填好三塊 buffer（供 TrySaveCapture 判定；detection 失敗幀不得存舊縮圖）。
         private bool _lastFrameResized = false;
         private bool _fusedResizeLogged = false;   // 每台每次開程式只記一筆「fused 路徑已啟用」確認 log
@@ -212,17 +220,17 @@ namespace AniloxRoll.Monitor.Core.Camera
         /// <summary>ImageCanvas / 瀑布顯示路徑用：每幀提供「顯示 bytes(8-bit 灰階)+ 尺寸 + 本幀硬體 frame-start tick」(MIL 回呼執行緒)。
         /// bytes 是重用緩衝 → 訂閱者必須**同步消費**(組 bitmap 複製)、勿存 ref。只在有訂閱者時觸發。
         /// tick＝跨相機幀對齊的硬體鑰匙（同 Review 的 FrameTickIndex；瀑布即時用它聚類時間槽）。</summary>
-        public event Action<int, byte[], int, int, long> OnDisplayFrame;
+        public event Action<int, byte[], int, int, long, float> OnDisplayFrame;
 
         /// <summary>
         /// 瀑布歷史用：同一物理幀一次提供原圖、欄強化與列強化。
         /// 三個陣列皆為重用緩衝，訂閱者必須在回呼內同步複製。
         /// </summary>
-        public event Action<int, byte[], byte[], byte[], int, int, long> OnWaterfallFrame;
+        public event Action<int, byte[], byte[], byte[], int, int, long, float, float> OnWaterfallFrame;
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
-        public event Action<int, float[], float[]> OnLiveCurveData;
+        public event Action<int, float[], float[], float> OnLiveCurveData;
         public event Action<int, float[], float[], float> OnLiveRowCurveData;
 
         /// <summary>存檔完成回呼：傳入已儲存的檔案路徑陣列（供遠端複製佇列）。</summary>
@@ -233,6 +241,7 @@ namespace AniloxRoll.Monitor.Core.Camera
         private bool _hasAcceptedCaptureFrame;
         private float _lastMeanPeak = 0f;
         private float _lastMaxPeak  = 0f;
+        private int _lastDvtPixelCurveProbeTick;
 
         // ==================== Constructor ====================
         public AniloxCamera(MIL_ID systemId, int id, int devNum, string dcfPath, IntPtr panelHandle, bool enableImageProcessing = true)
@@ -483,7 +492,13 @@ namespace AniloxRoll.Monitor.Core.Camera
             if (onDisp != null)
             {
                 byte[] disp = showProcessed ? processedDisplay : _hostInputBuffer;
-                if (disp != null) onDisp(CameraId, disp, FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
+                if (disp != null)
+                {
+                    float sourceGain = showProcessed
+                        ? (LiveDisplayDirection == "h" ? _rowFrameSourceGain : _columnFrameSourceGain)
+                        : 0f;
+                    onDisp(CameraId, disp, FrameWidth, FrameHeight, _mil.LastFrameStartTicks, sourceGain);
+                }
             }
 
             var onWaterfall = OnWaterfallFrame;
@@ -493,7 +508,9 @@ namespace AniloxRoll.Monitor.Core.Camera
                 byte[] row = processedByPicoater ? _hostRowOutputBuffer : _hostInputBuffer;
                 onWaterfall(
                     CameraId, _hostInputBuffer, column, row,
-                    FrameWidth, FrameHeight, _mil.LastFrameStartTicks);
+                    FrameWidth, FrameHeight, _mil.LastFrameStartTicks,
+                    processedByPicoater ? _columnFrameSourceGain : 0f,
+                    processedByPicoater ? _rowFrameSourceGain : 0f);
             }
 
             // Global merge 複製（display buffer → 合併 buffer 裁切位置）已移至 MilCamera grab hook，
@@ -560,8 +577,11 @@ namespace AniloxRoll.Monitor.Core.Camera
                         && !string.IsNullOrWhiteSpace(CaptureRootPath)
                         && _saveResizeScale > 1
                         && _resizeWidth > 0 && _resizeHeight > 0
-                        && _rawResizeBuf != IntPtr.Zero && _procResizeBuf != IntPtr.Zero && _muraResizeBuf != IntPtr.Zero
-                        && _hessianCStandardBuf != IntPtr.Zero && _hessianRStandardBuf != IntPtr.Zero;
+                        && _rawResizeBuf != IntPtr.Zero && _procResizeBuf != IntPtr.Zero && _muraResizeBuf != IntPtr.Zero;
+                    bool wantStandard = _standardWidth > 0 && _standardHeight > 0
+                        && _hessianCStandardBuf != IntPtr.Zero && _hessianRStandardBuf != IntPtr.Zero
+                        && _hostColumnStandardHalfBuffer != null && _hostRowStandardHalfBuffer != null
+                        && _hostColumnStandardGrayBuffer != null && _hostRowStandardGrayBuffer != null;
 
                     var swGpu = System.Diagnostics.Stopwatch.StartNew();
                     IntPtr backgroundColumnMean = _precomputedColMean;
@@ -591,10 +611,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                             ResizedRaw   = wantResize ? _rawResizeBuf  : IntPtr.Zero,
                             ResizedRidge = wantResize ? _procResizeBuf : IntPtr.Zero,
                             ResizedMura  = wantResize ? _muraResizeBuf : IntPtr.Zero,
-                            StandardWidth = wantResize ? _standardWidth : 0,
-                            StandardHeight = wantResize ? _standardHeight : 0,
-                            ResizedHessianColumnHalf = wantResize ? _hessianCStandardBuf : IntPtr.Zero,
-                            ResizedHessianRowHalf = wantResize ? _hessianRStandardBuf : IntPtr.Zero
+                            StandardWidth = wantStandard ? _standardWidth : 0,
+                            StandardHeight = wantStandard ? _standardHeight : 0,
+                            ResizedHessianColumnHalf = wantStandard ? _hessianCStandardBuf : IntPtr.Zero,
+                            ResizedHessianRowHalf = wantStandard ? _hessianRStandardBuf : IntPtr.Zero
                         },
                         Params = new AoiProcessRequest.AlgorithmParams
                         {
@@ -629,6 +649,10 @@ namespace AniloxRoll.Monitor.Core.Camera
                     }
 
                     // 從 Mura 曲線計算 peak（0-1 normalized），供 OnInspectionResult 使用
+                    float[] columnMeanForProbe = null;
+                    float[] columnMaxForProbe = null;
+                    float[] rowMeanForProbe = null;
+                    float[] rowMaxForProbe = null;
                     int curveLen = _nativeBufferPool.CurveBufferSize / sizeof(float);
                     if (curveLen > 0 && picoaterCurveMean != IntPtr.Zero && picoaterCurveMax != IntPtr.Zero)
                     {
@@ -636,6 +660,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                         float[] maxArr  = new float[curveLen];
                         Marshal.Copy(picoaterCurveMean, meanArr, 0, curveLen);
                         Marshal.Copy(picoaterCurveMax,  maxArr,  0, curveLen);
+                        columnMeanForProbe = meanArr;
+                        columnMaxForProbe = maxArr;
                         float mp = 0f, xp = 0f;
                         for (int k = 0; k < curveLen; k++)
                         {
@@ -645,7 +671,8 @@ namespace AniloxRoll.Monitor.Core.Camera
                         _lastMeanPeak = mp / 255f;
                         _lastMaxPeak  = xp / 255f;
 
-                        OnLiveCurveData?.Invoke(CameraId, meanArr, maxArr);
+                        OnLiveCurveData?.Invoke(
+                            CameraId, meanArr, maxArr, frameHessianMaxFactor);
 
                         // Row curves (horizontal data)
                         int rowCurveLen = fh;
@@ -655,22 +682,72 @@ namespace AniloxRoll.Monitor.Core.Camera
                             float[] rowMaxArr  = new float[rowCurveLen];
                             Marshal.Copy(picoaterRowCurveMean, rowMeanArr, 0, rowCurveLen);
                             Marshal.Copy(picoaterRowCurveMax,  rowMaxArr,  0, rowCurveLen);
+                            rowMeanForProbe = rowMeanArr;
+                            rowMaxForProbe = rowMaxArr;
                             OnLiveRowCurveData?.Invoke(
                                 CameraId, rowMeanArr, rowMaxArr, frameHessianMaxFactor);
                         }
                     }
 
                     // GPU 已同時計算欄／列；兩份都留給瀑布歷史，OnMilFrameReady 再決定即時畫面顯示哪一份。
-                    Marshal.Copy(
-                        picoaterRidgeBuffer,
-                        _hostColumnOutputBuffer,
-                        0,
-                        _hostColumnOutputBuffer.Length);
-                    Marshal.Copy(
-                        _nativeBufferPool.MuraBuffer,
-                        _hostRowOutputBuffer,
-                        0,
-                        _hostRowOutputBuffer.Length);
+                    if (wantStandard)
+                    {
+                        int halfBytes = checked(_standardWidth * _standardHeight * sizeof(ushort));
+                        Marshal.Copy(
+                            _hessianCStandardBuf,
+                            _hostColumnStandardHalfBuffer,
+                            0,
+                            halfBytes);
+                        Marshal.Copy(
+                            _hessianRStandardBuf,
+                            _hostRowStandardHalfBuffer,
+                            0,
+                            halfBytes);
+                        _columnFrameSourceGain = HessianStandardMapCodec.ComputeAdaptiveByteGain(
+                            _hostColumnStandardHalfBuffer, _standardWidth, _standardHeight);
+                        _rowFrameSourceGain = HessianStandardMapCodec.ComputeAdaptiveByteGain(
+                            _hostRowStandardHalfBuffer, _standardWidth, _standardHeight);
+                        HessianStandardMapCodec.FillGray8Expanded(
+                            _hostColumnStandardHalfBuffer,
+                            _standardWidth,
+                            _standardHeight,
+                            fw,
+                            fh,
+                            _columnFrameSourceGain,
+                            _hostColumnStandardGrayBuffer,
+                            _hostColumnOutputBuffer);
+                        HessianStandardMapCodec.FillGray8Expanded(
+                            _hostRowStandardHalfBuffer,
+                            _standardWidth,
+                            _standardHeight,
+                            fw,
+                            fh,
+                            _rowFrameSourceGain,
+                            _hostRowStandardGrayBuffer,
+                            _hostRowOutputBuffer);
+                    }
+                    else
+                    {
+                        _columnFrameSourceGain = frameHessianMaxFactor;
+                        _rowFrameSourceGain = frameHessianMaxFactor;
+                        Marshal.Copy(
+                            picoaterRidgeBuffer,
+                            _hostColumnOutputBuffer,
+                            0,
+                            _hostColumnOutputBuffer.Length);
+                        Marshal.Copy(
+                            _nativeBufferPool.MuraBuffer,
+                            _hostRowOutputBuffer,
+                            0,
+                            _hostRowOutputBuffer.Length);
+                    }
+                    TraceDvtPixelCurveConsistency(
+                        _mil.LastFrameStartTicks,
+                        frameHessianMaxFactor,
+                        columnMeanForProbe,
+                        columnMaxForProbe,
+                        rowMeanForProbe,
+                        rowMaxForProbe);
                     return true;
                 }
                 catch (Exception ex)
@@ -680,6 +757,69 @@ namespace AniloxRoll.Monitor.Core.Camera
                     return false;
                 }
             }
+        }
+
+        private void TraceDvtPixelCurveConsistency(
+            long frameTick,
+            float captureHm,
+            float[] columnMean,
+            float[] columnMax,
+            float[] rowMean,
+            float[] rowMax)
+        {
+            if (!FlowTrace.DvtEnabled || columnMax == null || rowMax == null) return;
+
+            int now = Environment.TickCount;
+            int previous = _lastDvtPixelCurveProbeTick;
+            if (previous != 0 && unchecked(now - previous) < 1000) return;
+            _lastDvtPixelCurveProbeTick = now;
+
+            LivePixelCurveProbeResult sample = LivePixelCurveProbe.Measure(
+                _hostColumnOutputBuffer,
+                _hostRowOutputBuffer,
+                columnMean,
+                columnMax,
+                rowMean,
+                rowMax,
+                captureHm,
+                HessianColumnDisplayFactor,
+                HessianRowDisplayFactor,
+                _columnFrameSourceGain,
+                _rowFrameSourceGain);
+
+            TraceDvtPixelCurveAxis(
+                "C", sample.Column, frameTick, captureHm, HessianColumnDisplayFactor);
+            TraceDvtPixelCurveAxis(
+                "R", sample.Row, frameTick, captureHm, HessianRowDisplayFactor);
+        }
+
+        private void TraceDvtPixelCurveAxis(
+            string axis,
+            LivePixelCurveAxisSample sample,
+            long frameTick,
+            float captureHm,
+            float currentHm)
+        {
+            FlowTrace.Dvt(string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "live pixel-curve probe cam{0} tick={1} axis={2} " +
+                "captureHm={3:F4} currentHm={4:F4} sourceGain={5:F4} imagePeak={6:F4} " +
+                "curveMeanPeak={7:F4} curveMaxPeak={8:F4} delta={9:F4} " +
+                "sourceImageMax={10:F4} sourceCurveMax={11:F4} verdict={12} reason={13}",
+                CameraId,
+                frameTick,
+                axis,
+                captureHm,
+                currentHm,
+                axis == "C" ? _columnFrameSourceGain : _rowFrameSourceGain,
+                sample.DisplayImagePeak,
+                sample.DisplayCurveMeanPeak,
+                sample.DisplayCurveMaxPeak,
+                sample.MaxDelta,
+                sample.SourceImageMax,
+                sample.SourceCurveMax,
+                sample.MaxMatches ? "match" : "mismatch",
+                sample.MaxMatches ? "none" : sample.QuantizedToZero ? "quantized-zero" : "max-delta"));
         }
 
         // ==================== Background Column Mean ====================
@@ -972,17 +1112,21 @@ namespace AniloxRoll.Monitor.Core.Camera
             FreeResizeBuffers();
             int fw = _mil.FrameWidth;
             int fh = _mil.FrameHeight;
-            if (fw <= 0 || fh <= 0 || _saveResizeScale <= 1) return;
+            if (fw <= 0 || fh <= 0) return;
 
-            _resizeWidth  = fw / _saveResizeScale;
-            _resizeHeight = fh / _saveResizeScale;
-            if (_resizeWidth <= 0 || _resizeHeight <= 0) return;
+            if (_saveResizeScale > 1)
+            {
+                _resizeWidth = fw / _saveResizeScale;
+                _resizeHeight = fh / _saveResizeScale;
+            }
 
             _standardWidth = Math.Max(1, fw / InspectionEngineConfig.DefaultHessianStandardMapScale);
             _standardHeight = Math.Max(1, fh / InspectionEngineConfig.DefaultHessianStandardMapScale);
 
-            ulong sz = checked((ulong)_resizeWidth * (ulong)_resizeHeight);
-            ulong stride = (sz + 63UL) & ~63UL;
+            ulong resizeSamples = _resizeWidth > 0 && _resizeHeight > 0
+                ? checked((ulong)_resizeWidth * (ulong)_resizeHeight)
+                : 0UL;
+            ulong stride = (resizeSamples + 63UL) & ~63UL;
             ulong standardSamples = checked((ulong)_standardWidth * (ulong)_standardHeight);
             ulong halfStride = (checked(standardSamples * 2UL) + 63UL) & ~63UL;
             _resizePinnedBytes = checked(stride * 3UL + halfStride * 2UL);
@@ -991,13 +1135,22 @@ namespace AniloxRoll.Monitor.Core.Camera
                 throw new OutOfMemoryException(
                     $"CAM{CameraId} resize pinned slab allocation failed. Requested size={_resizePinnedBytes}.");
 
-            _rawResizeBuf = _resizeSlabBuf;
-            _procResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)stride));
-            _muraResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)(stride * 2UL)));
+            if (stride > 0)
+            {
+                _rawResizeBuf = _resizeSlabBuf;
+                _procResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)stride));
+                _muraResizeBuf = new IntPtr(checked(_resizeSlabBuf.ToInt64() + (long)(stride * 2UL)));
+            }
             _hessianCStandardBuf = new IntPtr(
                 checked(_resizeSlabBuf.ToInt64() + (long)(stride * 3UL)));
             _hessianRStandardBuf = new IntPtr(
                 checked(_hessianCStandardBuf.ToInt64() + (long)halfStride));
+            int standardCount = checked(_standardWidth * _standardHeight);
+            int standardHalfBytes = checked(standardCount * sizeof(ushort));
+            _hostColumnStandardHalfBuffer = new byte[standardHalfBytes];
+            _hostRowStandardHalfBuffer = new byte[standardHalfBytes];
+            _hostColumnStandardGrayBuffer = new byte[standardCount];
+            _hostRowStandardGrayBuffer = new byte[standardCount];
         }
 
         private void FreeResizeBuffers()
@@ -1017,6 +1170,10 @@ namespace AniloxRoll.Monitor.Core.Camera
             _resizeHeight = 0;
             _standardWidth = 0;
             _standardHeight = 0;
+            _hostColumnStandardHalfBuffer = null;
+            _hostRowStandardHalfBuffer = null;
+            _hostColumnStandardGrayBuffer = null;
+            _hostRowStandardGrayBuffer = null;
         }
 
         // ==================== Dispose ====================

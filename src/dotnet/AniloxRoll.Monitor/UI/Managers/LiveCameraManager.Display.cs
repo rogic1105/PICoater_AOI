@@ -70,6 +70,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _display.RefreshEnhanceColorMap();
         }
 
+        public void RefreshEnhanceIntensityScales(float columnScale, float rowScale)
+        {
+            _display.SetEnhanceIntensityScales(columnScale, rowScale);
+        }
+
         public void RefreshHorizontalDisplayCrop()
         {
             _display.RefreshHorizontalDisplayCrop();

@@ -462,7 +462,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             {
                 float captureHm = _presentedConfig?.HessianMaxFactorV ??
                     _ctx.Settings.HessianMaxFactorV;
-                float valueScale = HessianRescaleHelper.Ratio(
+                float valueScale = HessianRescaleHelper.RawCurveToDisplayScale(
                     captureHm, _ctx.Settings.HessianMaxFactorV);
                 float errMean = _ctx.Settings.ErrorValueMeanV;
                 float errMax = _ctx.Settings.ErrorValueMaxV;

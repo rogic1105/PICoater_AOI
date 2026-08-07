@@ -68,15 +68,15 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "live inspection apply setting=dc_HessianMaxFactorV "
                 "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
-                "action=normalization-reset",
+                "action=normalization-latest",
                 "ui:閮剖?[dd_HessianMaxFactorH]=1.0",
                 "setting route dd_HessianMaxFactorH owner=DataStats "
                 "effects=ReviewCurves+LiveInspectionCurves",
                 "live inspection apply setting=dd_HessianMaxFactorH "
                 "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
-                "action=normalization-reset",
-                "live row normalize captureHm=0.5000 rowHm=1.0000 ratio=2.0000",
+                "action=normalization-latest",
+                "live row normalize captureHm=0.5000 rowHm=1.0000 ratio=0.5000",
                 "DT curve refresh 260804-135456 "
                 "reason=setting-dd_HessianMaxFactorH "
                 "column=False row=True source=memory preserveRange=True "
@@ -88,11 +88,11 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "mean=0.1200 max=0.3200 threshold=0.2000/0.6000 "
                 "mode=Both verdict=O source=light-surrogate-not-mura",
                 "live inspection stimulus brightness=255 direction=col "
-                "mean=0.3000 max=0.8000 threshold=0.2000/0.6000 "
-                "mode=Both verdict=X source=light-surrogate-not-mura",
+                "mean=0.1001 max=0.3001 threshold=0.2000/0.6000 "
+                "mode=Both verdict=O source=light-surrogate-not-mura",
                 "live inspection stimulus brightness=255 direction=row "
-                "mean=0.3500 max=0.7500 threshold=0.2000/0.6000 "
-                "mode=Both verdict=X source=light-surrogate-not-mura",
+                "mean=0.1201 max=0.3201 threshold=0.2000/0.6000 "
+                "mode=Both verdict=O source=light-surrogate-not-mura",
             )
         )
 
@@ -130,6 +130,132 @@ class SettingsFlowValidatorTests(unittest.TestCase):
 
         self.assertEqual(CheckStatus.FAIL, result(report, "S1.light-stimulus").status)
 
+    def test_live_normalization_output_accepts_latest_curve_and_pixel_ratio(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "set:[dc_HessianMaxFactorV]=0.8",
+                "setting route dc_HessianMaxFactorV owner=DataStats "
+                "effects=InspectionService+CapturePolicy+ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dc_HessianMaxFactorV "
+                "hm=0.8000/0.5000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-latest",
+                "set:[dc_HessianMaxFactorV]=1.0",
+                "setting route dc_HessianMaxFactorV owner=DataStats "
+                "effects=InspectionService+CapturePolicy+ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dc_HessianMaxFactorV "
+                "hm=1.0000/0.5000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-latest",
+                "live curve applied setting=dc_HessianMaxFactorV generation=2 "
+                "hm=1.0000/0.5000 colMeanPeak=0.2000 colMaxPeak=0.7000 "
+                "rowMeanPeak=0.1000 rowMaxPeak=0.3000",
+                "live image scale source=adaptive-standard-half captureHm=0.5000 "
+                "currentHm=1.0000/0.5000 scale=1.0000/0.5000",
+                "RV normalization queued generation=1 setting=dc_HessianMaxFactorV",
+                "RV normalization queued generation=2 setting=dc_HessianMaxFactorV",
+                "RV normalization settle generation=2 setting=dc_HessianMaxFactorV "
+                "hm=1.0000/0.5000",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "S1.live-normalization-output").status,
+        )
+
+    def test_live_normalization_output_rejects_stale_curve_and_wrong_pixel_ratio(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "set:[dd_HessianMaxFactorH]=1.0",
+                "setting route dd_HessianMaxFactorH owner=DataStats "
+                "effects=ReviewCurves+LiveInspectionCurves",
+                "live inspection apply setting=dd_HessianMaxFactorH "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Both direction=Both "
+                "action=normalization-latest",
+                "live curve applied setting=dd_HessianMaxFactorH generation=4 "
+                "hm=0.5000/0.5000 colMeanPeak=0.2000 colMaxPeak=0.7000 "
+                "rowMeanPeak=0.1000 rowMaxPeak=0.3000",
+                "live image scale source=adaptive-standard-half captureHm=0.5000 currentHm=0.5000/1.0000 "
+                "scale=1.0000/1.0000",
+                "RV normalization queued generation=4 setting=dd_HessianMaxFactorH",
+                "RV normalization settle generation=3 setting=dd_HessianMaxFactorH "
+                "hm=0.5000/1.0000",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "S1.live-normalization-output").status,
+        )
+
+    def test_live_pixel_curve_probe_accepts_same_frame_peaks(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "set:[dc_HessianMaxFactorV]=1.0",
+                "live pixel-curve probe cam1 tick=123 axis=C "
+                "captureHm=0.5000 currentHm=1.0000 sourceGain=1.2500 imagePeak=0.8000 "
+                "curveMeanPeak=0.2000 curveMaxPeak=0.8030 delta=0.0030 "
+                "sourceImageMax=102.0000 sourceCurveMax=102.3825 "
+                "verdict=match reason=none",
+                "live pixel-curve probe cam1 tick=123 axis=R "
+                "captureHm=0.5000 currentHm=0.5000 sourceGain=1.2500 imagePeak=0.4000 "
+                "curveMeanPeak=0.1000 curveMaxPeak=0.4000 delta=0.0000 "
+                "sourceImageMax=102.0000 sourceCurveMax=102.0000 "
+                "verdict=match reason=none",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "S1.live-pixel-curve").status,
+        )
+
+    def test_live_pixel_curve_probe_rejects_diverged_image(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "set:[dc_HessianMaxFactorV]=1.0",
+                "live pixel-curve probe cam1 tick=123 axis=C "
+                "captureHm=0.5000 currentHm=1.0000 sourceGain=1.2500 imagePeak=0.2000 "
+                "curveMeanPeak=0.1000 curveMaxPeak=0.8000 delta=0.6000 "
+                "sourceImageMax=25.5000 sourceCurveMax=102.0000 "
+                "verdict=mismatch reason=max-delta",
+                "live pixel-curve probe cam1 tick=123 axis=R "
+                "captureHm=0.5000 currentHm=0.5000 sourceGain=1.2500 imagePeak=0.4000 "
+                "curveMeanPeak=0.1000 curveMaxPeak=0.4000 delta=0.0000 "
+                "sourceImageMax=102.0000 sourceCurveMax=102.0000 "
+                "verdict=match reason=none",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "S1.live-pixel-curve").status,
+        )
+
+    def test_live_pixel_curve_probe_rejects_quantized_zero_image(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "set:[dc_HessianMaxFactorV]=10.3",
+                "live pixel-curve probe cam1 tick=123 axis=C "
+                "captureHm=10.3000 currentHm=10.3000 sourceGain=100.0000 imagePeak=0.0000 "
+                "curveMeanPeak=0.0008 curveMaxPeak=0.0029 delta=0.0029 "
+                "sourceImageMax=0.0000 sourceCurveMax=0.7395 "
+                "verdict=mismatch reason=quantized-zero",
+                "live pixel-curve probe cam1 tick=123 axis=R "
+                "captureHm=10.3000 currentHm=41.5000 sourceGain=100.0000 imagePeak=0.0000 "
+                "curveMeanPeak=0.0004 curveMaxPeak=0.0011 delta=0.0011 "
+                "sourceImageMax=0.0000 sourceCurveMax=0.0689 "
+                "verdict=mismatch reason=quantized-zero",
+            )
+        )
+
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "S1.live-pixel-curve").status,
+        )
+
     def test_report_refresh_rejects_physical_range_jump(self):
         report = SettingsFlowValidator().validate(
             session(
@@ -157,7 +283,7 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "live inspection apply setting=dd_HessianMaxFactorH "
                 "hm=1.0000/0.5000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
-                "action=normalization-reset",
+                "action=normalization-latest",
                 "RV hessian standard 260804-135456 dir=R gain=0.5 scale=25 "
                 "sampleMin=0 sampleMax=128 sampleMean=12.500",
                 "ui:設定[dd_HessianMaxFactorH]=1.0",
@@ -166,7 +292,7 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "live inspection apply setting=dd_HessianMaxFactorH "
                 "hm=1.0000/1.0000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
-                "action=normalization-reset",
+                "action=normalization-latest",
                 "RV hessian standard 260804-135456 dir=R gain=1 scale=25 "
                 "sampleMin=0 sampleMax=255 sampleMean=25.000",
             )
@@ -186,7 +312,7 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "live inspection apply setting=dc_HessianMaxFactorV "
                 "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
-                "action=normalization-reset",
+                "action=normalization-latest",
                 "RV hessian standard 260804-135456 dir=C gain=0.5 scale=25 "
                 "sampleMin=0 sampleMax=255 sampleMean=30.000",
                 "ui:設定[dc_HessianMaxFactorV]=1.0",
@@ -195,7 +321,7 @@ class SettingsFlowValidatorTests(unittest.TestCase):
                 "live inspection apply setting=dc_HessianMaxFactorV "
                 "hm=1.0000/1.0000 thresholdC=0.2000/0.6000 "
                 "thresholdR=0.2000/0.6000 mode=Both direction=Both "
-                "action=normalization-reset",
+                "action=normalization-latest",
                 "RV hessian standard 260804-135456 dir=C gain=1 scale=25 "
                 "sampleMin=0 sampleMax=128 sampleMean=15.000",
             )

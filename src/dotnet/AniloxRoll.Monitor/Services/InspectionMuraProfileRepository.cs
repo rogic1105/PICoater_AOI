@@ -420,7 +420,7 @@ namespace AniloxRoll.Monitor.Core.Services
                 if (curve == null || curve.Length == 0) continue;
                 if (result == null) result = new float[curve.Length];
                 if (result.Length != curve.Length) continue;
-                float valueScale = HessianRescaleHelper.Ratio(
+                float valueScale = HessianRescaleHelper.RawCurveToDisplayScale(
                     record.CaptureHmV, currentHmV);
 
                 for (int i = 0; i < curve.Length; i++)
@@ -444,7 +444,7 @@ namespace AniloxRoll.Monitor.Core.Services
 
         private static float ScaleScore(MuraCurveRecord record, float currentHmV)
         {
-            return record.MaxCMean * HessianRescaleHelper.Ratio(
+            return record.MaxCMean * HessianRescaleHelper.NormalizedValueToDisplayScale(
                 record.CaptureHmV, currentHmV);
         }
 

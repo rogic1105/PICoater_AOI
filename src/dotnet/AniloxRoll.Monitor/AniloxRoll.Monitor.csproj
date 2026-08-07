@@ -149,6 +149,7 @@
     <Compile Include="Services\OutputHealthService.cs" />
     <Compile Include="Services\LogRetentionService.cs" />
     <Compile Include="Services\HessianRescaleHelper.cs" />
+    <Compile Include="Services\LivePixelCurveProbe.cs" />
     <Compile Include="ImageProcessing\BatchInspectionService.cs" />
     <Compile Include="ImageProcessing\InspectionEngine.cs" />
     <Compile Include="ImageProcessing\NativeBufferPool.cs" />

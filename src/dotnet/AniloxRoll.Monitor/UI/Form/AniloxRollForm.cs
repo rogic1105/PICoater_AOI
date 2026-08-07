@@ -69,6 +69,9 @@ namespace AniloxRoll.Monitor.Forms
         // Global merge 用：快取各相機 row curve 資料，合併後更新圖表
         private readonly Dictionary<int, float[]> _liveRowMeanCache = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _liveRowMaxCache  = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _liveRowRawMean = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float[]> _liveRowRawMax = new Dictionary<int, float[]>();
+        private readonly Dictionary<int, float> _liveRowCaptureHm = new Dictionary<int, float>();
         private readonly object _pendingLiveRowCurveLock = new object();
         private readonly Dictionary<int, float[]> _pendingLiveRowMean = new Dictionary<int, float[]>();
         private readonly Dictionary<int, float[]> _pendingLiveRowMax = new Dictionary<int, float[]>();
@@ -110,6 +113,13 @@ namespace AniloxRoll.Monitor.Forms
         private LiveTelemetryPresenter _telemetryPresenter;
         private System.Windows.Forms.Timer _telemetryTimer;
         private System.Windows.Forms.Timer _liveOverviewTimer;
+        private System.Windows.Forms.Timer _liveNormalizationTimer;
+        private string _pendingLiveNormalizationSetting;
+        private int _liveNormalizationGeneration;
+        private System.Windows.Forms.Timer _reviewNormalizationTimer;
+        private string _pendingReviewNormalizationSetting;
+        private int _reviewNormalizationGeneration;
+        private bool _reviewNormalizationApplying;
 
         // --- Resource Monitor ---
         private ListViewItem _resMonRawSize, _resMonGpuTime, _resMonSaveSize;
@@ -186,6 +196,9 @@ namespace AniloxRoll.Monitor.Forms
         // --- Live 全覽圖：每台相機最新曲線快取 ---
         private readonly float[][] _liveCurveMean = new float[CameraCount][];
         private readonly float[][] _liveCurveMax  = new float[CameraCount][];
+        private readonly float[][] _liveCurveRawMean = new float[CameraCount][];
+        private readonly float[][] _liveCurveRawMax = new float[CameraCount][];
+        private readonly float[] _liveCurveCaptureHm = new float[CameraCount];
         private volatile bool _liveOverviewDirty;
         private bool _isIoSuspended;
         private bool _shutdownInProgress;
@@ -215,6 +228,8 @@ namespace AniloxRoll.Monitor.Forms
             try { _captureStopCoordinator?.Dispose(); _captureStopCoordinator = null; } catch { }
             try { _telemetryTimer?.Stop(); } catch { }
             try { _liveOverviewTimer?.Stop(); } catch { }
+            try { _liveNormalizationTimer?.Stop(); _liveNormalizationTimer?.Dispose(); _liveNormalizationTimer = null; } catch { }
+            try { _reviewNormalizationTimer?.Stop(); _reviewNormalizationTimer?.Dispose(); _reviewNormalizationTimer = null; } catch { }
             try { _statsRefreshDebouncer?.Stop(); _statsRefreshDebouncer?.Dispose(); _statsRefreshDebouncer = null; } catch { }  // H3 + round-2 H3 補 Dispose
             try { _reviewLoadDebounce?.Stop(); _reviewLoadDebounce?.Dispose(); _reviewLoadDebounce = null; } catch { }  // 回顧序號載入 debounce
             try { _dataStatsPresenter?.Dispose(); } catch { }  // 報表範圍選擇 debounce
@@ -1365,11 +1380,22 @@ namespace AniloxRoll.Monitor.Forms
             if ((impacts & SettingImpact.ReviewCurves) != 0 &&
                 _stitchCoordinator?.IsStitchMode == true)
             {
-                _stitchCoordinator.UpdateStitchedOverviewChart();
-                _stitchCoordinator.RefreshChartsForSettingsChange();
+                if (IsNormalizationSetting(settingName))
+                    ScheduleReviewNormalizationRefresh(settingName);
+                else
+                {
+                    _stitchCoordinator.UpdateStitchedOverviewChart();
+                    _stitchCoordinator.RefreshChartsForSettingsChange();
+                }
             }
             if ((impacts & SettingImpact.LiveInspectionCurves) != 0)
                 ApplyLiveInspectionSettings(settingName);
+        }
+
+        private static bool IsNormalizationSetting(string settingName)
+        {
+            return settingName == nameof(InspectionSettings.dc_HessianMaxFactorV) ||
+                   settingName == nameof(InspectionSettings.dd_HessianMaxFactorH);
         }
 
         private async Task DispatchSettingOwner(SettingFeatureOwner owner, string name)

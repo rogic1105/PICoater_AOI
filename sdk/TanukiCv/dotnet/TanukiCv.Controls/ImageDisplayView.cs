@@ -46,7 +46,16 @@ namespace TanukiCv.Controls
         private ThumbStrip _thumbStrip;
         private readonly double _screenMmPerPx;
 
-        private sealed class Frame { public readonly byte[] Bytes; public readonly int W, H; public Frame(byte[] b, int w, int h) { Bytes = b; W = w; H = h; } }
+        private sealed class Frame
+        {
+            public readonly byte[] Bytes;
+            public readonly int W, H;
+            public readonly float SourceGain;
+            public Frame(byte[] b, int w, int h, float sourceGain)
+            {
+                Bytes = b; W = w; H = h; SourceGain = sourceGain;
+            }
+        }
         private readonly Frame[] _latest;            // 各台最新「全解析度（相對餵入）」灰階快照（原子 ref 換）
         private readonly bool[] _readySinceMerge;
         private int _lastMergeTick;
@@ -163,6 +172,24 @@ namespace TanukiCv.Controls
             }
         }
         private IntensityColorMap _mainColorMap = IntensityColorMap.Grayscale;
+
+        /// <summary>
+        /// Display-only grayscale gain. Source frames remain unchanged so repeated setting changes
+        /// can always rebuild from the same unclipped bytes.
+        /// </summary>
+        public float IntensityScale
+        {
+            get => _intensityScale;
+            set
+            {
+                float normalized = value > 0f ? value : 1f;
+                if (Math.Abs(_intensityScale - normalized) < 0.0001f) return;
+                _intensityScale = normalized;
+                if (_thumbStrip != null) _thumbStrip.IntensityScale = normalized;
+                _mainDirty = true;
+            }
+        }
+        private float _intensityScale = 1f;
 
         /// <summary>垂直「座標約定」（與影像翻轉 FlipVertical 解耦——live 影像不翻但座標仍要照方向）：
         /// true＝物理 0 錨定畫面底（由下而上：overlay 下緣≈0、上緣=大值、游標在底部 Y≈0）；
@@ -470,13 +497,20 @@ namespace TanukiCv.Controls
 
         /// <summary>相機每幀（可能背景執行緒）：存全解析度快照 + 餵縮圖條 + 標記主畫面 dirty。</summary>
         public void PushFrame(int camId, byte[] gray, int w, int h)
+            => PushFrame(camId, gray, w, h, 1f);
+
+        /// <summary>
+        /// Stores a frame with its encoding gain. A positive sourceGain means the bytes represent
+        /// source*sourceGain; display uses IntensityScale/sourceGain. Non-positive bypasses gain.
+        /// </summary>
+        public void PushFrame(int camId, byte[] gray, int w, int h, float sourceGain)
         {
             if (_disposed || camId < 1 || camId > _camCount || gray == null || w <= 0 || h <= 0) return;
             int n = w * h;
             var copy = new byte[n];
             Array.Copy(gray, copy, Math.Min(gray.Length, n));
-            _latest[camId - 1] = new Frame(copy, w, h);
-            _thumbStrip?.PushFrame(camId - 1, gray, w, h);
+            _latest[camId - 1] = new Frame(copy, w, h, sourceGain);
+            _thumbStrip?.PushFrame(camId - 1, gray, w, h, sourceGain);
 
             if (_mergeMode)
             {
@@ -846,6 +880,7 @@ namespace TanukiCv.Controls
 
             byte[] dst = resize(crop, sw, sh, tw, th);
             if (dst == null) return null;
+            GrayIntensity.ScaleInPlace(dst, EffectiveScale(f));
             return GrayBitmap.From(dst, tw, th, false, _mainColorMap);
         }
 
@@ -893,7 +928,8 @@ namespace TanukiCv.Controls
                     int localY = vy - yOffset;
                     if (localY < 0 || localY >= fhei) continue;
                     int srcY = _flip ? (fhei - 1 - localY) : localY;
-                    comp[cy * cw + cx] = fb[srcY * fwid + srcX];
+                    comp[cy * cw + cx] = GrayIntensity.Scale(
+                        fb[srcY * fwid + srcX], EffectiveScale(f));
                 }
             }
 
@@ -908,7 +944,11 @@ namespace TanukiCv.Controls
         {
             int idx = _selectedCamId - 1;
             Frame f = (idx >= 0 && idx < _latest.Length) ? _latest[idx] : null;
-            return f != null ? GrayBitmap.From(f.Bytes, f.W, f.H, _flip, _mainColorMap) : null;
+            return f != null
+                ? GrayBitmap.From(
+                    GrayIntensity.ScaleCopy(f.Bytes, EffectiveScale(f)),
+                    f.W, f.H, _flip, _mainColorMap)
+                : null;
         }
 
         /// <summary>CPU 合圖：佈局/重疊分界委派 <see cref="MergeLayout"/>（含 8 槽全納入：無畫面相機留黑占位）；
@@ -1038,13 +1078,18 @@ namespace TanukiCv.Controls
                     int dw = Math.Max(1, (int)Math.Round(p.DestWidth / (double)k));
                     int dh = Math.Max(1, (int)Math.Round(f.H / (double)k));
                     int dy = _flip ? Math.Max(0, mh - dh) : 0;
-                    using (var cam = GrayBitmap.From(f.Bytes, f.W, f.H, _flip, _mainColorMap))
+                    using (var cam = GrayBitmap.From(
+                        GrayIntensity.ScaleCopy(f.Bytes, EffectiveScale(f)),
+                        f.W, f.H, _flip, _mainColorMap))
                         g.DrawImage(cam, new Rectangle(dx, dy, dw, dh),
                             new Rectangle(p.SrcLeft, 0, p.SrcWidth, f.H), GraphicsUnit.Pixel);
                 }
             }
             return merged;
         }
+
+        private float EffectiveScale(Frame frame)
+            => frame == null || frame.SourceGain <= 0f ? 1f : _intensityScale / frame.SourceGain;
 
         // ==================== 座標 / mm overlay ====================
 

@@ -57,8 +57,11 @@ namespace TanukiCv.Controls
         // _fullW 永遠是未裁切的完整資料寬；Crop 只改 _visibleW/_displaySourceLeftPx。
         // Preserve native pixels per camera. The current layout is composed only when LOD reads.
         private byte[][][][] _cameraLayerChunks;
+        // Per stored row encoding gain. Positive values mean byte=source*gain; zero bypasses scaling.
+        private float[][][] _cameraLayerSourceGains;
         private readonly int[] _historyCameraWidths;
         private WaterfallFrameLayer _displayLayer = WaterfallFrameLayer.Raw;
+        private readonly float[] _layerIntensityScales = { 1f, 1f, 1f };
         private int _fullW;
         private int _visibleW;
         private int _displaySourceLeftPx;
@@ -87,6 +90,7 @@ namespace TanukiCv.Controls
         private struct Frame
         {
             public byte[] Raw, Column, Row;
+            public float ColumnSourceGain, RowSourceGain;
             public int W, H;
             public long Tick;
         }
@@ -120,6 +124,7 @@ namespace TanukiCv.Controls
         private struct Span
         {
             public byte[] Raw, Column, Row;
+            public float ColumnSourceGain, RowSourceGain;
             public int CameraIndex, Sw, Sh;
         }
         private struct ColumnSample
@@ -185,6 +190,7 @@ namespace TanukiCv.Controls
             _cameraWidths = new int[_camCount];
             _historyCameraWidths = new int[_camCount];
             _cameraLayerChunks = CreateCameraLayerChunks();
+            _cameraLayerSourceGains = CreateCameraLayerSourceGains();
             for (int i = 0; i < _camCount; i++) _perCamSeq[i] = -1;
 
             _canvas = new ImageCanvas { Dock = DockStyle.Fill, BackColor = Color.Black };
@@ -354,6 +360,19 @@ namespace TanukiCv.Controls
 
         public WaterfallFrameLayer DisplayLayer => _displayLayer;
 
+        public void SetLayerIntensityScale(WaterfallFrameLayer layer, float scale)
+        {
+            int index = (int)layer;
+            float normalized = scale > 0f ? scale : 1f;
+            lock (_lock)
+            {
+                if (Math.Abs(_layerIntensityScales[index] - normalized) < 0.0001f) return;
+                _layerIntensityScales[index] = normalized;
+            }
+            _lodContentDirty = true;
+            PushLodRefresh();
+        }
+
         /// <summary>切換原圖／欄強化／列強化；保留累積內容、寫頭、tick 對齊與目前視野。</summary>
         public void SetDisplayLayer(WaterfallFrameLayer layer)
         {
@@ -478,6 +497,11 @@ namespace TanukiCv.Controls
         /// </summary>
         public void PushFrameVariants(
             int camId, byte[] raw, byte[] column, byte[] row, int w, int h, long tick)
+            => PushFrameVariants(camId, raw, column, row, w, h, tick, 1f, 1f);
+
+        public void PushFrameVariants(
+            int camId, byte[] raw, byte[] column, byte[] row, int w, int h, long tick,
+            float columnSourceGain, float rowSourceGain)
         {
             if (_disposed || camId < 1 || camId > _camCount || raw == null || w <= 0 || h <= 0) return;
             int n = w * h;
@@ -525,6 +549,8 @@ namespace TanukiCv.Controls
                     Raw = rawCopy,
                     Column = columnCopy,
                     Row = rowCopy,
+                    ColumnSourceGain = columnSourceGain,
+                    RowSourceGain = rowSourceGain,
                     W = w,
                     H = h,
                     Tick = tick
@@ -683,6 +709,8 @@ namespace TanukiCv.Controls
                     Raw = f.Raw,
                     Column = f.Column,
                     Row = f.Row,
+                    ColumnSourceGain = f.ColumnSourceGain,
+                    RowSourceGain = f.RowSourceGain,
                     CameraIndex = i,
                     Sw = f.W,
                     Sh = f.H
@@ -771,6 +799,7 @@ namespace TanukiCv.Controls
                             byte[] existing = chunks[ci];
                             if (existing != null)
                                 Array.Clear(existing, off * width, width);
+                            _cameraLayerSourceGains[layerIndex][cameraIndex][gy] = 0f;
                         }
 
                         foreach (var s in job.Spans)
@@ -786,6 +815,8 @@ namespace TanukiCv.Controls
                                 chunks[ci] = chunk;
                             }
                             Array.Copy(source, y * s.Sw, chunk, off * s.Sw, s.Sw);
+                            _cameraLayerSourceGains[layerIndex][s.CameraIndex][gy] =
+                                GetSpanSourceGain(s, layerIndex);
                         }
                     }
                 }
@@ -862,6 +893,7 @@ namespace TanukiCv.Controls
             {
                 if (_cameraLayerChunks == null || _fullW <= 0) return null;
                 ColumnSample[] samples = BuildColumnSamplesLocked(r.X, rw, dw);
+                float intensityScale = _layerIntensityScales[(int)_displayLayer];
                 outp = new byte[dw * dh]; // 黑底
                 for (int dy = 0; dy < dh; dy++)
                 {
@@ -882,7 +914,10 @@ namespace TanukiCv.Controls
                         if (chunkIndex < 0 || chunkIndex >= chunks.Length) continue;
                         byte[] chunk = chunks[chunkIndex];
                         if (chunk == null) continue;
-                        outp[orow + dx] = chunk[rowOffset * sourceWidth + sample.SourceX];
+                        float sourceGain = _cameraLayerSourceGains[(int)_displayLayer][sample.CameraIndex][sy];
+                        float effectiveScale = sourceGain > 0f ? intensityScale / sourceGain : 1f;
+                        outp[orow + dx] = GrayIntensity.Scale(
+                            chunk[rowOffset * sourceWidth + sample.SourceX], effectiveScale);
                     }
                 }
                 if (_fullMode == WaterfallFullMode.Ring)   // Ring 接縫：寫頭畫亮掃描線 → 一看就知道在循環
@@ -938,6 +973,18 @@ namespace TanukiCv.Controls
             return layers;
         }
 
+        private float[][][] CreateCameraLayerSourceGains()
+        {
+            var layers = new float[3][][];
+            for (int layer = 0; layer < layers.Length; layer++)
+            {
+                layers[layer] = new float[_camCount][];
+                for (int camera = 0; camera < _camCount; camera++)
+                    layers[layer][camera] = new float[_totalHeight];
+            }
+            return layers;
+        }
+
         private void ClearCameraLayerChunksLocked()
         {
             if (_cameraLayerChunks == null) return;
@@ -945,6 +992,10 @@ namespace TanukiCv.Controls
                 for (int camera = 0; camera < _cameraLayerChunks[layer].Length; camera++)
                     for (int chunk = 0; chunk < _cameraLayerChunks[layer][camera].Length; chunk++)
                         _cameraLayerChunks[layer][camera][chunk] = null;
+            if (_cameraLayerSourceGains != null)
+                for (int layer = 0; layer < _cameraLayerSourceGains.Length; layer++)
+                    for (int camera = 0; camera < _cameraLayerSourceGains[layer].Length; camera++)
+                        Array.Clear(_cameraLayerSourceGains[layer][camera], 0, _totalHeight);
         }
 
         private static byte[] GetSpanSource(Span span, int layerIndex)
@@ -952,6 +1003,15 @@ namespace TanukiCv.Controls
             if (layerIndex == (int)WaterfallFrameLayer.Column) return span.Column ?? span.Raw;
             if (layerIndex == (int)WaterfallFrameLayer.Row) return span.Row ?? span.Raw;
             return span.Raw;
+        }
+
+        private static float GetSpanSourceGain(Span span, int layerIndex)
+        {
+            if (layerIndex == (int)WaterfallFrameLayer.Column)
+                return span.Column != null ? span.ColumnSourceGain : 0f;
+            if (layerIndex == (int)WaterfallFrameLayer.Row)
+                return span.Row != null ? span.RowSourceGain : 0f;
+            return 0f;
         }
 
         private MergeLayout.CamGeom CreateCameraGeometryLocked(int cameraIndex, int sourceWidth)
@@ -1162,7 +1222,7 @@ namespace TanukiCv.Controls
             catch { }
             try { _canvas.DisableLod(); } catch { }
             try { if (_canvas.Parent != null) _canvas.Parent.Controls.Remove(_canvas); _canvas.Dispose(); } catch { }
-            lock (_lock) { _cameraLayerChunks = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }
+            lock (_lock) { _cameraLayerChunks = null; _cameraLayerSourceGains = null; _fullW = 0; _writeRow = 0; _pending.Clear(); _preBuffer.Clear(); _writeQueue.Clear(); }
         }
     }
 }

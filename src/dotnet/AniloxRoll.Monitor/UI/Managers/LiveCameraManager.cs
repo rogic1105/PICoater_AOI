@@ -32,7 +32,9 @@ namespace AniloxRoll.Monitor.UI.Managers
         private double[] _cameraLineRateHz     = new double[7];
         private int _saveResizeScale = InspectionEngineConfig.DefaultSaveResizeScale;
         private int _saveJpgQuality  = InspectionEngineConfig.DefaultSaveJpgQuality;
-        private float _hessianMaxFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
+        private float _hessianColumnDisplayFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
+        private float _hessianRowDisplayFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
+        private float _captureHessianMaxFactor = InspectionEngineConfig.DefaultHessianMaxFactor;
         private float _ridgeSigma = InspectionEngineConfig.DefaultRidgeSigma;   // 細線濾除（ridge_sigma）；設定改 → 下次 grab 生效
         private string _ridgeMode = InspectionEngineConfig.DefaultRidgeMode;
         private string _liveDisplayDirection = "v";
@@ -136,7 +138,7 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, curveMean_raw255, curveMax_raw255)</summary>
-        public event Action<int, float[], float[]> OnLiveCurveData;
+        public event Action<int, float[], float[], float> OnLiveCurveData;
 
         /// <summary>每幀 GPU pipeline 完成後觸發（MIL 回呼執行緒）。
         /// 參數：(cameraId, rowCurveMean_raw255, rowCurveMax_raw255)</summary>
@@ -290,7 +292,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.CameraExposureTimeUs = _cameraExposureTimeUs[camIdx]; // InitializeAcquisition() 會呼叫 SetExposureUs 套用
                 cam.SetLineRateHz(_cameraLineRateHz[camIdx]);  // 記錄 _appliedLineRateHz（CLProtocol 就緒後自動重套）
                 cam.HessianSigma         = _ridgeSigma;   // 細線濾除（設定值，非硬編常數）
-                cam.HessianFixedMax      = _hessianMaxFactor;
+                cam.HessianFixedMax      = _captureHessianMaxFactor;
+                cam.HessianColumnDisplayFactor = _hessianColumnDisplayFactor;
+                cam.HessianRowDisplayFactor = _hessianRowDisplayFactor;
                 cam.RidgeMode            = _ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
@@ -301,8 +305,9 @@ namespace AniloxRoll.Monitor.UI.Managers
                 cam.OnInspectionResult += (grabId, camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak) =>
                     OnInspectionResult?.Invoke(
                         grabId, camId, fn, mp, xp, maxCMean, meanRPeak, maxRPeak);
-                cam.OnLiveCurveData      += (camId, mean, max) =>
-                    OnLiveCurveData?.Invoke(camId, mean, max);
+                cam.OnLiveCurveData      += (camId, mean, max, frameHessianMaxFactor) =>
+                    OnLiveCurveData?.Invoke(
+                        camId, mean, max, frameHessianMaxFactor);
                 cam.OnLiveRowCurveData   += (camId, mean, max, frameHessianMaxFactor) =>
                     OnLiveRowCurveData?.Invoke(
                         camId, mean, max, frameHessianMaxFactor);
@@ -446,6 +451,10 @@ namespace AniloxRoll.Monitor.UI.Managers
                     .Where(cam => cam != null && cam.IsConnected)
                     .ToArray();
                 if (targets.Length == 0) return false;
+
+                // A grab owns one immutable normalization baseline. Runtime PropertyGrid changes
+                // only rescale the display; the next grab adopts the latest column factor here.
+                ApplyCapturePolicyToCameras(applyCaptureNormalization: true);
 
                 _captureGateOpen = false;
                 ClearCaptureBoundary();
@@ -943,23 +952,61 @@ namespace AniloxRoll.Monitor.UI.Managers
             if (settings == null) return;
             _inspectionSettings = settings;
             UpdateCaptureSettingsCache(settings);
-            ApplyCapturePolicyToCameras();
+            // Existing frames keep the baseline with which they were produced. The next
+            // StartGrab adopts the new baseline; until then only the display scale changes.
+            ApplyCapturePolicyToCameras(applyCaptureNormalization: false);
         }
 
-        private void ApplyCapturePolicyToCameras()
+        public void SetHessianDisplayFactors(double columnFactor, double rowFactor)
         {
+            _hessianColumnDisplayFactor = columnFactor > 0
+                ? (float)columnFactor
+                : InspectionEngineConfig.DefaultHessianMaxFactor;
+            _hessianRowDisplayFactor = rowFactor > 0
+                ? (float)rowFactor
+                : InspectionEngineConfig.DefaultHessianMaxFactor;
+            foreach (AniloxCamera camera in _cameras)
+            {
+                camera.HessianColumnDisplayFactor = _hessianColumnDisplayFactor;
+                camera.HessianRowDisplayFactor = _hessianRowDisplayFactor;
+            }
+            ApplyHessianDisplayScales();
+        }
+
+        private void ApplyHessianDisplayScales()
+        {
+            float columnScale = _hessianColumnDisplayFactor;
+            float rowScale = _hessianRowDisplayFactor;
+            _display.SetEnhanceIntensityScales(columnScale, rowScale);
+            FlowTrace.Dvt(string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                "live image scale source=adaptive-standard-half captureHm={0:F4} currentHm={1:F4}/{2:F4} scale={3:F4}/{4:F4}",
+                _captureHessianMaxFactor,
+                _hessianColumnDisplayFactor,
+                _hessianRowDisplayFactor,
+                columnScale,
+                rowScale));
+        }
+
+        private void ApplyCapturePolicyToCameras(bool applyCaptureNormalization = true)
+        {
+            if (applyCaptureNormalization)
+                _captureHessianMaxFactor = _hessianColumnDisplayFactor;
             foreach (var cam in _cameras)
             {
                 cam.EnableAutoCapture    = _enableAutoCapture;
                 cam.SaveOriginalBmp      = _saveOriginalBmp;
                 cam.CaptureRootPath      = _captureRootPath;
                 cam.HessianSigma         = _ridgeSigma;
-                cam.HessianFixedMax      = _hessianMaxFactor;
+                if (applyCaptureNormalization)
+                    cam.HessianFixedMax = _captureHessianMaxFactor;
                 cam.RidgeMode            = _ridgeMode;
                 cam.SaveResizeScale      = _saveResizeScale;
                 cam.SaveJpgQuality       = _saveJpgQuality;
                 cam.TimestampCoordinator = _timestampCoordinator;
             }
+            if (applyCaptureNormalization)
+                ApplyHessianDisplayScales();
         }
 
         /// <summary>
@@ -1280,8 +1327,11 @@ namespace AniloxRoll.Monitor.UI.Managers
             _saveResizeScale      = settings.Recipe?.SaveResizeScale ?? InspectionEngineConfig.DefaultSaveResizeScale;
             _saveJpgQuality       = settings.Recipe?.SaveJpgQuality  ?? InspectionEngineConfig.DefaultSaveJpgQuality;
             // capture-time HM 用 V（baked 進 .bin）；H 為 view-time only，不送進 native
-            _hessianMaxFactor     = settings.HessianMaxFactorV > 0
+            _hessianColumnDisplayFactor = settings.HessianMaxFactorV > 0
                 ? settings.HessianMaxFactorV
+                : InspectionEngineConfig.DefaultHessianMaxFactor;
+            _hessianRowDisplayFactor = settings.HessianMaxFactorH > 0
+                ? settings.HessianMaxFactorH
                 : InspectionEngineConfig.DefaultHessianMaxFactor;
             _ridgeSigma           = settings.RidgeSigma > 0
                 ? settings.RidgeSigma

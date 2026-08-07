@@ -3,27 +3,28 @@
 > This file is overwritten by the next recorded campaign. Git history is the durable record.
 
 - Result: **PASS**
-- Run: `20260803-100950`
-- Commit: `9036db0`
-- Working tree: clean
-- Mode: `PhysicalSoak`
+- Run: `20260807-084007`
+- Commit: `2e447d5`
+- Working tree: dirty
+- Mode: `Functional`
 - Machine: `DESKTOP-C1MN5KD`
-- Finished: 2026-08-03 14:10:10 +08:00
-- Raw artifacts: `artifacts/test-reports/20260803-100950-9036db0/` (local, ignored by Git)
+- Finished: 2026-08-07 08:40:26 +08:00
+- Raw artifacts: `artifacts/test-reports/20260807-084007-2e447d5/` (local, ignored by Git)
 
 ## Results
 
 | Layer | Check | Result | Theory / acceptance | Experimental value / evidence | Seconds |
 |---|---|---:|---|---|---:|
-| Build | Release x64 solution build | **PASS** | Release\|x64 build; 0 compiler errors; 0 warnings. | exit code 0 | 4.11 |
-| Unit | Resource trend guard tests | **PASS** | One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail. | exit code 0 | 0.3 |
-| Physical soak | Physical IO, storage, and light soak | **PASS** | Fixed hardware topology; IO, storage, and light stay healthy; UI always responds; Private Bytes sustained growth <=256 MB/hour and total delta <=4 GB; handles/GDI/USER/threads stay within guards; clean shutdown. | 4.00 hours; 475 samples; Private 2761.3->3241.8 MB; median 71.5 MB/hour; post-expansion 22.2 MB/hour; handles +109; GDI +2; USER +4; threads +22; UI non-responsive=0; checker 17 PASS / 0 FAIL. | 14415.2 |
+| Unit | Resource trend guard tests | **PASS** | One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail. | exit code 0 | 0.25 |
+| Functional | Python flow checker tests | **PASS** | All discovered checker self-tests pass; 0 failures. | Ran 171 tests in 0.027s; OK | 0.14 |
+| Unit | .NET unit tests | **PASS** | All discovered unit tests pass; 0 failures. | total 204, passed 204, failed 0, not-executed 0 | 3.99 |
+| Integration | .NET integration tests | **PASS** | All discovered integration tests pass; 0 failures. | total 127, passed 127, failed 0, not-executed 0 | 6.6 |
+| DVT functional | DVT Runner self-check | **PASS** | Launch the exact app, restore changed settings, close cleanly, and finish the checker with exit code 0. | Result: PASS; Status: PASS：Runner 自我檢查（不 Grab） | 7.76 |
 
-## Conclusion
+## Improvement record
 
-- This is a valid four-hour connected qualification run, not the final eight-hour release soak.
-- IO polling, storage heartbeat, light connectivity, UI responsiveness, resource guards, and clean shutdown passed for the full run.
-- The uninterrupted eight-hour connected soak and seven-camera full-load test remain pending.
+- Live and review normalization now update retained Hessian standard maps and column/row curves with latest-only coalescing; DVT probes compare same-frame display payload and curve peaks, while report summaries retain their capture-normalized semantics.
+- The commit STAR body records the exact implementation change and verified result.
 
 ## Not covered by this campaign
 

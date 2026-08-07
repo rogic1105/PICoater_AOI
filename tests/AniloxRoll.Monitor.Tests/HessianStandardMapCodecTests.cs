@@ -56,6 +56,37 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(encoded.Length, Is.LessThan(source.Length / 10));
         }
 
+        [Test]
+        public void FillGray8Expanded_ReusesBuffersAndExpandsNearestSamples()
+        {
+            byte[] sourceGray = new byte[4];
+            byte[] targetGray = new byte[16];
+
+            HessianStandardMapCodec.FillGray8Expanded(
+                HalfBytes(0x0000, 0x3800, 0x3c00, 0x4000),
+                2, 2, 4, 4, 0.5f,
+                sourceGray, targetGray);
+
+            CollectionAssert.AreEqual(
+                new byte[]
+                {
+                    0, 0, 64, 64,
+                    0, 0, 64, 64,
+                    128, 128, 255, 255,
+                    128, 128, 255, 255
+                },
+                targetGray);
+        }
+
+        [Test]
+        public void ComputeAdaptiveByteGain_MapsLargestPositiveHalfToOne()
+        {
+            float gain = HessianStandardMapCodec.ComputeAdaptiveByteGain(
+                HalfBytes(0x0000, 0x3400, 0x3800), 3, 1);
+
+            Assert.That(gain, Is.EqualTo(2f).Within(0.0001f));
+        }
+
         [TestCase(0x0000, 0f)]
         [TestCase(0x3800, 0.5f)]
         [TestCase(0x3c00, 1f)]

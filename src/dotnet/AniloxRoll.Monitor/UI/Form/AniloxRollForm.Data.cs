@@ -202,10 +202,6 @@ namespace AniloxRoll.Monitor.Forms
                 case nameof(InspectionSettings.ef_ErrorValueMaxH):
                     _dataStatsPresenter?.RefreshMuraProfileForSettingsChange(name); // 記憶體內重算，保留圖表座標
                     ScheduleStatsRefresh();                                      // debounce 重算 Pass/Fail 統計 + 明細
-                    if (_settings.EnableReviewEnhance &&
-                        (name == nameof(InspectionSettings.dc_HessianMaxFactorV) ||
-                         name == nameof(InspectionSettings.dd_HessianMaxFactorH)))
-                        _ = ApplyReviewEnhance(true);
                     break;
             }
         }

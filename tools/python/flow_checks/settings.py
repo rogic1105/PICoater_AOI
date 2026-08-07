@@ -28,7 +28,42 @@ class SettingsFlowValidator:
         r"thresholdC=(?P<mean_c>\d+(?:\.\d+)?)/(?P<max_c>\d+(?:\.\d+)?) "
         r"thresholdR=(?P<mean_r>\d+(?:\.\d+)?)/(?P<max_r>\d+(?:\.\d+)?) "
         r"mode=(?P<mode>Mean|Max|Both) direction=(?P<direction>Vertical|Horizontal|Both) "
-        r"action=(?P<action>normalization-reset|refresh)$"
+        r"action=(?P<action>normalization-latest|refresh)$"
+    )
+    _live_curve_applied_pattern = re.compile(
+        r"^live curve applied setting=(?P<name>\S+) generation=(?P<generation>\d+) "
+        r"hm=(?P<hm_c>\d+(?:\.\d+)?)/(?P<hm_r>\d+(?:\.\d+)?) "
+        r"colMeanPeak=(?P<col_mean>\d+(?:\.\d+)?) "
+        r"colMaxPeak=(?P<col_max>\d+(?:\.\d+)?) "
+        r"rowMeanPeak=(?P<row_mean>\d+(?:\.\d+)?) "
+        r"rowMaxPeak=(?P<row_max>\d+(?:\.\d+)?)$"
+    )
+    _live_image_scale_pattern = re.compile(
+        r"^live image scale source=(?P<source>[\w-]+) "
+        r"captureHm=(?P<capture>\d+(?:\.\d+)?) "
+        r"currentHm=(?P<hm_c>\d+(?:\.\d+)?)/(?P<hm_r>\d+(?:\.\d+)?) "
+        r"scale=(?P<scale_c>\d+(?:\.\d+)?)/(?P<scale_r>\d+(?:\.\d+)?)$"
+    )
+    _live_pixel_curve_probe_pattern = re.compile(
+        r"^live pixel-curve probe cam(?P<camera>\d+) tick=(?P<tick>\d+) "
+        r"axis=(?P<axis>C|R) captureHm=(?P<capture>\d+(?:\.\d+)?) "
+        r"currentHm=(?P<current>\d+(?:\.\d+)?) "
+        r"sourceGain=(?P<source_gain>\d+(?:\.\d+)?) "
+        r"imagePeak=(?P<image>\d+(?:\.\d+)?) "
+        r"curveMeanPeak=(?P<mean>\d+(?:\.\d+)?) "
+        r"curveMaxPeak=(?P<maximum>\d+(?:\.\d+)?) "
+        r"delta=(?P<delta>\d+(?:\.\d+)?) "
+        r"sourceImageMax=(?P<source_image>\d+(?:\.\d+)?) "
+        r"sourceCurveMax=(?P<source_curve>\d+(?:\.\d+)?) "
+        r"verdict=(?P<verdict>match|mismatch) "
+        r"reason=(?P<reason>none|quantized-zero|max-delta)$"
+    )
+    _review_normalization_queued_pattern = re.compile(
+        r"^RV normalization queued generation=(?P<generation>\d+) setting=(?P<name>\S+)$"
+    )
+    _review_normalization_settle_pattern = re.compile(
+        r"^RV normalization settle generation=(?P<generation>\d+) setting=(?P<name>\S+) "
+        r"hm=(?P<hm_c>\d+(?:\.\d+)?)/(?P<hm_r>\d+(?:\.\d+)?)$"
     )
     _live_row_scale_pattern = re.compile(
         r"^live row normalize captureHm=(?P<capture>\d+(?:\.\d+)?) "
@@ -89,6 +124,8 @@ class SettingsFlowValidator:
         self._check_format(settings, report)
         self._check_routes(session, settings, report)
         self._check_live_inspection_settings(session, settings, report)
+        self._check_live_normalization_output(session, settings, report)
+        self._check_live_pixel_curve_consistency(session, report)
         self._check_live_row_scale(session, report)
         self._check_report_curve_refresh(session, report)
         self._check_hessian_standard_gain(session, report)
@@ -100,6 +137,65 @@ class SettingsFlowValidator:
         self._check_live_layout(session, settings, report)
         self._check_direction_refresh(session, settings, report)
         return report
+
+    def _check_live_pixel_curve_consistency(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        samples = []
+        for line in session.lines:
+            match = self._live_pixel_curve_probe_pattern.match(line.message)
+            if match:
+                samples.append(match)
+
+        if not samples:
+            report.add(
+                self.domain,
+                "S1.live-pixel-curve",
+                CheckStatus.NOT_COVERED,
+                "no DVT pixel/curve sample was captured during Grab",
+            )
+            return
+
+        failures = []
+        axes = set()
+        for sample in samples:
+            axis = sample.group("axis")
+            axes.add(axis)
+            delta = float(sample.group("delta"))
+            verdict = sample.group("verdict")
+            source_image = float(sample.group("source_image"))
+            source_curve = float(sample.group("source_curve"))
+            information_lost = source_image == 0.0 and source_curve > 0.0
+            expected = (
+                "match"
+                if not information_lost and delta <= (1.0 / 255.0) + 0.0001
+                else "mismatch"
+            )
+            if verdict != expected:
+                failures.append(
+                    f"cam{sample.group('camera')} axis={axis} "
+                    f"verdict={verdict} expected={expected} delta={delta:.4f} "
+                    f"reason={sample.group('reason')}"
+                )
+            elif verdict == "mismatch":
+                failures.append(
+                    f"cam{sample.group('camera')} axis={axis} "
+                    f"image={sample.group('image')} curveMax={sample.group('maximum')} "
+                    f"delta={delta:.4f}"
+                )
+
+        missing_axes = {"C", "R"} - axes
+        if missing_axes:
+            failures.append("missing axes=" + ",".join(sorted(missing_axes)))
+
+        report.add(
+            self.domain,
+            "S1.live-pixel-curve",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"samples={len(samples)} axes={','.join(sorted(axes))} "
+            f"failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
 
     def _check_format(self, settings, report: CheckReport) -> None:
         failures = []
@@ -197,7 +293,7 @@ class SettingsFlowValidator:
                 continue
 
             expected_action = (
-                "normalization-reset"
+                "normalization-latest"
                 if name in {"dc_HessianMaxFactorV", "dd_HessianMaxFactorH"}
                 else "refresh"
             )
@@ -234,6 +330,118 @@ class SettingsFlowValidator:
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 
+    def _check_live_normalization_output(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        normalization_names = {
+            "dc_HessianMaxFactorV",
+            "dd_HessianMaxFactorH",
+        }
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") in normalization_names
+        ]
+        if not changes:
+            report.add(
+                self.domain, "S1.live-normalization-output",
+                CheckStatus.NOT_COVERED,
+                "no live normalization change in this session",
+            )
+            return
+
+        applied = []
+        image_scales = []
+        review_queued = []
+        review_settled = []
+        latest_hm_c = None
+        latest_hm_r = None
+        failures = []
+        for line in session.lines:
+            apply_match = self._live_apply_pattern.match(line.message)
+            if apply_match:
+                latest_hm_c = float(apply_match.group("hm_c"))
+                latest_hm_r = float(apply_match.group("hm_r"))
+                continue
+
+            curve_match = self._live_curve_applied_pattern.match(line.message)
+            if curve_match:
+                applied.append(curve_match)
+                if latest_hm_c is None or latest_hm_r is None:
+                    failures.append("curve output appeared before live inspection apply")
+                    continue
+                actual_hm_c = float(curve_match.group("hm_c"))
+                actual_hm_r = float(curve_match.group("hm_r"))
+                if (abs(actual_hm_c - latest_hm_c) > 0.0001 or
+                        abs(actual_hm_r - latest_hm_r) > 0.0001):
+                    failures.append(
+                        "stale curve output "
+                        f"hm={actual_hm_c:g}/{actual_hm_r:g} "
+                        f"latest={latest_hm_c:g}/{latest_hm_r:g}"
+                    )
+                continue
+
+            image_match = self._live_image_scale_pattern.match(line.message)
+            if image_match:
+                image_scales.append(image_match)
+                if image_match.group("source") != "adaptive-standard-half":
+                    failures.append(
+                        f"image source={image_match.group('source')} expected=adaptive-standard-half"
+                    )
+                capture = float(image_match.group("capture"))
+                for axis in ("c", "r"):
+                    current = float(image_match.group(f"hm_{axis}"))
+                    scale = float(image_match.group(f"scale_{axis}"))
+                    expected = current if current > 0 else 1.0
+                    if abs(scale - expected) <= 0.0002:
+                        continue
+                    failures.append(
+                        f"image axis={axis.upper()} scale={scale:g} expected={expected:.4f}"
+                    )
+
+            queued_match = self._review_normalization_queued_pattern.match(line.message)
+            if queued_match:
+                review_queued.append(queued_match)
+                continue
+            settle_match = self._review_normalization_settle_pattern.match(line.message)
+            if settle_match:
+                review_settled.append(settle_match)
+
+        if review_queued:
+            final_queued = review_queued[-1]
+            final_generation = int(final_queued.group("generation"))
+            matching = [
+                match for match in review_settled
+                if int(match.group("generation")) == final_generation
+            ]
+            if not matching:
+                failures.append(
+                    f"review final generation={final_generation} did not settle"
+                )
+            elif latest_hm_c is not None and latest_hm_r is not None:
+                final_settle = matching[-1]
+                if (abs(float(final_settle.group("hm_c")) - latest_hm_c) > 0.0001 or
+                        abs(float(final_settle.group("hm_r")) - latest_hm_r) > 0.0001):
+                    failures.append("review final settle used stale normalization")
+
+        if not applied and not image_scales and not review_queued:
+            report.add(
+                self.domain, "S1.live-normalization-output",
+                CheckStatus.NOT_COVERED,
+                "setting route was exercised but no live frame/curve output was measured",
+            )
+            return
+
+        report.add(
+            self.domain,
+            "S1.live-normalization-output",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(changes)} curveOutputs={len(applied)} "
+            f"imageScales={len(image_scales)} reviewQueued={len(review_queued)} "
+            f"reviewSettled={len(review_settled)} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
+
     def _check_live_row_scale(
         self, session: FlowSession, report: CheckReport
     ) -> None:
@@ -254,7 +462,7 @@ class SettingsFlowValidator:
             capture = float(match.group("capture"))
             row = float(match.group("row"))
             ratio = float(match.group("ratio"))
-            expected = row / capture if capture > 0 and row > 0 else 1.0
+            expected = capture * row if capture > 0 and row > 0 else 1.0
             if abs(ratio - expected) > 0.0002:
                 failures.append(
                     f"capture={capture} row={row} ratio={ratio} expected={expected:.4f}"
@@ -417,8 +625,8 @@ class SettingsFlowValidator:
             }
             values = [by_level[level] for level in complete_levels if level in by_level]
             if values and any(
-                abs(value[0] - values[0][0]) >= 0.005 or
-                abs(value[1] - values[0][1]) >= 0.005
+                abs(value[0] - values[0][0]) >= 0.00005 or
+                abs(value[1] - values[0][1]) >= 0.00005
                 for value in values[1:]
             ):
                 changed_directions.add(direction)
