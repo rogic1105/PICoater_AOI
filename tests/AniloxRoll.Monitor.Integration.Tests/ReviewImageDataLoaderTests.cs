@@ -104,6 +104,52 @@ namespace AniloxRoll.Monitor.Integration.Tests
             }
         }
 
+        [Test]
+        public void Load_EnhancedThumbnailWithStandardMap_UsesCurrentGain()
+        {
+            DateTime date = new DateTime(2026, 7, 21);
+            string grabId = "260721-082000";
+            string fileName = "20260721_082000.000-1";
+            string imageDir = CaptureStoragePaths.DateImageDir(_tempRoot, date);
+            Directory.CreateDirectory(imageDir);
+            string rawPath = Path.Combine(
+                imageDir, fileName + CaptureFileNaming.RawJpg);
+            WriteJpeg(rawPath);
+            WriteJpeg(Path.Combine(imageDir, fileName + CaptureFileNaming.ProcC));
+            File.WriteAllBytes(
+                CaptureFileNaming.StripRawJpg(rawPath) + CaptureFileNaming.HessianC,
+                HessianStandardMapCodec.Encode(
+                    new byte[]
+                    {
+                        0x00, 0x00, 0x00, 0x38,
+                        0x00, 0x3c, 0x00, 0x40
+                    },
+                    2, 2));
+            WriteCsv(date, grabId, fileName);
+
+            var loader = new ReviewImageDataLoader();
+            ReviewImageLoadPlan plan = loader.Prepare(
+                _tempRoot, grabId, date, date, 1, true, "c");
+            ReviewImageData result = loader.Load(
+                plan, 1, true, "c", includeCurves: false,
+                useThumbnail: true, standardDisplayGain: 0.5f);
+
+            try
+            {
+                Assert.That(result.PreviewSource, Is.EqualTo("hessian"));
+                Assert.That(result.Images[0].Size, Is.EqualTo(new Size(2, 2)));
+                Assert.That(result.Images[0].GetPixel(1, 0).R,
+                    Is.EqualTo(64).Within(1));
+                Assert.That(result.Images[0].GetPixel(0, 1).R,
+                    Is.EqualTo(128).Within(1));
+                Assert.That(result.Images[0].GetPixel(1, 1).R, Is.EqualTo(255));
+            }
+            finally
+            {
+                result.DisposeImages();
+            }
+        }
+
         private void WriteCsv(DateTime date, string grabId, string fileName)
         {
             string csvPath = CaptureStoragePaths.DailyCsv(_tempRoot, date);

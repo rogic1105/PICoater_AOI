@@ -135,6 +135,14 @@ namespace AniloxRoll.Monitor.Integration.Tests
                 Assert.That(remapped.GetPixel(0, 1).R, Is.EqualTo(128).Within(1));
                 Assert.That(remapped.GetPixel(1, 1).R, Is.EqualTo(255));
             }
+            using (Bitmap thumbnail = GrabImageStitcher.LoadCameraImage(
+                rawPath, 5, null, true, "c", true, 0.5f))
+            {
+                Assert.That(thumbnail.Size, Is.EqualTo(new Size(2, 2)));
+                Assert.That(thumbnail.GetPixel(1, 0).R, Is.EqualTo(64).Within(1));
+                Assert.That(thumbnail.GetPixel(0, 1).R, Is.EqualTo(128).Within(1));
+                Assert.That(thumbnail.GetPixel(1, 1).R, Is.EqualTo(255));
+            }
             Assert.That(
                 Directory.GetFiles(_root, "*", SearchOption.AllDirectories),
                 Is.EqualTo(new[] { archive }));

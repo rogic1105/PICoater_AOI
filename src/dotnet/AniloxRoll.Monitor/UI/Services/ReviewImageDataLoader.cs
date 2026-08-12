@@ -134,7 +134,9 @@ namespace AniloxRoll.Monitor.UI.Services
             var alignment = plan.Alignment;
             var alignedByCamera = alignment.ByCamera;
 
-            if (useThumbnail && !includeCurves &&
+            bool preferStandardMap = enableProcess && standardDisplayGain > 0f &&
+                HasCompleteStandardMaps(grouped, ridgeDirection);
+            if (useThumbnail && !includeCurves && !preferStandardMap &&
                 CapturePreviewAtlasCodec.TryLoad(
                     grouped, cameraCount, enableProcess, ridgeDirection,
                     out CapturePreviewAtlasData atlas))
@@ -182,7 +184,7 @@ namespace AniloxRoll.Monitor.UI.Services
                         : paths;
                     images[index] = GrabImageStitcher.StitchCamera(
                         aligned, scale, null, enableProcess, ridgeDirection, useThumbnail,
-                        standardDisplayGain);
+                        preferStandardMap ? standardDisplayGain : 0f);
                     if (includeCurves)
                     {
                         CurveMergeHelper.MergeCurves(
@@ -235,7 +237,9 @@ namespace AniloxRoll.Monitor.UI.Services
                 StorageSource = plan.StorageSource,
                 IsThumbnail = useThumbnail,
                 PixelScaleRatio = pixelScaleRatio,
-                PreviewSource = useThumbnail ? "frames" : null,
+                PreviewSource = useThumbnail
+                    ? (preferStandardMap ? "hessian" : "frames")
+                    : null,
                 PreviewWidth = 0,
                 PreviewHeight = 0
             };
@@ -258,6 +262,27 @@ namespace AniloxRoll.Monitor.UI.Services
             return Load(
                 plan, cameraCount, enableProcess, ridgeDirection,
                 includeCurves, useThumbnail, standardDisplayGain);
+        }
+
+        private static bool HasCompleteStandardMaps(
+            Dictionary<int, List<string>> grouped, string ridgeDirection)
+        {
+            bool foundRaw = false;
+            foreach (KeyValuePair<int, List<string>> camera in grouped)
+            {
+                List<string> paths = camera.Value;
+                if (paths == null) continue;
+                for (int index = 0; index < paths.Count; index++)
+                {
+                    string rawPath = paths[index];
+                    if (!CaptureFileNaming.IsRawJpg(rawPath)) continue;
+                    foundRaw = true;
+                    string standardPath = CaptureFileNaming.ResolveHessianStandardMap(
+                        rawPath, ridgeDirection);
+                    if (!CaptureArchiveStore.Exists(standardPath)) return false;
+                }
+            }
+            return foundRaw;
         }
     }
 }

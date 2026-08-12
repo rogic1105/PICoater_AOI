@@ -193,7 +193,7 @@ against current code with `rg` before editing because lookup data can become sta
 | 欄正規值 | `dc_HessianMaxFactorV` → `HessianMaxFactorV` | 0.3 | V Hessian 正規化係數（capture-time baked-in） |
 | 列正規值 | `dd_HessianMaxFactorH` → `HessianMaxFactorH` | 0.3 | H Hessian 正規化係數（view-time only） |
 | 細線濾除 | `de_RidgeSigma` → `RidgeSigma` | 9.0 | Ridge 前 Gaussian blur sigma；越大→濾掉越多細線/雜訊（較不敏感），越小→越敏感。走每幀 json 送 native；改設定下次 grab 生效。唯一預設 `InspectionEngineConfig.DefaultRidgeSigma` |
-| 欄曲線判定 | `eca_ColumnCurveMode` → `ColumnCurveMode` | 顯示兩者 | 顯示平均／顯示最大／顯示兩者；同時決定欄圖表可見曲線、監控欄 MURA 與報表 O/X 使用的門檻 |
+| 欄列曲線判定 | `eca_ColumnCurveMode` → `ColumnCurveMode` | 顯示兩者 | 顯示平均／顯示最大／顯示兩者；同時決定欄列圖表可見曲線、監控欄列 MURA 與報表 O/X 使用的門檻 |
 | 欄平均閾值 | `ec_ErrorValueMeanV` → `ErrorValueMeanV` | 0.2 | V chart Mean 閾值線 |
 | 欄最大閾值 | `ed_ErrorValueMaxV` → `ErrorValueMaxV` | 0.6 | V chart Max 閾值線 |
 | 列平均閾值 | `ee_ErrorValueMeanH` → `ErrorValueMeanH` | 0.2 | H chart Mean 閾值線 |

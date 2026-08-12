@@ -489,11 +489,24 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 Core.Services.FlowTrace.Log(
                     $"RV loadGrab curves={curveSource} {grabId}");
 
-                ReviewImageData loaded = await Task.Run(() => _imageDataLoader.Load(
-                    plan, camCount, enableProcess, ridgeDir,
-                    includeCurves: !preserveCurves,
-                    standardDisplayGain: ResolveStandardDisplayGain(
-                        enableProcess, ridgeDir)));
+                var imageQueueWatch = Stopwatch.StartNew();
+                long imageQueueMs = 0L;
+                long imageLoadMs = 0L;
+                ReviewImageData loaded = await Task.Run(() =>
+                {
+                    imageQueueMs = imageQueueWatch.ElapsedMilliseconds;
+                    var imageLoadWatch = Stopwatch.StartNew();
+                    ReviewImageData result = _imageDataLoader.Load(
+                        plan, camCount, enableProcess, ridgeDir,
+                        includeCurves: !preserveCurves,
+                        standardDisplayGain: ResolveStandardDisplayGain(
+                            enableProcess, ridgeDir));
+                    imageLoadMs = imageLoadWatch.ElapsedMilliseconds;
+                    Core.Services.FlowTrace.Dvt(
+                        $"RV image load worker {grabId} queueMs={imageQueueMs} " +
+                        $"loadMs={imageLoadMs} storage={result.StorageSource}");
+                    return result;
+                });
                 var newImages = loaded.Images;
 
                 // token 閘門：背景載入期間已有更新的選取 → 本結果作廢（不上畫面、不動 chart）
@@ -532,6 +545,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     loaded.PixelScaleRatio;
                 int feedScale = Math.Max(1, (int)Math.Round(exactFeedScale));
                 double rowPitchCorrection = exactFeedScale / feedScale;
+                long imageApplyStartMs = swTotal.ElapsedMilliseconds;
                 StitchedImagesReady?.Invoke(
                     loaded.GrayFrames, loaded.GrayWidths, loaded.GrayHeights, opsEff, posEff,
                     isGlobal, keepDisplayedCurves,
@@ -557,6 +571,10 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _charts.UpdateGlobalRowChart();   // 畫布顯示走 ImageDisplayView（同源）；row 曲線照合併更新
                     UpdateStitchedOverviewChart();
                 }
+
+                Core.Services.FlowTrace.Dvt(
+                    $"RV image load apply {grabId} queueMs={imageQueueMs} " +
+                    $"loadMs={imageLoadMs} applyMs={swTotal.ElapsedMilliseconds - imageApplyStartMs}");
 
                 Trace.WriteLine($"[StitchView] {grabId} proc={enableProcess} | CSV={loaded.ConfigMs}ms | Stitch={loaded.StitchMs}ms | Merge(bg)=0ms | UIapply={swTotal.ElapsedMilliseconds - loaded.ConfigMs - loaded.StitchMs}ms | Total={swTotal.ElapsedMilliseconds}ms");
                 Core.Services.FlowTrace.Log($"RV loadGrab done {grabId}（{swTotal.ElapsedMilliseconds}ms）");
@@ -663,8 +681,12 @@ namespace AniloxRoll.Monitor.UI.Presenters
             int cameraCount, bool enableProcess, string ridgeDirection,
             out ReviewCacheAccess access)
         {
+            float standardDisplayGain = ResolveStandardDisplayGain(
+                enableProcess, ridgeDirection);
             string key = BuildPreparedPlanKey(
-                root, grabId, enableProcess, ridgeDirection);
+                root, grabId, enableProcess, ridgeDirection) + "|" +
+                standardDisplayGain.ToString(
+                    "R", System.Globalization.CultureInfo.InvariantCulture);
             return _thumbnailCache.GetOrLoadAsync(
                 key,
                 () =>
@@ -674,7 +696,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     {
                         loaded = _imageDataLoader.Load(
                             plan, cameraCount, enableProcess, ridgeDirection,
-                            includeCurves: false, useThumbnail: true);
+                            includeCurves: false, useThumbnail: true,
+                            standardDisplayGain: standardDisplayGain);
                         var snapshot = new ReviewThumbnailSnapshot
                         {
                             GrayFrames = loaded.GrayFrames,

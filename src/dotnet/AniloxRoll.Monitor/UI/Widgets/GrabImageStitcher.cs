@@ -158,7 +158,9 @@ namespace AniloxRoll.Monitor.UI.Widgets
             if (!CaptureFileNaming.IsRawJpg(path))
                 return null;
 
-            if (useProcessed && !useThumbnail && standardDisplayGain > 0f)
+            // Standard maps are already compact. Prefer them during fast-scroll too,
+            // so preview and settled display use the same current normalization.
+            if (useProcessed && standardDisplayGain > 0f)
             {
                 string standardPath = CaptureFileNaming.ResolveHessianStandardMap(
                     path, ridgeDirection);
