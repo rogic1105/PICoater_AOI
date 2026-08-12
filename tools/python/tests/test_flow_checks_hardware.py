@@ -121,6 +121,26 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
 
+    def test_io_stop_policy_accepts_io_low_only_arm(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "grab stop armed condition=IoSignal limit=io-low "
+                "configured=10s grace=unused source=io grab=260811-120000",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H4.io-stop-policy").status)
+
+    def test_io_stop_policy_rejects_timer_termination(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "grab stop armed condition=IoSignal limit=12s "
+                "configured=10s grace=2s source=io grab=260811-120000",
+                "auto:grab-stop condition=IoSignal "
+                "limit=12s grab=260811-120000",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
+
     def test_fixed_target_low_edge_pairs_with_time_or_height_request(self):
         report = HardwareFlowValidator().validate(
             session(

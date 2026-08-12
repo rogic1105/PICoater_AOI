@@ -13,6 +13,10 @@ namespace AniloxRoll.DvtRunner
     {
         private Process _process;
         private AutomationElement _root;
+        private AutomationElement _propertyGridTable;
+        private Dictionary<string, List<AutomationElement>> _propertyGridItems;
+        private List<AutomationElement> _propertyGridItemOrder;
+        private string _selectedPropertyGridKey;
 
         public bool IsAttached =>
             _process != null && !_process.HasExited && _root != null;
@@ -20,12 +24,45 @@ namespace AniloxRoll.DvtRunner
         public int ProcessId =>
             _process != null && !_process.HasExited ? _process.Id : 0;
 
+        public void RefreshPropertyGridIndex()
+        {
+            EnsureAttached();
+            _propertyGridItems = null;
+            _propertyGridItemOrder = null;
+            _selectedPropertyGridKey = null;
+        }
+
+        public void RefreshRoot()
+        {
+            EnsureAttached();
+            _process.Refresh();
+            if (_process.MainWindowHandle == IntPtr.Zero)
+                throw new InvalidOperationException(
+                    "Monitor main window is unavailable while refreshing UI Automation.");
+            _root = AutomationElement.FromHandle(
+                _process.MainWindowHandle);
+            _propertyGridTable = null;
+            _propertyGridItems = null;
+            _propertyGridItemOrder = null;
+            _selectedPropertyGridKey = null;
+        }
+
         public async Task AttachOrLaunchAsync(
             string exePath,
             int timeoutSeconds,
             CancellationToken cancellationToken)
         {
             if (IsAttached) return;
+            if (_process != null)
+            {
+                _process.Dispose();
+                _process = null;
+                _root = null;
+                _propertyGridTable = null;
+                _propertyGridItems = null;
+                _propertyGridItemOrder = null;
+                _selectedPropertyGridKey = null;
+            }
             if (!File.Exists(exePath))
                 throw new FileNotFoundException("Monitor executable not found.", exePath);
 
@@ -92,6 +129,10 @@ namespace AniloxRoll.DvtRunner
                         _process.MainWindowHandle, 2000))
                     {
                         _root = AutomationElement.FromHandle(_process.MainWindowHandle);
+                        _propertyGridTable = null;
+                        _propertyGridItems = null;
+                        _propertyGridItemOrder = null;
+                        _selectedPropertyGridKey = null;
                     }
                     if (_root != null)
                         return;
@@ -232,6 +273,10 @@ namespace AniloxRoll.DvtRunner
                 if (_process.HasExited)
                 {
                     _root = null;
+                    _propertyGridTable = null;
+                    _propertyGridItems = null;
+                    _propertyGridItemOrder = null;
+                    _selectedPropertyGridKey = null;
                     return;
                 }
                 await Task.Delay(150, cancellationToken);
@@ -245,6 +290,10 @@ namespace AniloxRoll.DvtRunner
             if (_process == null || _process.HasExited)
             {
                 _root = null;
+                _propertyGridTable = null;
+                _propertyGridItems = null;
+                _propertyGridItemOrder = null;
+                _selectedPropertyGridKey = null;
                 return true;
             }
 
@@ -252,28 +301,56 @@ namespace AniloxRoll.DvtRunner
             bool exited = _process.WaitForExit(
                 Math.Max(1, timeoutSeconds) * 1000);
             if (exited)
+            {
                 _root = null;
+                _propertyGridTable = null;
+                _propertyGridItems = null;
+                _propertyGridItemOrder = null;
+                _selectedPropertyGridKey = null;
+            }
             return exited;
         }
 
-        public string GetPropertyValue(string displayName)
+        public string GetPropertyValue(string displayName, int occurrence = 0)
         {
-            AutomationElement element = FindUniqueDataItem(displayName);
+            AutomationElement element = FindDataItem(displayName, occurrence);
             return ReadRequiredValue(element);
+        }
+
+        public async Task<string> GetPropertyValueAsync(
+            string displayName,
+            int occurrence,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            AutomationElement element = await BringDataItemIntoViewAsync(
+                displayName,
+                occurrence,
+                timeoutSeconds,
+                cancellationToken);
+            string value = ReadRequiredValue(element);
+            return value;
         }
 
         public async Task SetPropertyValueAsync(
             string displayName,
             string value,
             int timeoutSeconds,
-            CancellationToken cancellationToken)
+            CancellationToken cancellationToken,
+            int occurrence = 0)
         {
             if (string.Equals(
-                GetPropertyValue(displayName), value, StringComparison.Ordinal))
+                await GetPropertyValueAsync(
+                    displayName,
+                    occurrence,
+                    timeoutSeconds,
+                    cancellationToken),
+                value,
+                StringComparison.Ordinal))
                 return;
 
             AutomationElement element = await BringDataItemIntoViewAsync(
-                displayName, timeoutSeconds, cancellationToken);
+                displayName, occurrence, timeoutSeconds, cancellationToken);
             if (!element.Current.IsEnabled)
                 throw new InvalidOperationException("Property is disabled: " + displayName);
 
@@ -285,7 +362,7 @@ namespace AniloxRoll.DvtRunner
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 element = await BringDataItemIntoViewAsync(
-                    displayName, timeoutSeconds, cancellationToken);
+                    displayName, occurrence, timeoutSeconds, cancellationToken);
                 NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
                 System.Windows.Rect bounds = element.Current.BoundingRectangle;
                 NativeMethods.ClickScreenPoint(
@@ -297,7 +374,9 @@ namespace AniloxRoll.DvtRunner
                 if (editor != null &&
                     editor.TryGetCurrentPattern(
                         ValuePattern.Pattern, out valuePattern))
+                {
                     break;
+                }
 
                 // A first click can select the row without opening its editor.
                 // Retry against the current row instead of assuming a fixed delay.
@@ -310,52 +389,50 @@ namespace AniloxRoll.DvtRunner
                 throw new InvalidOperationException(
                     "Property editor does not expose ValuePattern: " + displayName);
 
-            ((ValuePattern)valuePattern).SetValue(value);
-            IntPtr editorHandle = new IntPtr(editor.Current.NativeWindowHandle);
+            var editorValue = (ValuePattern)valuePattern;
+            bool editorIsReadOnly = editorValue.Current.IsReadOnly;
+            if (!editorIsReadOnly)
+            {
+                editorValue.SetValue(value);
 
-            // PropertyGrid accessibility SetValue only updates the edit box. Enter is the
-            // actual commit boundary that raises PropertyValueChanged and SettingsHub routing.
-            if (editorHandle != IntPtr.Zero)
-            {
-                NativeMethods.SendMessage(
-                    editorHandle, NativeMethods.WmKeyDown,
-                    new IntPtr(NativeMethods.VkReturn), IntPtr.Zero);
-                NativeMethods.SendMessage(
-                    editorHandle, NativeMethods.WmKeyUp,
-                    new IntPtr(NativeMethods.VkReturn), IntPtr.Zero);
-            }
-            else
-            {
+                // PropertyGrid accessibility SetValue only updates the edit
+                // box. Enter commits it and raises PropertyValueChanged. A
+                // cross-process SendMessage waits for the whole value-change
+                // route (including chart/display refresh) and can deadlock the
+                // runner. Keyboard input is asynchronous; the read-back loop
+                // below remains the actual commit boundary.
                 NativeMethods.PressKey((byte)NativeMethods.VkReturn);
-            }
 
-            DateTime directDeadline = DateTime.UtcNow.AddSeconds(
-                Math.Min(1.0, timeoutSeconds));
-            while (DateTime.UtcNow < directDeadline)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                string current = GetPropertyValue(displayName);
-                if (string.Equals(current, value, StringComparison.Ordinal))
+                // Do not accept the editor text as proof before WinForms has
+                // dispatched PropertyValueChanged and persisted the setting.
+                await Task.Delay(300, cancellationToken);
+
+                DateTime directDeadline = DateTime.UtcNow.AddSeconds(
+                    Math.Min(1.0, timeoutSeconds));
+                while (DateTime.UtcNow < directDeadline)
                 {
-                    // Move focus back to the property name after the committed value is
-                    // observable. This closes the editor before a consecutive update.
-                    element = await BringDataItemIntoViewAsync(
-                        displayName, timeoutSeconds, cancellationToken);
-                    System.Windows.Rect bounds =
-                        element.Current.BoundingRectangle;
-                    NativeMethods.ClickScreenPoint(
-                        (int)Math.Round(bounds.Left + bounds.Width * 0.25),
-                        (int)Math.Round(bounds.Top + bounds.Height / 2.0));
-                    await Task.Delay(100, cancellationToken);
-                    return;
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string current = await GetPropertyValueAsync(
+                        displayName,
+                        occurrence,
+                        timeoutSeconds,
+                        cancellationToken);
+                    if (string.Equals(
+                        current, value, StringComparison.Ordinal))
+                    {
+                        // The value and route are the commit boundary. A
+                        // setting such as AppRole can rebuild the layout, so
+                        // do not touch the pre-change AutomationElement.
+                        return;
+                    }
+                    await Task.Delay(150, cancellationToken);
                 }
-                await Task.Delay(150, cancellationToken);
             }
 
             // Some WinForms PropertyGrid enum editors expose ValuePattern but
-            // do not commit text that was not chosen from the standard-value
-            // list. Select each standard value by keyboard and verify the
-            // actual PropertyGrid value instead of trusting the editor text.
+            // mark it read-only, or do not commit text that was not chosen
+            // from the standard-value list. Select each standard value by
+            // keyboard and verify the actual value.
             DateTime selectionDeadline =
                 DateTime.UtcNow.AddSeconds(timeoutSeconds);
             for (int choiceIndex = 0;
@@ -364,7 +441,7 @@ namespace AniloxRoll.DvtRunner
             {
                 cancellationToken.ThrowIfCancellationRequested();
                 element = await BringDataItemIntoViewAsync(
-                    displayName, timeoutSeconds, cancellationToken);
+                    displayName, occurrence, timeoutSeconds, cancellationToken);
                 NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
                 System.Windows.Rect bounds =
                     element.Current.BoundingRectangle;
@@ -373,24 +450,25 @@ namespace AniloxRoll.DvtRunner
                     (int)Math.Round(bounds.Top + bounds.Height / 2.0));
                 await Task.Delay(100, cancellationToken);
 
+                // F4 opens the PropertyGrid standard-value drop-down. Without
+                // opening it, Home/Down only edit the current text and some
+                // three-or-more-value enums oscillate between two entries.
+                NativeMethods.PressKey((byte)NativeMethods.VkF4);
+                await Task.Delay(100, cancellationToken);
                 NativeMethods.PressKey((byte)NativeMethods.VkHome);
                 for (int i = 0; i < choiceIndex; i++)
                     NativeMethods.PressKey((byte)NativeMethods.VkDown);
                 NativeMethods.PressKey((byte)NativeMethods.VkReturn);
                 await Task.Delay(200, cancellationToken);
 
-                string current = GetPropertyValue(displayName);
+                string current = await GetPropertyValueAsync(
+                    displayName,
+                    occurrence,
+                    timeoutSeconds,
+                    cancellationToken);
                 if (!string.Equals(
                     current, value, StringComparison.Ordinal))
                     continue;
-
-                element = await BringDataItemIntoViewAsync(
-                    displayName, timeoutSeconds, cancellationToken);
-                bounds = element.Current.BoundingRectangle;
-                NativeMethods.ClickScreenPoint(
-                    (int)Math.Round(bounds.Left + bounds.Width * 0.25),
-                    (int)Math.Round(bounds.Top + bounds.Height / 2.0));
-                await Task.Delay(100, cancellationToken);
                 return;
             }
             throw new TimeoutException(
@@ -779,24 +857,25 @@ namespace AniloxRoll.DvtRunner
             await Task.Delay(150, cancellationToken);
         }
 
-        private AutomationElement FindUniqueDataItem(string name)
+        private AutomationElement FindDataItem(string name, int occurrence)
         {
             EnsureAttached();
-            var condition = new AndCondition(
-                new PropertyCondition(AutomationElement.NameProperty, name),
-                new PropertyCondition(
-                    AutomationElement.ControlTypeProperty,
-                    ControlType.DataItem));
-            AutomationElement element = _root.FindFirst(
-                TreeScope.Descendants, condition);
-            if (element == null)
+            if (occurrence < 0)
+                throw new ArgumentOutOfRangeException(nameof(occurrence));
+            Dictionary<string, List<AutomationElement>> items =
+                GetPropertyGridItems();
+            List<AutomationElement> matches;
+            if (!items.TryGetValue(name, out matches) ||
+                occurrence >= matches.Count)
                 throw new InvalidOperationException(
-                    "PropertyGrid item not found: " + name);
-            return element;
+                    "PropertyGrid item not found: " + name +
+                    " occurrence=" + occurrence);
+            return matches[occurrence];
         }
 
         private async Task<AutomationElement> BringDataItemIntoViewAsync(
             string name,
+            int occurrence,
             int timeoutSeconds,
             CancellationToken cancellationToken)
         {
@@ -804,23 +883,71 @@ namespace AniloxRoll.DvtRunner
             while (DateTime.UtcNow < deadline)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                AutomationElement item = FindUniqueDataItem(name);
-                AutomationElement category =
-                    TreeWalker.RawViewWalker.GetParent(item);
-                AutomationElement table = category == null
-                    ? null
-                    : TreeWalker.RawViewWalker.GetParent(category);
-                if (table == null || table.Current.ControlType != ControlType.Table)
-                    throw new InvalidOperationException(
-                        "Cannot locate PropertyGrid table for " + name);
+                AutomationElement item = FindDataItem(name, occurrence);
+                AutomationElement table = GetPropertyGridTable();
+
+                string itemKey = name + "\u001f" + occurrence;
+                if (!string.Equals(
+                    _selectedPropertyGridKey,
+                    itemKey,
+                    StringComparison.Ordinal))
+                {
+                    int ordinal = _propertyGridItemOrder.IndexOf(item);
+                    if (ordinal < 0)
+                        throw new InvalidOperationException(
+                            "PropertyGrid navigation index not found: " + name);
+
+                    NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+                    table.SetFocus();
+                    System.Windows.Forms.SendKeys.SendWait("{HOME}");
+                    for (int i = 0; i < ordinal; i++)
+                        System.Windows.Forms.SendKeys.SendWait("{DOWN}");
+                    await Task.Delay(150, cancellationToken);
+                    _selectedPropertyGridKey = itemKey;
+                }
+
+                AutomationElement selected = FindFocusedDataItem(name);
+                if (selected != null)
+                    item = selected;
 
                 System.Windows.Rect itemBounds = item.Current.BoundingRectangle;
                 System.Windows.Rect tableBounds = table.Current.BoundingRectangle;
+                double itemCenterY = itemBounds.Top + itemBounds.Height / 2.0;
                 bool visible =
-                    itemBounds.Top >= tableBounds.Top &&
-                    itemBounds.Bottom <= tableBounds.Bottom &&
-                    itemBounds.Height > 0;
+                    itemBounds.Height > 0 &&
+                    itemCenterY >= tableBounds.Top &&
+                    itemCenterY <= tableBounds.Bottom;
                 if (visible) return item;
+
+                object scrollItemPattern;
+                if (item.TryGetCurrentPattern(
+                        ScrollItemPattern.Pattern,
+                        out scrollItemPattern))
+                {
+                    ((ScrollItemPattern)scrollItemPattern).ScrollIntoView();
+                    await Task.Delay(150, cancellationToken);
+                    continue;
+                }
+
+                bool down = itemBounds.Top > tableBounds.Bottom;
+
+                // WinForms PropertyGrid rows do not expose ScrollItemPattern on
+                // every Windows version. The table does handle PageUp/PageDown,
+                // including rows below the current viewport that UIA incorrectly
+                // reports as IsOffscreen=false.
+                try
+                {
+                    NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+                    table.SetFocus();
+                    System.Windows.Forms.SendKeys.SendWait(
+                        down ? "{PGDN}" : "{PGUP}");
+                    await Task.Delay(150, cancellationToken);
+                    continue;
+                }
+                catch (InvalidOperationException)
+                {
+                    // Fall through to the native scrollbar for older UIA hosts.
+                }
 
                 AutomationElement scrollOwner = table;
                 IntPtr scrollHandle = IntPtr.Zero;
@@ -830,7 +957,6 @@ namespace AniloxRoll.DvtRunner
                         scrollOwner.Current.NativeWindowHandle);
                     scrollOwner = TreeWalker.RawViewWalker.GetParent(scrollOwner);
                 }
-                bool down = itemBounds.Top > tableBounds.Bottom;
                 if (!NativeMethods.ScrollVerticalPage(scrollHandle, down))
                     throw new InvalidOperationException(
                         "Cannot safely scroll PropertyGrid for " + name);
@@ -838,6 +964,102 @@ namespace AniloxRoll.DvtRunner
             }
             throw new TimeoutException(
                 "Timed out scrolling PropertyGrid item into view: " + name);
+        }
+
+        private AutomationElement FindFocusedDataItem(string expectedName)
+        {
+            AutomationElement element = AutomationElement.FocusedElement;
+            while (element != null)
+            {
+                try
+                {
+                    if (element.Current.ProcessId != _process.Id)
+                        return null;
+                    if (element.Current.ControlType == ControlType.DataItem)
+                    {
+                        return string.Equals(
+                            element.Current.Name,
+                            expectedName,
+                            StringComparison.Ordinal)
+                            ? element
+                            : null;
+                    }
+                    element = TreeWalker.RawViewWalker.GetParent(element);
+                }
+                catch (ElementNotAvailableException)
+                {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        private AutomationElement GetPropertyGridTable()
+        {
+            EnsureAttached();
+            if (_propertyGridTable != null)
+            {
+                try
+                {
+                    if (_propertyGridTable.Current.ProcessId == _process.Id)
+                        return _propertyGridTable;
+                }
+                catch (ElementNotAvailableException)
+                {
+                    _propertyGridTable = null;
+                    _propertyGridItems = null;
+                    _propertyGridItemOrder = null;
+                    _selectedPropertyGridKey = null;
+                }
+            }
+
+            var condition = new AndCondition(
+                new PropertyCondition(
+                    AutomationElement.NameProperty,
+                    "屬性視窗"),
+                new PropertyCondition(
+                    AutomationElement.ControlTypeProperty,
+                    ControlType.Table));
+            _propertyGridTable = _root.FindFirst(
+                TreeScope.Descendants,
+                condition);
+            if (_propertyGridTable == null)
+                throw new InvalidOperationException(
+                    "PropertyGrid table not found.");
+            return _propertyGridTable;
+        }
+
+        private Dictionary<string, List<AutomationElement>> GetPropertyGridItems()
+        {
+            if (_propertyGridItems != null)
+                return _propertyGridItems;
+
+            AutomationElement table = GetPropertyGridTable();
+            AutomationElementCollection elements = table.FindAll(
+                TreeScope.Descendants,
+                new PropertyCondition(
+                    AutomationElement.ControlTypeProperty,
+                    ControlType.DataItem));
+            var items = new Dictionary<string, List<AutomationElement>>(
+                StringComparer.Ordinal);
+            var itemOrder = new List<AutomationElement>(elements.Count);
+            foreach (AutomationElement element in elements)
+            {
+                itemOrder.Add(element);
+                string name = element.Current.Name;
+                if (string.IsNullOrWhiteSpace(name))
+                    continue;
+                List<AutomationElement> matches;
+                if (!items.TryGetValue(name, out matches))
+                {
+                    matches = new List<AutomationElement>();
+                    items.Add(name, matches);
+                }
+                matches.Add(element);
+            }
+            _propertyGridItems = items;
+            _propertyGridItemOrder = itemOrder;
+            return _propertyGridItems;
         }
 
         private AutomationElement FindUnique(string name, bool throwIfMissing)

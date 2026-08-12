@@ -36,9 +36,14 @@ class DataFlowValidator:
 
         self._check_statistics_snapshot(session, report)
         self._check_column_verdict_index(session, report)
+        self._check_verdict_cache(session, report)
+        self._check_row_verdict_index(session, report)
         self._check_column_verdicts(session, report)
+        self._check_row_verdicts(session, report)
         self._check_column_chart_verdict_alignment(session, report)
+        self._check_row_chart_verdict_alignment(session, report)
         self._check_column_verdict_clicks(session, report)
+        self._check_row_verdict_clicks(session, report)
         self._check_single_selection(session, report)
         self._check_single_curve_policy(session, report)
         self._check_single_curve(session, report)
@@ -61,9 +66,13 @@ class DataFlowValidator:
     def _check_column_verdict_index(
         self, session: FlowSession, report: CheckReport
     ) -> None:
-        pattern = re.compile(
+        complete_pattern = re.compile(
             r"^DT verdict index apply=ok gen=(\d+) summaries=(\d+) bins=(\d+) "
             r"missing=(\d+)/(\d+) cams=(\d+) verdicts=(\d+) ms=(\d+)$"
+        )
+        partial_pattern = re.compile(
+            r"^DT verdict index apply=partial gen=(\d+) summaries=(\d+) "
+            r"pending=(\d+)/(\d+) cams=(\d+) verdicts=(\d+) ms=(\d+)$"
         )
         candidates = [
             line.message for line in session.lines
@@ -78,14 +87,25 @@ class DataFlowValidator:
 
         invalid = []
         for message in candidates:
-            match = pattern.match(message)
-            if not match:
-                invalid.append(message)
+            complete = complete_pattern.match(message)
+            if complete:
+                _, summaries, bins, missing, requested, cameras, verdicts, _ = map(
+                    int, complete.groups()
+                )
+                if summaries + bins + missing != requested or verdicts != cameras:
+                    invalid.append(message)
                 continue
-            _, summaries, bins, missing, requested, cameras, verdicts, _ = map(
-                int, match.groups()
-            )
-            if summaries + bins + missing != requested or verdicts != cameras:
+
+            partial = partial_pattern.match(message)
+            if partial:
+                _, summaries, pending, requested, cameras, verdicts, _ = map(
+                    int, partial.groups()
+                )
+                if summaries + pending != requested or verdicts != cameras:
+                    invalid.append(message)
+                continue
+
+            if not complete and not partial:
                 invalid.append(message)
 
         report.add(
@@ -113,7 +133,9 @@ class DataFlowValidator:
         candidates = [
             line.message for line in session.lines
             if line.message.startswith("DT verdict ")
-            and not line.message.startswith(("DT verdict index ", "DT verdict click "))
+            and not line.message.startswith(
+                ("DT verdict index ", "DT verdict click ", "DT verdict cache ")
+            )
         ]
         if not candidates:
             report.add(
@@ -165,6 +187,140 @@ class DataFlowValidator:
             f"max:{causes['max']}/both:{causes['both']} invalid={len(invalid)}"
             + (f" first={invalid[0]}" if invalid else ""),
         )
+
+    def _check_verdict_cache(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^DT verdict cache gen=(\d+) hits=(\d+)/(\d+) "
+            r"days=(\d+) loadMs=(\d+)$"
+        )
+        candidates = [
+            line.message for line in session.lines
+            if line.message.startswith("DT verdict cache ")
+        ]
+        if not candidates:
+            report.add(
+                self.domain, "D1.verdict-cache", CheckStatus.NOT_COVERED,
+                "No daily curve peak cache evidence",
+            )
+            return
+
+        invalid = []
+        warm_runs = 0
+        for message in candidates:
+            match = pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+            _, hits, requested, days, _ = map(int, match.groups())
+            if hits > requested or (hits > 0 and days == 0):
+                invalid.append(message)
+            if requested > 0 and hits == requested:
+                warm_runs += 1
+        report.add(
+            self.domain,
+            "D1.verdict-cache",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"runs={len(candidates)} warm={warm_runs} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    def _check_row_verdict_index(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^DT row verdict index apply=(?:partial|ok) gen=(\d+) rows=(\d+) "
+            r"verdicts=(\d+) enabled=([01])$"
+        )
+        candidates = [
+            line.message for line in session.lines
+            if line.message.startswith("DT row verdict index apply=")
+        ]
+        if not candidates:
+            report.add(
+                self.domain, "D1.row-verdict-index", CheckStatus.NOT_COVERED,
+                "No full-list row verdict index evidence",
+            )
+            return
+
+        invalid = []
+        for message in candidates:
+            match = pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+            _, rows, verdicts, enabled = map(int, match.groups())
+            if verdicts != (rows if enabled else 0):
+                invalid.append(message)
+        report.add(
+            self.domain, "D1.row-verdict-index",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"runs={len(candidates)} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    def _check_row_verdicts(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^DT row verdict (?P<grab>\d{6}-\d{6}) merged=1 "
+            r"mode=(?P<mode>mean|max|both) "
+            r"mean=(?P<mean>\d+(?:\.\d+)?)/(?P<mean_threshold>\d+(?:\.\d+)?) "
+            r"enabled=(?P<mean_enabled>[01]) "
+            r"max=(?P<max>\d+(?:\.\d+)?)/(?P<max_threshold>\d+(?:\.\d+)?) "
+            r"enabled=(?P<max_enabled>[01]) "
+            r"result=(?P<result>pass|fail) "
+            r"cause=(?P<cause>none|mean|max|both) "
+            r"source=visible-merged-curve$"
+        )
+        candidates = [
+            line.message for line in session.lines
+            if line.message.startswith("DT row verdict ")
+            and not line.message.startswith(
+                ("DT row verdict index ", "DT row verdict click "))
+        ]
+        if not candidates:
+            report.add(
+                self.domain, "D1.row-verdict", CheckStatus.NOT_COVERED,
+                "No selected merged-row verdict evidence",
+            )
+            return
+        invalid = [
+            message for message in candidates
+            if not self._verdict_message_is_valid(pattern.match(message))
+        ]
+        report.add(
+            self.domain, "D1.row-verdict",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"rows={len(candidates)} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    @staticmethod
+    def _verdict_message_is_valid(match) -> bool:
+        if not match:
+            return False
+        mode = match.group("mode")
+        mean_enabled = match.group("mean_enabled") == "1"
+        max_enabled = match.group("max_enabled") == "1"
+        expected_flags = {
+            "mean": (True, False),
+            "max": (False, True),
+            "both": (True, True),
+        }[mode]
+        mean_failed = mean_enabled and float(match.group("mean")) > float(
+            match.group("mean_threshold"))
+        max_failed = max_enabled and float(match.group("max")) > float(
+            match.group("max_threshold"))
+        expected_cause = (
+            "both" if mean_failed and max_failed else
+            "mean" if mean_failed else "max" if max_failed else "none"
+        )
+        expected_result = "fail" if mean_failed or max_failed else "pass"
+        return ((mean_enabled, max_enabled) == expected_flags and
+                match.group("cause") == expected_cause and
+                match.group("result") == expected_result)
 
     def _check_column_chart_verdict_alignment(
         self, session: FlowSession, report: CheckReport
@@ -336,6 +492,119 @@ class DataFlowValidator:
             "D1.verdict-click",
             CheckStatus.PASS if not invalid else CheckStatus.FAIL,
             f"runs={runs} rows={rows} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    def _check_row_chart_verdict_alignment(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        display_pattern = re.compile(
+            r"^DT row curve display (?P<grab>\d{6}-\d{6}) "
+            r"mode=(?P<mode>mean|max|both) "
+            r"mean=(?P<mean>\d+(?:\.\d+)?)/\d+(?:\.\d+)? "
+            r"max=(?P<max>\d+(?:\.\d+)?)/\d+(?:\.\d+)? "
+            r"scale=\d+(?:\.\d+)? points=\d+$"
+        )
+        verdict_pattern = re.compile(
+            r"^DT row verdict (?P<grab>\d{6}-\d{6}) merged=1 "
+            r"mode=(?P<mode>mean|max|both) "
+            r"mean=(?P<mean>\d+(?:\.\d+)?)/\d+(?:\.\d+)? enabled=[01] "
+            r"max=(?P<max>\d+(?:\.\d+)?)/\d+(?:\.\d+)? enabled=[01] "
+        )
+        displays = {}
+        verdicts = {}
+        for line in session.lines:
+            display = display_pattern.match(line.message)
+            if display:
+                displays[display.group("grab")] = display
+            verdict = verdict_pattern.match(line.message)
+            if verdict:
+                verdicts[verdict.group("grab")] = verdict
+        compared = sorted(set(displays) & set(verdicts))
+        invalid = []
+        for grab in compared:
+            display = displays[grab]
+            verdict = verdicts[grab]
+            if (display.group("mode") != verdict.group("mode") or
+                    abs(float(display.group("mean")) -
+                        float(verdict.group("mean"))) > 0.0002 or
+                    abs(float(display.group("max")) -
+                        float(verdict.group("max"))) > 0.0002):
+                invalid.append(grab)
+        status = CheckStatus.PASS if compared and not invalid else (
+            CheckStatus.NOT_COVERED if not compared and not invalid
+            else CheckStatus.FAIL
+        )
+        report.add(
+            self.domain, "D1.row-chart-verdict", status,
+            f"compared={len(compared)} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
+        )
+
+    def _check_row_verdict_clicks(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        pattern = re.compile(
+            r"^DT row verdict click (?P<grab>\d{6}-\d{6}) "
+            r"mode=(?P<mode>mean|max|both) "
+            r"mean=(?P<mean>nan|\d+(?:\.\d+)?)/(?P<mean_threshold>\d+(?:\.\d+)?) "
+            r"enabled=(?P<mean_enabled>[01]) "
+            r"max=(?P<max>nan|\d+(?:\.\d+)?)/(?P<max_threshold>\d+(?:\.\d+)?) "
+            r"enabled=(?P<max_enabled>[01]) "
+            r"result=(?P<result>pass|fail|unknown) "
+            r"cause=(?P<cause>none|mean|max|both) "
+            r"list=(?P<list>pass|fail|unknown) "
+            r"source=(?P<source>visible-curve-index|missing)$"
+        )
+        candidates = [
+            line.message for line in session.lines
+            if line.message.startswith("DT row verdict click ")
+        ]
+        if not candidates:
+            report.add(
+                self.domain, "D1.row-verdict-click", CheckStatus.NOT_COVERED,
+                "No report-list row verdict audit evidence",
+            )
+            return
+        invalid = []
+        for message in candidates:
+            match = pattern.match(message)
+            if not match:
+                invalid.append(message)
+                continue
+            mean = match.group("mean")
+            maximum = match.group("max")
+            mean_enabled = match.group("mean_enabled") == "1"
+            max_enabled = match.group("max_enabled") == "1"
+            flags = {
+                "mean": (True, False),
+                "max": (False, True),
+                "both": (True, True),
+            }[match.group("mode")]
+            mean_failed = (mean_enabled and mean != "nan" and
+                           float(mean) > float(match.group("mean_threshold")))
+            max_failed = (max_enabled and maximum != "nan" and
+                          float(maximum) > float(match.group("max_threshold")))
+            has_data = ((mean_enabled and mean != "nan") or
+                        (max_enabled and maximum != "nan"))
+            expected_result = (
+                "unknown" if not has_data else
+                "fail" if mean_failed or max_failed else "pass"
+            )
+            expected_cause = (
+                "both" if mean_failed and max_failed else
+                "mean" if mean_failed else "max" if max_failed else "none"
+            )
+            if ((mean_enabled, max_enabled) != flags or
+                    match.group("result") != expected_result or
+                    match.group("cause") != expected_cause or
+                    (expected_result != "unknown" and
+                     match.group("list") != expected_result)):
+                invalid.append(message)
+        report.add(
+            self.domain, "D1.row-verdict-click",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"rows={len(candidates)} invalid={len(invalid)}"
             + (f" first={invalid[0]}" if invalid else ""),
         )
 

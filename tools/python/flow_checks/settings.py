@@ -30,6 +30,10 @@ class SettingsFlowValidator:
         r"mode=(?P<mode>Mean|Max|Both) direction=(?P<direction>Vertical|Horizontal|Both) "
         r"action=(?P<action>normalization-latest|refresh)$"
     )
+    _row_metric_pattern = re.compile(
+        r"^(?P<scope>LC|RV|DT) row metrics "
+        r"mean=(?P<mean>True|False) max=(?P<max>True|False)$"
+    )
     _live_curve_applied_pattern = re.compile(
         r"^live curve applied setting=(?P<name>\S+) generation=(?P<generation>\d+) "
         r"hm=(?P<hm_c>\d+(?:\.\d+)?)/(?P<hm_r>\d+(?:\.\d+)?) "
@@ -126,6 +130,7 @@ class SettingsFlowValidator:
         self._check_format(settings, report)
         self._check_routes(session, settings, report)
         self._check_live_inspection_settings(session, settings, report)
+        self._check_curve_metric_visibility(session, settings, report)
         self._check_live_normalization_output(session, settings, report)
         self._check_live_pixel_curve_consistency(session, report)
         self._check_live_row_scale(session, report)
@@ -139,6 +144,61 @@ class SettingsFlowValidator:
         self._check_live_layout(session, settings, report)
         self._check_direction_refresh(session, settings, report)
         return report
+
+    def _check_curve_metric_visibility(
+        self, session: FlowSession, settings, report: CheckReport
+    ) -> None:
+        changes = [
+            (index, line, match)
+            for index, line, match in settings
+            if match and match.group("name") == "eca_ColumnCurveMode"
+        ]
+        if not changes:
+            report.add(
+                self.domain, "S1.curve-metrics", CheckStatus.NOT_COVERED,
+                "no column/row curve metric mode change in this session",
+            )
+            return
+
+        failures = []
+        for index, line, match in changes:
+            value = (match.group("value") or match.group("arrow") or "").strip()
+            if value == "Mean" or "平均" in value:
+                expected = (True, False)
+            elif value == "Max" or "最大" in value:
+                expected = (False, True)
+            elif value == "Both" or "兩者" in value:
+                expected = (True, True)
+            else:
+                failures.append(f"{line.timestamp} unknown curve mode={value}")
+                continue
+
+            found = {}
+            for candidate in session.lines[index + 1:]:
+                if candidate.message.startswith(("ui:設定[", "set:[")):
+                    break
+                parsed = self._row_metric_pattern.match(candidate.message)
+                if parsed:
+                    found[parsed.group("scope")] = (
+                        parsed.group("mean") == "True",
+                        parsed.group("max") == "True",
+                    )
+
+            for scope in ("LC", "RV", "DT"):
+                if scope not in found:
+                    failures.append(f"{line.timestamp} {scope} row metric evidence missing")
+                elif found[scope] != expected:
+                    failures.append(
+                        f"{line.timestamp} {scope} row metrics={found[scope]} expected={expected}"
+                    )
+
+        report.add(
+            self.domain,
+            "S1.curve-metrics",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"changes={len(changes)} failures={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
+        )
 
     def _check_live_pixel_curve_consistency(
         self, session: FlowSession, report: CheckReport
@@ -1057,7 +1117,8 @@ class SettingsFlowValidator:
             r"tail=(?P<tail>\d+(?:\.\d+)?) "
             r"mode=(?P<mode>IC|WF) "
             r"content=(?P<width>\d+)x(?P<height>\d+) "
-            r"zoom=(?P<zoom>\d+(?:\.\d+)?) fit=True frames=dynamic$"
+            r"zoom=(?P<zoom>\d+(?:\.\d+)?) "
+            r"fit=(?P<fit>True|False) frames=dynamic$"
         )
         pending_pattern = re.compile(
             r"^capture layout pending grab=(?P<grab>\S+) "
@@ -1072,6 +1133,7 @@ class SettingsFlowValidator:
             r"render=(?P<render>once|already-applied) source=unchanged$"
         )
         failures = []
+        blank_changes = 0
         deferred = {}
         setting_indices = [item[0] for item in settings]
         for index, line, match in changes:
@@ -1145,12 +1207,18 @@ class SettingsFlowValidator:
                 None,
             )
             actual_match = actual_pattern.match(actual_line.message) if actual_line else None
-            if (
-                actual_match is None
-                or int(actual_match.group("width")) <= 0
+            if actual_match is None:
+                failures.append(f"{line.timestamp} 缺實際畫布 Crop 後置條件")
+            elif (
+                int(actual_match.group("width")) <= 0
                 or int(actual_match.group("height")) <= 0
             ):
-                failures.append(f"{line.timestamp} 缺實際畫布 Crop 後置條件")
+                if pending_line is not None:
+                    failures.append(
+                        f"{line.timestamp} Grab 中 Crop 後置畫布仍為空"
+                    )
+                else:
+                    blank_changes += 1
 
         for current_id, items in deferred.items():
             last_pending = items[-1][3]
@@ -1260,7 +1328,7 @@ class SettingsFlowValidator:
             "S6.display-crop",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"changes={len(changes)} deferredGrabs={len(deferred)} "
-            f"failures={len(failures)}"
+            f"blankCanvas={blank_changes} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

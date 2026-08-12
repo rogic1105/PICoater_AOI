@@ -3,27 +3,28 @@
 > This file is overwritten by the next recorded campaign. Git history is the durable record.
 
 - Result: **PASS**
-- Run: `20260807-084007`
-- Commit: `2e447d5`
+- Run: `20260812-154028`
+- Commit: `2794f88`
 - Working tree: dirty
 - Mode: `Functional`
 - Machine: `DESKTOP-C1MN5KD`
-- Finished: 2026-08-07 08:40:26 +08:00
-- Raw artifacts: `artifacts/test-reports/20260807-084007-2e447d5/` (local, ignored by Git)
+- Finished: 2026-08-12 15:40:51 +08:00
+- Raw artifacts: `artifacts/test-reports/20260812-154028-2794f88/` (local, ignored by Git)
 
 ## Results
 
 | Layer | Check | Result | Theory / acceptance | Experimental value / evidence | Seconds |
 |---|---|---:|---|---|---:|
-| Unit | Resource trend guard tests | **PASS** | One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail. | exit code 0 | 0.25 |
-| Functional | Python flow checker tests | **PASS** | All discovered checker self-tests pass; 0 failures. | Ran 171 tests in 0.027s; OK | 0.14 |
-| Unit | .NET unit tests | **PASS** | All discovered unit tests pass; 0 failures. | total 204, passed 204, failed 0, not-executed 0 | 3.99 |
-| Integration | .NET integration tests | **PASS** | All discovered integration tests pass; 0 failures. | total 127, passed 127, failed 0, not-executed 0 | 6.6 |
-| DVT functional | DVT Runner self-check | **PASS** | Launch the exact app, restore changed settings, close cleanly, and finish the checker with exit code 0. | Result: PASS; Status: PASS：Runner 自我檢查（不 Grab） | 7.76 |
+| Build | Release x64 solution build | **PASS** | Release\|x64 build; 0 compiler errors; 0 warnings. | exit code 0 | 3.42 |
+| Unit | Resource trend guard tests | **PASS** | One-time heap expansion passes; sustained 330 MB/hour growth and post-expansion growth fail. | exit code 0 | 0.24 |
+| Functional | Python flow checker tests | **PASS** | All discovered checker self-tests pass; 0 failures. | Ran 198 tests in 0.042s; OK | 0.22 |
+| Unit | .NET unit tests | **PASS** | All discovered unit tests pass; 0 failures. | total 239, passed 239, failed 0, not-executed 0 | 4.53 |
+| Integration | .NET integration tests | **PASS** | All discovered integration tests pass; 0 failures. | total 136, passed 136, failed 0, not-executed 0 | 6.55 |
+| DVT functional | DVT Runner self-check | **PASS** | Launch the exact app, restore changed settings, close cleanly, and finish the checker with exit code 0. | Result: PASS; Status: PASS：Runner 自我檢查（不 Grab） | 8.2 |
 
 ## Improvement record
 
-- Live and review normalization now update retained Hessian standard maps and column/row curves with latest-only coalescing; DVT probes compare same-frame display payload and curve peaks, while report summaries retain their capture-normalized semantics.
+- Inspect the tested commit and worktree diff for product changes; the campaign runner does not infer them.
 - The commit STAR body records the exact implementation change and verified result.
 
 ## Not covered by this campaign

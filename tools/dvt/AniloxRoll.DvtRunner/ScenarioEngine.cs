@@ -45,8 +45,8 @@ namespace AniloxRoll.DvtRunner
         private readonly RunnerOptions _options;
         private readonly UiAutomationDriver _ui = new UiAutomationDriver();
         private readonly FlowLogMonitor _log;
-        private readonly Dictionary<string, string> _originalProperties =
-            new Dictionary<string, string>(StringComparer.Ordinal);
+        private readonly Dictionary<string, OriginalPropertyValue> _originalProperties =
+            new Dictionary<string, OriginalPropertyValue>(StringComparer.Ordinal);
         private readonly Dictionary<string, Process> _helperProcesses =
             new Dictionary<string, Process>(StringComparer.OrdinalIgnoreCase);
         private readonly Dictionary<string, string> _blockedNetworkTargets =
@@ -67,6 +67,9 @@ namespace AniloxRoll.DvtRunner
         private string _sessionStatePath;
         private byte[] _originalSessionState;
         private bool _sessionStateExisted;
+        private string _appModePath;
+        private byte[] _originalAppMode;
+        private bool _appModeExisted;
 
         public ScenarioEngine(RunnerOptions options)
         {
@@ -103,6 +106,7 @@ namespace AniloxRoll.DvtRunner
             _retentionFixtureBytes = 0;
             _captureMayBeActive = false;
             CaptureSessionState();
+            CaptureAppMode();
             try
             {
                 for (int i = 0; i < scenario.Steps.Count; i++)
@@ -143,6 +147,7 @@ namespace AniloxRoll.DvtRunner
                 finally
                 {
                     RestoreSessionState();
+                    RestoreAppMode();
                 }
             }
         }
@@ -215,16 +220,34 @@ namespace AniloxRoll.DvtRunner
                 case "cleanup-retention-fixture":
                     return CleanupRetentionFixture(false);
 
+                case "audit-property-catalog":
+                    return PropertyGridCatalog.Load().AuditProductAssembly(
+                        _options.AppExePath);
+
+                case "exercise-property-group":
+                    return await ExercisePropertyGroupAsync(
+                        step.Target,
+                        step.TimeoutSeconds,
+                        cancellationToken);
+
                 case "wait-element":
                     return await _ui.WaitForElementAsync(
                         step.Target, step.Value, step.TimeoutSeconds, cancellationToken);
 
                 case "set-property":
-                    if (!_originalProperties.ContainsKey(step.Target))
-                        _originalProperties[step.Target] = _ui.GetPropertyValue(step.Target);
+                    await RememberOriginalPropertyAsync(
+                        step.Target,
+                        step.TargetOccurrence,
+                        step.TimeoutSeconds,
+                        cancellationToken);
                     await _ui.SetPropertyValueAsync(
-                        step.Target, step.Value, step.TimeoutSeconds, cancellationToken);
-                    return step.Target + "=" + step.Value;
+                        step.Target,
+                        step.Value,
+                        step.TimeoutSeconds,
+                        cancellationToken,
+                        step.TargetOccurrence);
+                    return PropertyLabel(step.Target, step.TargetOccurrence) +
+                        "=" + step.Value;
 
                 case "click":
                     await _ui.ClickAsync(
@@ -328,6 +351,21 @@ namespace AniloxRoll.DvtRunner
                     return RangeScrollEvidenceVerifier.Verify(
                         _log.GetEvidenceLines());
 
+                case "reset-verdict-cache":
+                    return ResetVerdictCache(step.Target);
+
+                case "verify-verdict-cache-performance":
+                    return VerdictCachePerformanceVerifier.Verify(
+                        _log.GetEvidenceLines());
+
+                case "verify-verdict-cache-warm-first":
+                    return VerdictCachePerformanceVerifier.VerifyWarmFirst(
+                        _log.GetEvidenceLines());
+
+                case "verify-monitor-functional-cycle":
+                    return MonitorFunctionalEvidenceVerifier.Verify(
+                        _log.GetEvidenceLines(), step.Value);
+
                 case "reset-evidence":
                     _log.ResetEvidence();
                     return "後續只接受本階段新產生的 Flow 證據";
@@ -370,6 +408,25 @@ namespace AniloxRoll.DvtRunner
             }
         }
 
+        private static string ResetVerdictCache(string root)
+        {
+            if (string.IsNullOrWhiteSpace(root) || !Directory.Exists(root))
+                throw new InvalidOperationException(
+                    "Verdict cache root does not exist: " + root);
+
+            int deleted = 0;
+            foreach (string path in Directory.EnumerateFiles(
+                root,
+                "curve-peaks.mcpi",
+                SearchOption.AllDirectories))
+            {
+                File.Delete(path);
+                deleted++;
+            }
+            return "root=" + root + " deleted=" +
+                deleted.ToString(CultureInfo.InvariantCulture);
+        }
+
         private async Task SafeCleanupAsync()
         {
             if (_captureMayBeActive)
@@ -397,9 +454,18 @@ namespace AniloxRoll.DvtRunner
             UnblockAllNetworkTargets();
 
             using (var restoreTimeout =
-                new CancellationTokenSource(TimeSpan.FromSeconds(30)))
+                new CancellationTokenSource(TimeSpan.FromSeconds(120)))
             {
-                await RestoreOriginalPropertiesAsync(restoreTimeout.Token);
+                try
+                {
+                    await RestoreOriginalPropertiesAsync(restoreTimeout.Token);
+                }
+                catch (Exception ex)
+                {
+                    Output?.Invoke(
+                        "[cleanup warning] property restore failed: " +
+                        ex.Message);
+                }
             }
             CleanupRetentionFixture(true);
 
@@ -544,14 +610,10 @@ namespace AniloxRoll.DvtRunner
                 throw new InvalidOperationException(
                     "Fixture did not lower free space below the threshold.");
 
-            if (!_originalProperties.ContainsKey(
-                RetentionRootPropertyName))
-                _originalProperties[RetentionRootPropertyName] =
-                    _ui.GetPropertyValue(RetentionRootPropertyName);
-            if (!_originalProperties.ContainsKey(
-                RetentionThresholdPropertyName))
-                _originalProperties[RetentionThresholdPropertyName] =
-                    _ui.GetPropertyValue(RetentionThresholdPropertyName);
+            await RememberOriginalPropertyAsync(
+                RetentionRootPropertyName, 0, timeoutSeconds, cancellationToken);
+            await RememberOriginalPropertyAsync(
+                RetentionThresholdPropertyName, 0, timeoutSeconds, cancellationToken);
 
             await _ui.SetPropertyValueAsync(
                 RetentionRootPropertyName,
@@ -1469,18 +1531,131 @@ namespace AniloxRoll.DvtRunner
                 new UTF8Encoding(false));
         }
 
+        private async Task<string> ExercisePropertyGroupAsync(
+            string group,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            IReadOnlyList<PropertyGridCatalogEntry> entries =
+                PropertyGridCatalog.Load().GetGroup(group);
+            int changed = 0;
+            foreach (PropertyGridCatalogEntry entry in entries)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                Output?.Invoke(
+                    "[PropertyGrid] prepare " + entry.Contract + " " +
+                    entry.Name + " display=" +
+                    PropertyLabel(entry.DisplayName, entry.Occurrence));
+                await RememberOriginalPropertyAsync(
+                    entry.DisplayName,
+                    entry.Occurrence,
+                    timeoutSeconds,
+                    cancellationToken);
+                foreach (string value in entry.TestValues)
+                {
+                    string current = await _ui.GetPropertyValueAsync(
+                        entry.DisplayName,
+                        entry.Occurrence,
+                        timeoutSeconds,
+                        cancellationToken);
+                    if (string.Equals(current, value, StringComparison.Ordinal))
+                        continue;
+
+                    Output?.Invoke(
+                        "[PropertyGrid] " + entry.Contract + " " +
+                        entry.Name + " " + current + " -> " + value);
+                    await _ui.SetPropertyValueAsync(
+                        entry.DisplayName,
+                        value,
+                        timeoutSeconds,
+                        cancellationToken,
+                        entry.Occurrence);
+                    await _log.WaitForAsync(
+                        @"setting route " + Regex.Escape(entry.Name) + @"\b",
+                        timeoutSeconds,
+                        cancellationToken);
+                    if (string.Equals(
+                        entry.Name,
+                        "AppRole",
+                        StringComparison.Ordinal))
+                    {
+                        // AppRole is persisted for the next process and the
+                        // product deliberately requires an acknowledgement.
+                        // Leaving this modal open would make a later normal
+                        // shutdown look like an application hang.
+                        await _ui.ClickAsync(
+                            "確定",
+                            timeoutSeconds,
+                            cancellationToken);
+                        await Task.Delay(250, cancellationToken);
+                        _ui.RefreshRoot();
+                    }
+                    changed++;
+                    if (string.Equals(
+                        entry.Name,
+                        "AppRole",
+                        StringComparison.Ordinal))
+                    {
+                        // One true UI transition is enough. Switching role
+                        // rebuilds the entire accessibility tree; the original
+                        // app-mode file is restored after the app closes.
+                        break;
+                    }
+                }
+            }
+            return "group=" + group + " properties=" + entries.Count +
+                " changes=" + changed;
+        }
+
+        private async Task RememberOriginalPropertyAsync(
+            string displayName,
+            int occurrence,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            string key = PropertyKey(displayName, occurrence);
+            if (_originalProperties.ContainsKey(key))
+                return;
+            _originalProperties[key] = new OriginalPropertyValue
+            {
+                DisplayName = displayName,
+                Occurrence = occurrence,
+                Value = await _ui.GetPropertyValueAsync(
+                    displayName,
+                    occurrence,
+                    timeoutSeconds,
+                    cancellationToken)
+            };
+        }
+
+        private static string PropertyKey(string displayName, int occurrence)
+        {
+            return displayName + "\u001f" +
+                occurrence.ToString(CultureInfo.InvariantCulture);
+        }
+
+        private static string PropertyLabel(string displayName, int occurrence)
+        {
+            return occurrence == 0
+                ? displayName
+                : displayName + "#" + (occurrence + 1);
+        }
+
         private async Task RestoreOriginalPropertiesAsync(
             CancellationToken cancellationToken)
         {
+            if (_originalProperties.Count == 0)
+                return;
+
+            var restoredProperties = new List<OriginalPropertyValue>(
+                _originalProperties.Values);
             const string ioEnabledProperty = "啟用 IO";
-            KeyValuePair<string, string>? originalIoEnabled = null;
+            OriginalPropertyValue originalIoEnabled = null;
             if (_originalProperties.TryGetValue(
-                    ioEnabledProperty,
-                    out string ioEnabledValue))
+                    PropertyKey(ioEnabledProperty, 0),
+                    out OriginalPropertyValue ioEnabledValue))
             {
-                originalIoEnabled = new KeyValuePair<string, string>(
-                    ioEnabledProperty,
-                    ioEnabledValue);
+                originalIoEnabled = ioEnabledValue;
                 try
                 {
                     Output?.Invoke("[cleanup] 先停用 IO，再還原 endpoint");
@@ -1494,45 +1669,100 @@ namespace AniloxRoll.DvtRunner
                 }
             }
 
-            foreach (KeyValuePair<string, string> pair in _originalProperties)
+            foreach (OriginalPropertyValue property in
+                _originalProperties.Values)
             {
                 if (string.Equals(
-                        pair.Key,
-                        ioEnabledProperty,
+                        property.DisplayName,
+                        "機台角色",
                         StringComparison.Ordinal))
+                    continue;
+                if (string.Equals(
+                        property.DisplayName,
+                        ioEnabledProperty,
+                        StringComparison.Ordinal) &&
+                    property.Occurrence == 0)
                     continue;
                 try
                 {
                     Output?.Invoke(
-                        $"[cleanup] 還原 {pair.Key}={pair.Value}");
+                        "[cleanup] 還原 " + PropertyLabel(
+                            property.DisplayName, property.Occurrence) +
+                        "=" + property.Value);
                     await _ui.SetPropertyValueAsync(
-                        pair.Key, pair.Value, 5, cancellationToken);
-                    Output?.Invoke($"已還原 {pair.Key}={pair.Value}");
+                        property.DisplayName,
+                        property.Value,
+                        5,
+                        cancellationToken,
+                        property.Occurrence);
+                    Output?.Invoke(
+                        "已還原 " + PropertyLabel(
+                            property.DisplayName, property.Occurrence) +
+                        "=" + property.Value);
                 }
                 catch (Exception ex)
                 {
                     Output?.Invoke(
-                        $"清理警告：{pair.Key} 還原失敗：{ex.Message}");
+                        "清理警告：" + PropertyLabel(
+                            property.DisplayName, property.Occurrence) +
+                        " 還原失敗：" + ex.Message);
                 }
             }
 
-            if (originalIoEnabled.HasValue)
+            if (originalIoEnabled != null)
             {
-                KeyValuePair<string, string> pair = originalIoEnabled.Value;
                 try
                 {
                     Output?.Invoke(
-                        $"[cleanup] 最後還原 {pair.Key}={pair.Value}");
+                        "[cleanup] 最後還原 " + ioEnabledProperty + "=" +
+                        originalIoEnabled.Value);
                     await _ui.SetPropertyValueAsync(
-                        pair.Key, pair.Value, 5, cancellationToken);
-                    Output?.Invoke($"已還原 {pair.Key}={pair.Value}");
+                        ioEnabledProperty,
+                        originalIoEnabled.Value,
+                        5,
+                        cancellationToken,
+                        originalIoEnabled.Occurrence);
+                    Output?.Invoke(
+                        "已還原 " + ioEnabledProperty + "=" +
+                        originalIoEnabled.Value);
                 }
                 catch (Exception ex)
                 {
                     Output?.Invoke(
-                        $"清理警告：{pair.Key} 還原失敗：{ex.Message}");
+                        "清理警告：" + ioEnabledProperty +
+                        " 還原失敗：" + ex.Message);
                 }
             }
+
+            // PropertyGrid can expose the edited text before the product has
+            // completed its serialized setting route. Give the route time to
+            // persist, then verify the settled UI values before closing.
+            await Task.Delay(1000, cancellationToken);
+            foreach (OriginalPropertyValue property in restoredProperties)
+            {
+                string settled = await _ui.GetPropertyValueAsync(
+                    property.DisplayName,
+                    property.Occurrence,
+                    5,
+                    cancellationToken);
+                if (!string.Equals(
+                        settled,
+                        property.Value,
+                        StringComparison.Ordinal))
+                {
+                    throw new InvalidOperationException(
+                        "Property restore did not settle: " +
+                        PropertyLabel(
+                            property.DisplayName,
+                            property.Occurrence) +
+                        " expected=" + property.Value +
+                        " actual=" + settled);
+                }
+            }
+            Output?.Invoke(
+                "[cleanup] property restore settled count=" +
+                restoredProperties.Count.ToString(
+                    CultureInfo.InvariantCulture));
             _originalProperties.Clear();
         }
 
@@ -1573,6 +1803,45 @@ namespace AniloxRoll.DvtRunner
             {
                 Output?.Invoke(
                     "[cleanup warning] session-state restore failed: " +
+                    ex.Message);
+            }
+        }
+
+        private void CaptureAppMode()
+        {
+            string exeDirectory = Path.GetDirectoryName(_options.AppExePath);
+            _appModePath = Path.Combine(
+                exeDirectory ?? string.Empty,
+                "Config",
+                "app-mode.json");
+            _appModeExisted = File.Exists(_appModePath);
+            _originalAppMode = _appModeExisted
+                ? File.ReadAllBytes(_appModePath)
+                : null;
+        }
+
+        private void RestoreAppMode()
+        {
+            if (string.IsNullOrWhiteSpace(_appModePath))
+                return;
+            try
+            {
+                if (_appModeExisted)
+                {
+                    Directory.CreateDirectory(
+                        Path.GetDirectoryName(_appModePath));
+                    File.WriteAllBytes(_appModePath, _originalAppMode);
+                }
+                else if (File.Exists(_appModePath))
+                {
+                    File.Delete(_appModePath);
+                }
+                Output?.Invoke("[cleanup] app-mode.json restored");
+            }
+            catch (Exception ex)
+            {
+                Output?.Invoke(
+                    "[cleanup warning] app-mode restore failed: " +
                     ex.Message);
             }
         }

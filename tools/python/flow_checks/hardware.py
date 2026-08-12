@@ -23,7 +23,15 @@ class HardwareFlowValidator:
             or line.message.startswith(("儲存程式 heartbeat ", "⚠ 儲存程式 heartbeat "))
             or line.message.startswith("[RemoteCopy] ")
             or line.message.startswith(
-                ("IO controller ", "IO poll state ", "io:DI START ", "IO grab ", "IO START edge=")
+                (
+                    "IO controller ",
+                    "IO poll state ",
+                    "io:DI START ",
+                    "IO grab ",
+                    "IO START edge=",
+                    "grab stop armed condition=IoSignal ",
+                    "auto:",
+                )
             )
             for line in session.lines
         )
@@ -261,7 +269,22 @@ class HardwareFlowValidator:
             for index, line in enumerate(session.lines)
             if line.message == fixed_low_message
         ]
-        if not lines and not fixed_lows:
+        arm_pattern = re.compile(
+            r"^grab stop armed condition=IoSignal limit=io-low "
+            r"configured=\d+s grace=unused source=(?:io|manual) grab=.*$"
+        )
+        io_arms = [
+            line
+            for line in session.lines
+            if line.message.startswith("grab stop armed condition=IoSignal ")
+        ]
+        io_timer_stops = [
+            line
+            for line in session.lines
+            if line.message.startswith("auto:")
+            and "condition=IoSignal" in line.message
+        ]
+        if not lines and not fixed_lows and not io_arms and not io_timer_stops:
             report.add(
                 self.domain,
                 "H4.io-stop-policy",
@@ -271,6 +294,16 @@ class HardwareFlowValidator:
             return
 
         failures = []
+        for line in io_arms:
+            if arm_pattern.match(line.message) is None:
+                failures.append(
+                    f"{line.timestamp} IO arm must use limit=io-low and grace=unused"
+                )
+        for line in io_timer_stops:
+            failures.append(
+                f"{line.timestamp} IO mode was terminated by a timer"
+            )
+
         for line, match in lines:
             if match is None:
                 failures.append(f"{line.timestamp} 格式錯誤")
@@ -318,6 +351,7 @@ class HardwareFlowValidator:
             "H4.io-stop-policy",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"requests={len(lines)} fixedLow={len(fixed_lows)} "
+            f"arms={len(io_arms)} timerStops={len(io_timer_stops)} "
             f"invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )

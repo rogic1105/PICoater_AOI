@@ -61,6 +61,14 @@ class CaptureFlowValidatorTests(unittest.TestCase):
                     1,
                     "00:00:01.000",
                     1,
+                    "capture report cache grab=260721-120000 "
+                    "summary=queued peakIndex=ok captures=20 merged=20 "
+                    "align=tick ms=4",
+                ),
+                FlowLine(
+                    2,
+                    "00:00:02.000",
+                    1,
                     "capture finalize grab=260721-120000 "
                     "archive=D:\\Anilox\\Captures\\2026\\202607\\20260721\\260721-120000.acap "
                     "atlas=3 atlasBytes=1234 remoteFiles=2",
@@ -71,9 +79,39 @@ class CaptureFlowValidatorTests(unittest.TestCase):
         report = CaptureFlowValidator().validate(session)
         plan = next(item for item in report.results if item.rule == "C1.plan")
         finalize = next(item for item in report.results if item.rule == "C3.finalize")
+        report_cache = next(
+            item for item in report.results if item.rule == "C3.report-cache"
+        )
 
         self.assertEqual(CheckStatus.PASS, plan.status)
         self.assertEqual(CheckStatus.PASS, finalize.status)
+        self.assertEqual(CheckStatus.PASS, report_cache.status)
+
+    def test_incomplete_report_cache_fails(self):
+        session = FlowSession(
+            Path("synthetic.log"),
+            [
+                FlowLine(
+                    0, "00:00:00.000", 1,
+                    "capture plan grab=260721-120000 root=D:\\Anilox\\Captures "
+                    "imageDir=x csv=y archive=260721-120000.acap "
+                    "assets=raw|proc_c|proc_r|mean_c|max_c|mean_r|max_r "
+                    "preview=1920x1080x3 scale=5",
+                ),
+                FlowLine(
+                    1, "00:00:01.000", 1,
+                    "capture report cache grab=260721-120000 "
+                    "summary=skip-incomplete peakIndex=skip-incomplete "
+                    "captures=20 merged=19 align=tick ms=0",
+                ),
+            ],
+        )
+
+        report = CaptureFlowValidator().validate(session)
+        result = next(
+            item for item in report.results if item.rule == "C3.report-cache"
+        )
+        self.assertEqual(CheckStatus.FAIL, result.status)
 
     def test_hessian_standard_plan_passes(self):
         session = FlowSession(

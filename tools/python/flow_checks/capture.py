@@ -44,6 +44,10 @@ class CaptureFlowValidator:
             line for line in session.lines
             if line.message.startswith("capture finalize ")
         ]
+        report_caches = [
+            line for line in session.lines
+            if line.message.startswith("capture report cache ")
+        ]
         layout_lines = [
             line for line in session.lines
             if line.message.startswith("capture layout ")
@@ -55,6 +59,7 @@ class CaptureFlowValidator:
             self._check_config_snapshots(configs, report)
             self._check_first_records(plans, records, report)
             self._check_capture_finalize(plans, finalizes, report)
+            self._check_report_cache(plans, report_caches, report)
         self._check_final_layout(plans, finalizes, layout_lines, report)
         self._check_output_health(session, report)
         return report
@@ -156,6 +161,63 @@ class CaptureFlowValidator:
             f"planned={len(planned_ids)} finalized={len(completed_ids)} "
             f"invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
+        )
+
+    def _check_report_cache(self, plans, cache_lines, report: CheckReport) -> None:
+        if not cache_lines:
+            report.add(
+                self.domain,
+                "C3.report-cache",
+                CheckStatus.NOT_COVERED,
+                "session has no new capture report-cache evidence",
+            )
+            return
+
+        planned_ids = {
+            current_id
+            for line in plans
+            for current_id in [grab_id(line.message)]
+            if current_id
+        }
+        pattern = re.compile(
+            r"^capture report cache grab=(?P<grab>\S+) "
+            r"summary=(?P<summary>queued|failed|skip-incomplete) "
+            r"peakIndex=(?P<index>ok|failed|skip-incomplete) "
+            r"captures=(?P<captures>\d+) merged=(?P<merged>\d+) "
+            r"align=(?P<align>tick|filename|none) ms=(?P<ms>\d+)$"
+        )
+        seen = set()
+        failures = []
+        for line in cache_lines:
+            match = pattern.match(line.message)
+            if match is None:
+                failures.append(f"{line.timestamp} malformed report-cache line")
+                continue
+            current_id = match.group("grab")
+            seen.add(current_id)
+            captures = int(match.group("captures"))
+            merged = int(match.group("merged"))
+            if current_id not in planned_ids:
+                failures.append(f"{line.timestamp} grab={current_id} missing capture plan")
+            if match.group("summary") != "queued" or match.group("index") != "ok":
+                failures.append(
+                    f"{line.timestamp} grab={current_id} summary={match.group('summary')} "
+                    f"peakIndex={match.group('index')}"
+                )
+            if captures <= 0 or merged != captures:
+                failures.append(
+                    f"{line.timestamp} grab={current_id} captures={captures} merged={merged}"
+                )
+
+        missing = sorted(planned_ids - seen)
+        if missing:
+            failures.append("missing=" + ",".join(missing[:3]))
+        report.add(
+            self.domain,
+            "C3.report-cache",
+            CheckStatus.PASS if not failures else CheckStatus.FAIL,
+            f"planned={len(planned_ids)} cached={len(seen)} invalid={len(failures)}"
+            + (f"; first={failures[0]}" if failures else ""),
         )
 
     def _check_config_snapshots(self, configs, report: CheckReport) -> None:

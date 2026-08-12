@@ -27,6 +27,8 @@ namespace AniloxRoll.DvtRunner
                 "prepare-retention-fixture",
                 "verify-retention-fixture",
                 "cleanup-retention-fixture",
+                "audit-property-catalog",
+                "exercise-property-group",
                 "wait-element",
                 "set-property",
                 "click",
@@ -42,6 +44,10 @@ namespace AniloxRoll.DvtRunner
                 "verify-log-min-count",
                 "verify-log-absent",
                 "verify-range-scroll",
+                "reset-verdict-cache",
+                "verify-verdict-cache-performance",
+                "verify-verdict-cache-warm-first",
+                "verify-monitor-functional-cycle",
                 "reset-evidence",
                 "delay",
                 "soak",
@@ -67,7 +73,34 @@ namespace AniloxRoll.DvtRunner
 
             if (scenarios.Count == 0)
                 throw new InvalidOperationException("No DVT scenarios were found in " + directory);
+            ValidatePropertyGridGroupCoverage(scenarios);
             return scenarios;
+        }
+
+        private static void ValidatePropertyGridGroupCoverage(
+            IReadOnlyList<DvtScenario> scenarios)
+        {
+            PropertyGridCatalog catalog = PropertyGridCatalog.Load();
+            var exercised = new HashSet<string>(
+                scenarios.SelectMany(scenario => scenario.Steps)
+                    .Where(step => string.Equals(
+                        step.Action,
+                        "exercise-property-group",
+                        StringComparison.OrdinalIgnoreCase))
+                    .Select(step => step.Target),
+                StringComparer.OrdinalIgnoreCase);
+            string[] missing = catalog.Properties
+                .Select(item => item.Group)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Where(group => !exercised.Contains(group))
+                .OrderBy(group => group)
+                .ToArray();
+            if (missing.Length > 0)
+            {
+                throw new InvalidDataException(
+                    "PropertyGrid DVT groups are not exercised by any scenario: " +
+                    string.Join(",", missing));
+            }
         }
 
         private static void Validate(DvtScenario scenario, string path)
@@ -93,6 +126,13 @@ namespace AniloxRoll.DvtRunner
                     throw new InvalidDataException(prefix + " has unsupported action " + step.Action);
                 if (step.Action != "run-checker" && string.IsNullOrWhiteSpace(step.Contract))
                     throw new InvalidDataException(prefix + " must reference a verify-flow contract.");
+                if (string.Equals(
+                        step.Action,
+                        "exercise-property-group",
+                        StringComparison.OrdinalIgnoreCase) &&
+                    string.IsNullOrWhiteSpace(step.Target))
+                    throw new InvalidDataException(
+                        prefix + " requires a PropertyGrid catalog group in Target.");
                 if (step.Action == "wait-log" ||
                     step.Action == "wait-log-current-combo" ||
                     step.Action == "verify-log-absent")

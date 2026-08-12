@@ -189,6 +189,9 @@ IC state viewX a~b viewY c~d                 ← ImageDisplayView.FlowViewState�
 IC|WF viewEdges X …｜Y …                     ← 拖曳放開時畫面四邊（滑鼠驅動，與 IC state 同源不同路）
 ```
 
+`IC state`／`WF state` 的 1 秒節流必須使用可跨 `Environment.TickCount` 有號轉負與回繞的
+unsigned elapsed 計算；程式連續運行超過 24.9 天後仍須持續輸出快照，不得因 signed 比較永久靜默。
+
 **方向判讀基準（關係跑掉＝哪層壞，直接定罪）**：
 | 量 | 由上而下（TopToBottom） | 由下而上（BottomToTop） |
 |---|---|---|
@@ -372,7 +375,7 @@ T1: acquisition start path=verified-standby cams=P
 T1: StartGrab...
 T1: capture plan grab=...
 T1: IO grab request stopCondition=IoSignal|Time|Height stopOnLow=True|False
-T1: grab stop armed condition=IoSignal limit=Ns configured=10s grace=Gs source=io grab=...
+T1: grab stop armed condition=IoSignal limit=io-low configured=10s grace=unused source=io grab=...
     | grab stop waiting condition=Time configured=Ns source=io grab=...
     | grab stop armed condition=height limit=Hpx source=io grab=...
 T1: capture gate open cams=P warm=True path=verified-standby
@@ -408,7 +411,7 @@ IoStartGrabAsync@AniloxRollForm.IoControl.cs
        -> verified standby: no Pause/Resume/fixed delay/next-frame target
     -> capture plan + selected duration/height guard
     -> Arm@CaptureStopCoordinator.cs
-       -> IO: ArmedIo + GrabDurationCoordinator safety timer
+       -> IO: ArmedIo; no timer, only an IO stop request may terminate the capture
        -> Time: WaitingForFirstSet (no timer)
        -> Height: ArmedHeight (common-row threshold)
     -> OpenCaptureGate -> ArmCaptureBoundary
@@ -444,7 +447,7 @@ Capture stop state table (the coordinator is the only owner of these transitions
 
 | Current state | Event | Next state | Action |
 |---|---|---|---|
-| Idle | Arm(IO) | ArmedIo | Snapshot condition/limit/grab; arm configured time + boundary grace safety timer |
+| Idle | Arm(IO) | ArmedIo | Snapshot condition/grab; do not start a timer |
 | Idle | Arm(Time) | WaitingForFirstSet | Snapshot condition/limit/grab; do not start timer |
 | Idle | Arm(Height) | ArmedHeight | Snapshot height/grab; watch common accepted rows |
 | WaitingForFirstSet | FirstSetReady | ArmedTime | Arm configured fixed timer |
@@ -452,10 +455,19 @@ Capture stop state table (the coordinator is the only owner of these transitions
 | ArmedIo | START Low | StopPending | One terminal request with tail drain |
 | ArmedIo | PLC alive lost / communication lost | StopPending | One terminal request without tail drain |
 | WaitingForFirstSet / ArmedTime / ArmedHeight | Any IO stop request | unchanged | Ignore IO stop; fixed target remains authoritative |
-| ArmedIo / ArmedTime | TimerElapsed | StopPending | One terminal request |
+| ArmedIo | TimerElapsed | ArmedIo | Ignore; IO Low remains authoritative |
+| ArmedTime | TimerElapsed | StopPending | One terminal request |
 | ArmedHeight | CommonRows >= snapshotted height | StopPending | One terminal request |
 | StopPending | Any terminal trigger | StopPending | Ignore duplicate |
 | Any active state | Complete / Cancel | Idle | Disarm generation timer and clear snapshot |
+
+IO stopping quantitative rules:
+- For `CaptureStopCondition=IoSignal`, `capture tail begin` must not precede the observed START falling edge.
+- The expected falling-edge-to-`capture tail begin` latency is `0..500 ms`; a larger value is a latency warning,
+  while a negative value is a contract failure.
+- `TimerElapsed` must never create a terminal request while the coordinator is `ArmedIo`.
+- `StartLow` is the only normal IO terminal request and must set `DrainIoTail=True`; connection-loss requests
+  may stop immediately without tail drain.
 
 **log-flow（執行期腳印＝判準）**
 ```
@@ -476,7 +488,7 @@ T1: viewRange refire reason=capture-start mode=WF|IC
     ← 清除上一輪 Curve 視野後，用主畫面既有幾何主動重發；不得等滑鼠或首幀才補
 T1: capture output begin grab=… date=yyyyMMdd
 T1: capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=… preview=1920x1080x3 scale=…
-T1: grab stop armed condition=IoSignal limit=Ns configured=Ns grace=Gs source=io grab=…
+T1: grab stop armed condition=IoSignal limit=io-low configured=Ns grace=unused source=io grab=…
     | grab stop waiting condition=Time configured=Ns source=io|manual grab=…
     | grab stop armed condition=height limit=Hpx source=io grab=…
     ← 本輪開始時依停止條件只建立一種 owner；Time 此時只等待，不得先啟動 timer
@@ -534,7 +546,7 @@ Tn: firstFrame camX WxH → {ImageDisplayView|Waterfall}   ← 每台「在線�
  │  ├ BeginCaptureOutput@LiveCameraManager.cs → 每台 CaptureGrabId/CaptureDate 快照
  │  ├ capture plan 行（C1）
  │  └ Arm@CaptureStopCoordinator.cs
- │     ├（IO）ArmedIo＋GrabDurationCoordinator(limit＋boundary grace) → grab stop armed 行
+ │     ├（IO）ArmedIo（不武裝 timer；只接受 IO stop request）→ grab stop armed 行
  │     ├（時間）WaitingForFirstSet，只記 `grab stop waiting`，尚不啟動 timer
  │     └（高度）ArmedHeight，等 OnCaptureCommonRowsCompleted
  │        ← 停止條件與數值在本輪開始時拍快照；PropertyGrid 中途改值從下一輪生效
@@ -597,6 +609,10 @@ ContentPresented → MainContentPresented@LiveDisplayCoordinator/LiveCameraManag
 只能由 `RowCurveSyncCoordinator.DataAccepted` 在確認 chart 已具備完整資料與視野、即將同步更新時發布；資料仍因缺視野停在
 pending 時不得先記成 present。快速累積時只保留每台最新一筆，禁止
 用固定延遲猜影像完成時間。
+
+上述先後約束只適用「新影像／新 Curve 資料」。單純切換 `hee_VerticalDirection` 時，列圖表會用
+最後一組資料做 mapping-only 重映射；此時允許 `LC row rowChart` 沒有新的 main image，checker
+必須以方向設定 intent 分類，不得拿它和數十秒前的舊影像配對而誤判 Curve 提早。
 
 同步相位不變量：`acquisition sync ready` 取得的 `tick/freq/height/lineRate` 是同一批不可變
 warm snapshot；`acquisition sync phase ... sampleSource=warm-snapshot` 必須只用這批數值計算。
@@ -976,7 +992,7 @@ UpdateStandardBgSubLockState@AniloxRollForm.Background.cs
  ├ 由 OnCamerasHwReady 與光源狀態轉變共同觸發，不依賴兩者誰先完成
  └ 狀態轉變記 `background capture ready=...`
 時間設定不變量：`BackgroundSampleSeconds` 只管本段背景採樣；`GrabLimitSeconds` 只在 F2 正式監控啟動成功後，
-依 `CaptureStopCondition` 作為時間模式停止值或 IO 模式安全上限，兩者不得互相中止。高度模式不武裝此 timer。
+只在 `CaptureStopCondition=Time` 時作為固定停止值；IO 模式只跟隨 IO stop request，高度模式也不武裝此 timer。
 PropertyGrid 分別顯示為檢測設定的 `背景採樣(秒)`，以及「畫布設定」下的
 `停止條件`／`總時間(秒)`／`總高度`。
 預覽背景：
@@ -1375,9 +1391,9 @@ Tn: MURA 恢復（v|h）                                                        
 - **唯一輸出路**：`OnLiveCurveData|OnLiveRowCurveData → CheckLiveMura → WarnMuraVisual + NotifyMuraDetected`；
   `OnCameraInspectionResult` 只負責 CSV/遠端存放，不得直接寫 Mura DO。暫停切換由
   `HandleMuraPauseSettingsChanged` 重設兩方向 edge latch 並立即 `ClearMura`，恢復後只接受新的超標事件。
-- 欄方向 `CheckLiveMura("v")` 必須和報表 O/X 共用 `ThresholdContext.EvaluateColumnFailureCause`；
-  `欄曲線判定=顯示平均|顯示最大|顯示兩者` 分別只啟用 Mean、只啟用 Max、或任一超標。
-  列方向維持 Mean/Max 任一超標，不受欄選項影響。
+- 欄列方向 `CheckLiveMura("v"|"h")` 與報表 O/X 必須共用
+  `ThresholdContext.EvaluateColumnFailureCause`；`欄列曲線判定=顯示平均|顯示最大|顯示兩者`
+  分別只啟用 Mean、只啟用 Max、或任一超標，顯示 series 與判定依據必須一致。
 - 違規樣本：chart 明顯超標卻無「MURA 超標」行＝判定鏈斷（2026-07-07 盲測抓到：舊版被
   IO 未連線 early-return 整段跳過＝操作員零警告）。
 
@@ -1640,6 +1656,60 @@ capture finalize grab=... archive=...acap ... remoteFiles=N
 - Runner 中止或失敗時，必先停止可能仍在進行的 Grab，再終止所有 helper、
   還原 PropertyGrid 並關閉主程式。helper exit code 非 0 直接判 FAIL。
 
+`monitor-io-basic-cycle` 是功能矩陣之前的最小外部測試。Runner 以測試介面設定主程式，
+再啟動 `IoBridge.IoSimulator` 自動模式送一次 `Low → High 10s → Low`；不得使用螢幕座標
+或人工滑鼠控制。單輪必須依序具備：
+
+```
+IO 恢復連線
+IO grab request stopCondition=IoSignal stopOnLow=True
+light turn on result=sent channel=C brightness=255
+capture gate open cams=P
+capture first-set ready ... aligned=True
+WF band first ... reason=complete
+rowCurve present after=mainImage ... mode=WF
+capture tail begin cams=P
+capture gate closed standby=on
+capture report cache grab=... summary=queued peakIndex=ok captures=N merged=N align=tick|filename ms=N
+capture finalize grab=... archive=...acap ... remoteFiles=N
+```
+
+`capture report cache` 是新資料第一次進報表時能立即顯示欄／列 O/X 的存檔收尾契約：
+完整 Grab 必須 `summary=queued`、`peakIndex=ok` 且 `captures=merged`。索引只保存合併後
+可見 Curve 的峰值投影，原始 `.acap`／CSV 仍是真實來源；索引遺失時可由 `.mcsf` 或 bin
+重建。`CAPTURE/C3.report-cache` 驗證此行；舊 Log 沒有這支探針時只列 NOT COVERED。
+
+測試會把光源亮度設為 255 並開啟存檔。光源底層 `TurnOn` 必須回傳成功；`archive` 必須是
+`.acap` 且 `remoteFiles>0`，否則即使畫面曾出現影像也判 FAIL。這條只驗 IO 控制、實際取相、光源與存檔基本鏈；
+通過後才執行布局／方向／檢出標準矩陣，避免將前置連線、顯示設定與演算法問題混成
+同一個失敗。模擬器 result file、Flow log 與封裝檔是證據，畫面旁觀不參與 PASS／FAIL。
+
+`monitor-io-functional-matrix` 把上述 IO 取相鏈與 S1/S2 顯示契約組成同一個功能矩陣，
+不是只驗 PropertyGrid 能寫入。三輪都由 `IoBridge.IoSimulator` 的 START High/Low 驅動：
+
+| 輪次 | 主畫面／方向 | 布局 | 檢測與顯示 |
+|---|---|---|---|
+| 1 | 瀑布／由下而上 | 基準 OPS、Start、Crop | 欄強化、欄列皆檢出、Mean+Max |
+| 2 | 即時／由上而下 | 改 Cam1 OPS、Cam2 Start、Crop | 欄強化、只判欄、另一組正規值與門檻 |
+| 3 | 瀑布／由下而上 | 再改 OPS、Start、Crop | 點列圖表切列強化、只判列、另一組正規值與門檻 |
+
+每輪在自己的 evidence window 執行 `verify-monitor-functional-cycle`，必須同時符合：
+
+- `rowCurve present after=mainImage ... mode=WF|IC`，禁止 Curve 早於主畫面。
+- `live enhance enabled=... direction=raw|column|row scope=all-cameras` 等於該輪真正選擇的圖層。
+- `live pixel-curve probe` 欄、列皆有樣本且無 `mismatch`；目前顯示軸至少一筆 `match`，
+  證明送入主畫面的完整影像資料最大值與同 native frame 的 max Curve 相同。
+- `LC row rowChart dir=...` 與上下方向相同；瀑布內容錨定端必須為由上而下=頂、由下而上=底；
+  即時 `IC state viewY` 的大小順序必須符合相同方向。
+- 光源亮暗替代刺激的 mean／max、門檻、模式與 O/X 必須能由同一公式重新計算得到；
+  只判欄或只判列時不得要求被停用方向的刺激樣本。
+- OPS／Start 的 `displayLayout applied` 必須帶七槽完整快照，Crop 必須有
+  `displayCrop applied ... scope=main+column-chart data=unchanged`；最後仍跑
+  `check_all_flows.py` 交叉驗證 route、latest-only、布局與方向全 session 契約。
+
+這個情境需要真實相機與光源；模擬器只替代 PLC。兩台在線時只能證明兩台矩陣，
+不得宣稱七台滿載已覆蓋。光源亮暗仍只屬 S1 替代刺激，不代表真實 Mura 光學準確度。
+
 `physical-capture-soak` 將同一契約延伸為耐久驗證，不另造產品判準：
 
 - IO 模擬器固定 `High 10s / Low 4s`，測試時間只換算完整循環數；結束必落在 Low。
@@ -1732,6 +1802,8 @@ T1: RV chartRange {grabId} chart=col|row axis=A~B/view=L~R
       圖片／Curve 上畫後若又出現不同的 chart axis 或 view，代表座標仍有二次跳位，不能因首個
       prefitPaint 很快就判綠。主畫面視野同時擁有 Axis 與 ScaleView；Curve 資料長度不得擴張座標軸。
 T1: RV pushFrames P/7（merge=True, feedScale=…, chartView=publish）   ← P=該 grab 有影像的相機數；缺台=黑占位
+Tn: RV image load worker {grabId} queueMs=Q loadMs=L storage={acap|legacy}
+T1: RV image load apply {grabId} queueMs=Q loadMs=L applyMs=A
 T1: RV loadGrab done {grabId}（…ms）
 （若由 Data 頁隱藏預載：切到回顧後延後一個 UI message，出現 `RV tabVisible repaint view=True` →
  `RV visiblePaint ready=True lod=… size=WxH`；以可見尺寸補 LOD tile + paint，不重讀檔、不重設視野）
@@ -1767,17 +1839,19 @@ T1: RV curves {grabId}（…ms） presentation=progressive|latest
  切時序／重讀資料等明確離開單序號情境才 stale-drop）
 Tn: RV thumbnail begin {grabId}
 Tn: RV thumbnail coalesced {grabId} skipped=N minCycleMs=33
-T1: RV thumbnail done {grabId} total=Nms decode=Nms images=P ratio=R source=atlas|frames cache=cold|join|hit atlas=WxH|none
+T1: RV thumbnail done {grabId} total=Nms decode=Nms images=P ratio=R source=atlas|frames|hessian cache=cold|join|hit atlas=WxH|none
     或 RV thumbnail unavailable {grabId}（Nms）／RV thumbnail stale-drop {grabId}（Nms）
 Tn: RV plan prepare begin {grabId}｜RV plan prepare reuse-inflight {grabId}
     ← Curve／縮圖／完整圖共用同一份 layout+CFG 準備工作；同 grabId 不得各自重讀同一份日 CSV
-    ← `.acap` 有內嵌預覽時，快滾可先上低解析圖片；已開始的圖片准依序完成上畫，
+    ← 原圖快滾優先使用 `.acap` 內嵌 atlas；強化快滾若有 neutral Hessian standard map，
+      必須依目前正規值即時重建並記 `source=hessian`，不得顯示 capture-time 強化 JPEG。
+      舊資料缺 standard map 才允許退回 atlas／逐幀縮圖；已開始的圖片准依序完成上畫，
       尚未開始的中間 intent 合併為最新一筆，不顯示 busy cursor。
       `atlas`＝所選 raw／proc C／proc R 只讀一筆 1080p 預覽合圖；`frames`＝舊逐幀縮圖 fallback
 （影像 debounce 250ms：滾動中不發完整載入；停下才同步日期/時間、載「最後選取」完整圖；session 也只在 settle 落盤一次）
 T1/Tn: RV loadGrab begin {grabId} → RV loadGrab paths … → RV prefit …
   → （尺寸改變）RV lodRebind merge …（fit reset）
-  → RV fit(record-change) → RV pushFrames → RV loadGrab done
+  → RV image load worker → RV fit(record-change) → RV pushFrames → RV image load apply → RV loadGrab done
 Tn: RV prefetch begin center={grabId} neighbors={next}|{previous}
  → RV prefetch ready center={grabId} neighbor={neighborId} thumbnail=cold|join|hit total=Nms
  或 RV prefetch unavailable center={grabId} neighbor={neighborId} error=no-preview
@@ -1789,6 +1863,9 @@ Tn: RV prefetch begin center={grabId} neighbors={next}|{previous}
   **Data tab 同步（統計/Mura 圖重算）也只在 settle 後做一次、排在影像之後**——唯一觸發點
   `SyncDataTabFromReviewSettled@AniloxRollForm.Data.cs`，不得回到逐格 inline
   （2026-07-10 定罪：逐格全量重算＝快撥 UiStall 5.7s＋曲線快路全餓死）。
+- **圖片載入三段計時**：`queueMs`＝所選圖片工作等候背景執行緒的時間、`loadMs`＝實際讀檔／解碼／合圖、
+  `applyMs`＝UI 上畫與 Curve 套用。報表舊 bin 補算必須走獨立背景工作，不得讓所選圖片 `queueMs`
+  因大量 fallback 升到秒級；畫面空白時先依三段數字定罪，不得只靠肉眼判斷。
 - **預覽是可重建快取，不是真實來源**：新格式每個 grab 內嵌 raw／proc C／proc R 各一筆
   `PreviewAtlas`；每筆是先依 tick 時間軸將各相機垂直拼接，再橫向裝入單張
   `<=1920×1080` JPEG，並保存 camera rectangle 與原始寬高。快滾只讀／解碼所選模式一筆，
@@ -1874,7 +1951,9 @@ OnReviewGrabIdSelected@AniloxRollForm.Data.cs
  │  │  └ CanApplyStarted（新 intent 不作廢 running；明確切模式／完整圖載入才 stale-drop）
  │  ├ ReviewAsyncLruCache（24 筆／96 MB；single-flight，前景可 join 相鄰預載）
  │  ├ Load(useThumbnail=true)@ReviewImageDataLoader.cs（cache miss 才執行）
- │  │  ├ TryLoad@CapturePreviewAtlasCodec.cs
+ │  │  ├ 強化＋standard map available → StitchCamera(useThumbnail=true, standardDisplayGain=current)
+ │  │  │  └ HessianStandardMapCodec.Decode＋ToGray8（目前正規值重建；source=hessian）
+ │  │  ├ 原圖或缺 standard map → TryLoad@CapturePreviewAtlasCodec.cs
  │  │  │  └ ReadAsset(PreviewAtlas raw|C|R) 一筆 → JPEG 解碼一次 → camera rectangle 記憶體切片
  │  │  └ atlas miss → StitchCamera(useThumbnail=true)@GrabImageStitcher.cs（舊逐幀縮圖 fallback）
  │  └ StitchedImagesReady(chartView=preserve)（只換低解析圖片，不重讀／重畫 Curve）
@@ -1989,6 +2068,26 @@ T1: setting route {屬性名} owner={owner|None} effects={effect+effect|None}
     ← 每個 setting intent 的下一行；分類一次後才執行副作用
 （之後的反應行歸此 intent 管）
 ```
+
+**PropertyGrid 全參數矩陣（自動 DVT）**：
+
+- `tools/dvt/AniloxRoll.DvtRunner/PropertyGridCoverage.json` 是可編輯欄位的測試目錄；
+- `AppRole` 變更必須出現「重新開啟程式後生效」提示；Runner 按下「確定」後，主程式必須能正常關閉，且測試結束還原原本 `app-mode.json`。
+  Runner 用 reflection 對照 `InspectionSettings` 的 browsable、非唯讀屬性。新增、刪除、
+  顯示名稱／類別／同名 occurrence 改變但目錄未同步，`audit-property-catalog` 必須 FAIL。
+- 目前 58 項分為 `role`、`layout`、`inspection`、`capture-policy`、
+  `display-report`、`storage-logging`、`bridge`。每項至少測兩個不同值；每次 UI 提交後
+  必須等到同一 internal name 的 `setting route`，不能只相信 PropertyGrid 畫面已改字。
+- 每個群組至少要被一個 scenario 的 `exercise-property-group` 引用；未引用的群組視為
+  測試洞，Runner 載入情境時即 FAIL。
+- 群組依目錄順序累積套值，因此同一群組會自然形成多參數交叉狀態；Bridge 獨立情境，
+  避免刻意斷線污染一般 UI 測試。全部情境無論成功、中止或失敗都須還原原值。
+- `AppRole` 會重建完整 UI Accessibility 樹，必須放在一般矩陣最後只做一次 UI 切換；
+  route 成功後關閉程式，再還原 Runner 啟動前保存的 `Config/app-mode.json`，不得持有舊
+  AutomationElement 嘗試反向切換。
+- 此矩陣只證明「可輸入／可保存／唯一 owner 路由」。需要真實影像或硬體結果的功能，
+  仍須由 S1、F2/F3/F4/F8、R/D、H 專用情境驗證，不得將 S0 PASS 擴張解讀為視覺結果 PASS。
+
 PropertyGrid 所有可編輯數值列可用滑鼠滾輪調整。第一次點選數值列才啟用滾輪，
 再點同一列即取消；切到其他列時原列必須解除，避免一般捲動誤改設定。狀態行為：
 `property wheel {armed|disarmed} setting={name}`。滾輪入口不得另建設定旁路：
@@ -2039,7 +2138,7 @@ CapturePolicy
 
 ### S1 檢測標準（監控／回顧／報表共用設定）
 
-涵蓋 `dc_`／`dd_` 欄列正規值、`eb_` 檢出方向、`eca_` 欄曲線判定及
+涵蓋 `dc_`／`dd_` 欄列正規值、`eb_` 檢出方向、`eca_` 欄列曲線判定及
 `ec_`～`ef_` 欄列平均／最大閾值。這些設定不是 Data tab 專用；監控 Live 必須同時生效。
 
 **log-flow**：
@@ -2049,6 +2148,11 @@ T1: setting route {name} owner=DataStats effects=…+LiveInspectionCurves
 T1: live inspection apply setting={name} hm=C/R thresholdC=Mean/Max
     thresholdR=Mean/Max mode={Mean|Max|Both} direction={Vertical|Horizontal|Both}
     action={normalization-latest|refresh}
+（eca_ColumnCurveMode）LC row metrics mean={True|False} max={True|False}
+                     RV row metrics mean={True|False} max={True|False}
+                     DT row metrics mean={True|False} max={True|False}
+    ← Mean／Max／Both 必須同時控制監控、回顧、報表的欄列 series 與對應閾值線；
+      顯示平均只留平均虛線、顯示最大只留最大實線、顯示兩者才同時顯示兩條，不可只切欄圖表。
 
 （dc_／dd_ 快速連續改變，停止 80 ms 後只套最後值；不得先清空 Curve）
 Tn: live curve applied setting={name} generation=G hm=C/R
@@ -2200,12 +2304,19 @@ T1: capture layout applied grab=… timing=stop ops=… start=… speed=N head=H
   即時主畫面、瀑布主畫面、橘色相機框線及欄圖表；縮圖仍顯示各相機完整影像。
 - `HorizontalDisplayCrop.Compute/Apply` 是裁切幾何唯一來源；fit 必須在裁切後寬度上計算，
   不得先 fit 完整寬度再隱藏頭尾。
+- 首幀前空畫布也要立即接受 Crop，允許狀態行為
+  `content=0x0 zoom=... fit=False frames=dynamic`；這只代表尚無影像可 fit，不是裁切失敗。
+  Grab 已開始或畫布已有內容時，`content` 必須為正且可視範圍仍須符合下列量化判準。
 - Live 使用目前 PropertyGrid；Review／Report 單序號使用該筆 CSV `#CFG` 的
   `TrimHead/TrimTail`，使歷史畫面與拍攝布局一致。
 - **資料不變量**：Crop 不得進入 pipeline、相機 frame、Curve bin、圖片、`.acap` 或 CSV 資料列。
   Grab 中 Crop 立即更新主畫面、欄圖表與橘框，但拍攝布局只在 Stop 封存最後值；只有
   A輪速度等延後布局也曾改變時，Stop 才允許一次輕量 repaint。不得重讀檔、
   重跑演算法、重算 Curve 或清除既有瀑布歷史。
+- **量化範圍**：主畫面可視 X 端點與欄圖表 X 端點都必須等於
+  `HorizontalDisplayCrop.Compute` 的可視起點／終點，端點差各不得超過 `0.1 mm`。
+  已放大的視野可以保留，但必須被夾在 Crop 後邊界內；Crop 前後 Curve sample count
+  與 Curve 資料內容必須完全不變。
 - 允許頭尾合計超過內容時保留最少一個顯示像素，不得產生零寬畫布或例外。
 
 ### S7 即時機台布局（OPS／Start）
@@ -2278,6 +2389,8 @@ T1: RV row …（Review 有資料時）或 RV load/update row（依當前 Review
   `RowCurveDisplayAdapter.ApplyDirection → RowCurveChartHelper.ZeroAtTop` 重畫既有資料/視野。
 - 違規樣本：grab 停止後改 PropertyGrid 上下方向，主監控畫面跟著翻，但 `chartLiveRow`
   仍維持舊方向＝`RowCurveSyncCoordinator` 沒有對最後資料做方向刷新。
+- 方向切換後由最後資料產生的 `LC row rowChart` 是 mapping-only 重畫；不要求同時出現新的
+  `rowCurve present after=mainImage`，但 `dataPhys↔dataChart` 與 view 順序必須立即符合新方向。
 
 **自動校稿（`flow_checks/settings.py`）**：
 - `S0.format`：所有 `ui:設定[]`／`set:[]` 必須同時帶屬性名與新值。
@@ -2340,22 +2453,29 @@ LoadDataFolder|SyncFromReviewFolderAsync@DataStatisticsPresenter.cs
 - **初始載入 SSoT**：同一資料夾＋同一門檻下，序號 List、色卡、年月日圖表必須共用同一份
   `InspectionStatisticsSnapshot`。初始【讀取資料】不得分別呼叫 `LoadAvailableTimes`、
   `LoadGrabIdInfosDescending`、`ScanCsvByDateRange`重複掃磁碟。
-- **Curve／判定一致**：MeanC/MaxC/MeanR/MaxR bin 是 Curve 樣本 SSoT；CSV
-  `MeanPeak/MaxPeak/MaxCMean/MeanRPeak/MaxRPeak`
-  是 capture 當下從同份資料產生的可重建標量索引。改欄正規值／Mean／Max 門檻後，
-  300ms debounce 只依新設定重判 snapshot／List／色卡／年月日圖表，不改寫歷史 CSV、
-  不逐筆重讀 bin。bin 被外部修改時必須重建 CSV 索引；兩者分歧＝資料完整性 FAIL。
+- **Curve／判定一致**：MeanC/MaxC/MeanR/MaxR bin 是 Curve 樣本 SSoT；`_curve_summary/*.mcsf`
+  是同一批合併 Curve 的可重建加速索引。CSV 的 capture-time 峰值只供舊資料 fallback，不能直接決定
+  報表目前畫出的 O/X。初次讀取在背景優先掃 `.mcsf`，缺少時才讀 bin 建立欄／列峰值 index；之後改
+  正規值、Mean／Max 門檻或檢出方向，只用記憶體峰值 index 雙向重判 List／色卡／年月日圖表，
+  不改寫歷史 CSV。Curve 與判定分歧＝DVT FAIL。
 
 ### D2 明細列表點選
 ```
 T1: ui:【明細列表】→ {grabId}
 T1: DT verdict click {grabId} cam=N mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail|unknown cause=none|mean|max|both list=pass|fail|unknown source=visible-curve-index|curve-index|missing
+T1: DT row verdict click {grabId} mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail|unknown cause=none|mean|max|both list=pass|fail|unknown source=visible-curve-index|missing
 T1: DT verdict click done {grabId} cams=N
 T1: DT curve display {grabId} mode=mean|max|both mean=M/T max=X/T scale=S points=N
+T1: DT row curve display {grabId} mode=mean|max|both mean=M/T max=X/T scale=S points=N
     ← 每次點列逐相機列出實際峰值、當下門檻、啟用狀態、公式結果及 List 畫出的 O/X；
       `DATA/D1.verdict-click` 用同一公式重算，並要求 result=list、相機編號 1..N 完整。
       新資料必須是 `visible-curve-index`：先依 OPS／Start／重疊中線合成最終可見 Curve，
       再依合併器回傳的 owner 相機取峰值；`curve-index` 僅供舊版 Log 相容判讀。
+      索引峰值來源為 raw `.bin/.mcsf`，code-flow 必須是
+      `ColumnCurvePeakIndex.BuildSummaries → UI partial apply → BuildBinFallback → UI final apply`；峰值走
+      `ColumnCurvePeakIndex.RawMeanPeak/RawMaxPeak → ThresholdContext.EvaluateRawColumnCurve`
+      （`captureHm * currentHm`）；不可誤走 CSV／`#CURVE-C` 的 `EvaluateColumn`
+      （`currentHm / captureHm`）。
       `DT curve display` 是 chart 真正畫出的縮點峰值；Mean/Max 縮點都必須保留桶內峰值，
       不得再次平均而藏掉會觸發 O/X 的窄尖峰。
 T1: ui:【報表序號】→ {grabId}          ← 同步行（明細點選經 cbDataId commit，兩行成對＝正常）
@@ -2385,14 +2505,34 @@ T1: DT verdict {grabId} cam=N mode=mean|max|both mean=M/T enabled=0|1 max=X/T en
      ← 報表欄 O/X 量實際上畫的最終可見合併曲線；多幀先合成每台相機 Curve，再與欄圖表共用
        `CurveOverviewMerger + MergeLayout(Midline)` 的 OPS／Start／重疊歸屬。每台相機只檢查 owner
        屬於自己的可見點，被相鄰相機遮掉的峰值不得造成 X。`merged-curve` 僅供舊版 Log 相容判讀。
-       「欄曲線判定」同時控制顯示與判定：
+       「欄列曲線判定」同時控制欄列顯示與判定：
        顯示平均只啟用 Mean、顯示最大只啟用 Max、顯示兩者則兩者任一超標即 X。
        Mean 只對平均閾值、Max 只對最大閾值，
        `cause` 直接標示觸發的閾值，不可因 Max 高於平均線就誤判為 Max 失敗。
      ← `DATA/D1.verdict` 逐行重算 result/cause；把 CurveMax 誤拿去比較平均閾值會直接 FAIL。
+T1: DT verdict index apply=partial gen=G summaries=S pending=P/R cams=C verdicts=V ms=N
+     ← 整份明細清單先以 `_curve_summary` 重判並立即刷新，不可等缺摘要的舊 bin 全部讀完才顯示；
+        `S+P=R`、`C=V`。此時 pending 列暫時顯示 `—`，其餘列必須已出現 O/X。
+T1: DT verdict cache gen=G hits=H/R days=D loadMs=N
+     ← 每日 `curve-peaks.mcpi` 是可重建的顯示後峰值索引；命中時不得再逐筆開啟 `.mcsf`。
+       第一次允許 `H=0` 並建立索引；同一資料第二次讀取應 `H=R`，索引隨日期資料夾一起刪除。
+        `report-verdict-cache-performance` 會先清除固定檔名的可重建索引，再連讀相同 `Captures` 兩次；
+        暖讀必須完整命中、全部完成時間不得慢於冷讀，且首批 O/X 顯示不得超過 1000ms。
+        `report-verdict-warm-first` 不清除索引，只讀一次真實 `Captures`，用來驗證新 Grab 的
+        首次報表顯示：List 建立不得超過 100ms、每日索引載入不得超過 250ms，欄／列 O/X
+        首批與完整套用皆不得超過 500ms；List 與索引的筆數必須相同。這個情境防止用第二次
+        熱讀掩蓋「新資料收尾沒有預先建立索引」的回歸。
+Tn: DT verdict index progress gen=G batch=B cams=C rows=R
+     ← 缺摘要的舊 bin 每完成最多 8 個序號就更新一次 List；不得等全部 pending 完成才一次上畫。
+        progress 只刷新 O/X，不重算範圍 Curve、卡片或年月日統計，避免小批更新反過來阻塞 UI。
 T1: DT verdict index apply=ok gen=G summaries=S bins=B missing=M/R cams=C verdicts=V ms=N
-     ← 整份明細清單以同一套最終可見合併 Curve 重判。先讀 `_curve_summary`，舊資料缺 summary 時在背景
-       批次掃一次 CSV 並合併原始 bin；`S+B+M=R`、`C=V`，完成後 List、卡片與期間統計一起刷新。
+     ← 第二階段只處理 `pending`：背景批次掃一次 CSV 並合併原始 bin；`S+B+M=R`、`C=V`，
+        小批進度刷新 List，完成後再統一刷新卡片與期間統計。摘要階段與 bin 階段共用 generation，
+        過期結果不得上畫。
+T1: DT row verdict {grabId} merged=1 mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail cause=none|mean|max|both source=visible-merged-curve
+T1: DT row verdict index apply=ok gen=G rows=R verdicts=V enabled=0|1
+     ← 列 O/X 量測實際上畫的合併 RowMean／RowMax Curve；正規值調低或調高都必須以同一 raw peak
+       重新計算，允許 X→O 與 O→X。啟用列檢出時 `R=V`；停用列檢出時 `V=0` 且 List 顯示 `—`。
 T1: DT row curve load {grabId} source=shared storage=summary|bins|memory-summary|memory-bins points=N pitch=Nmm
      ← 單片模式欄／列 Curve 同一刻套用同一份 load result，不得另掃一次路徑
 （快速滾過的舊選取）DT curve stale-drop {grabId}
@@ -2429,9 +2569,13 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
   重繪七張統計卡與同步寫高密度 Trace。
 - **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
   不得出現 `DT list reload`／`GrabDetailListBinder.SetItems`／重設 `VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
-- **列判定索引**：明細第 8 判定欄固定為「列」；O/X 由同序號所有相機／capture 的
-  `MeanRPeak/MaxRPeak` 一票否決。view-time 公式＝raw row peak × `HM_V_capture/HM_H_current`
-  對當前列門檻。舊 CSV 沒列峰值只能顯示 `—`，不得當 Pass。篩選異常也必納入列 Fail。
+- **列判定索引**：明細第 8 判定欄固定為「列」；O/X 以欄列圖表真正畫出的合併
+  RowMean／RowMax Curve 峰值為 SSoT，不再用每幀 CSV `MeanRPeak/MaxRPeak` 一票否決，避免被
+  對齊／重疊裁掉的峰值造成畫面看不到但 List 判 X。view-time 公式與列圖表相同：raw row peak ×
+  `HM_V_capture × HM_H_current`。缺 `.mcsf` 與 bin 才顯示 `—`，不得當 Pass；篩選異常也納入列 Fail。
+- **檢出方向與底色**：`欄`只判 CAM1～7，列欄為中性 `—`；`列`只判第 8 欄，CAM1～7 為中性
+  `—`；`全部`兩邊各自判定、各自顯示綠／紅。序號欄永遠使用一般背景，列 Fail 不得把整排 CAM
+  染紅，CAM Fail 也不得把列欄染紅。
 - **List 捲動顯示**：資料已全在 `GrabDetailListBinder._visibleDetails`，VirtualMode 不需資料預載；ListView 啟用雙緩衝，選中列只在接近
   可視區上下邊界時以 margin 捲動，反白變更只重畫舊／新兩列，不得每格整窗 `Invalidate()`（跨視窗白閃的根因）。
   欄寬先依內容 fit；工作區縮放後若總欄寬小於可視寬度，剩餘寬度全補到序號欄，避免全寬模式留下白色空欄。
@@ -2679,7 +2823,7 @@ Tbg acquisition standby ready cam2 tick=T
 10:37:13.855 T 1 ApplyMainDisplayMode → ImageCanvas
 T1 capture plan grab=… root=… imageDir=… csv=… archive=….acap assets=raw|proc_c|proc_r|hessian_c|hessian_r|mean_c|max_c|mean_r|max_r preview=1920x1080x3 scale=… hessianScale=25
 T1 IO grab request stopCondition=IoSignal stopOnLow=True
-T1 grab stop armed condition=IoSignal limit=Ns configured=10s grace=Gs source=io grab=…
+T1 grab stop armed condition=IoSignal limit=io-low configured=10s grace=unused source=io grab=…
 T1 capture gate open cams=2 warm=True
 10:37:15.170 T31 firstFrame cam1 16384x3000 → ImageDisplayView
 10:37:15.207 T30 firstFrame cam2 16384x3000 → ImageDisplayView

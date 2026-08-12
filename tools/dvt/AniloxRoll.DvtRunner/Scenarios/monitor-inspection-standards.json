@@ -145,7 +145,7 @@
       "Contract": "S1",
       "Title": "先切欄平均判定以保證模式產生變更",
       "Action": "set-property",
-      "Target": "欄曲線判定",
+      "Target": "欄列曲線判定",
       "Value": "顯示平均",
       "TimeoutSeconds": 10
     },
@@ -154,7 +154,7 @@
       "Contract": "S1",
       "Title": "欄判定改為平均與最大",
       "Action": "set-property",
-      "Target": "欄曲線判定",
+      "Target": "欄列曲線判定",
       "Value": "顯示兩者",
       "TimeoutSeconds": 10
     },

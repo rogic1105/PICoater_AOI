@@ -1,0 +1,50 @@
+{
+  "Id": "property-grid-bridge-matrix",
+  "Name": "PropertyGrid 全參數矩陣（Bridge）",
+  "Description": "專門修改光源與 IO endpoint、啟用狀態、亮度及暫停檢出。會刻意造成短暫斷線與重連，因此獨立於一般功能矩陣。",
+  "Steps": [
+    {
+      "Id": "audit-catalog",
+      "Contract": "S0.PropertyGridMatrix",
+      "Title": "比對產品 PropertyGrid 與測試目錄",
+      "Action": "audit-property-catalog",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "開啟或連接監控程式",
+      "Action": "launch",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "bridge",
+      "Contract": "H.IO/H.Light/M1",
+      "Title": "測試光源與 IO 的單項及累積交叉設定",
+      "Action": "exercise-property-group",
+      "Target": "bridge",
+      "TimeoutSeconds": 45
+    },
+    {
+      "Id": "restore",
+      "Contract": "DVT.Cleanup",
+      "Title": "安全停用 IO 後還原全部 Bridge 設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "close",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉監控程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 90
+    },
+    {
+      "Id": "checker",
+      "Contract": "DVT",
+      "Title": "執行完整 Flow checker",
+      "Action": "run-checker",
+      "TimeoutSeconds": 180
+    }
+  ]
+}

@@ -19,6 +19,7 @@ namespace AniloxRoll.DvtRunner
         public string Title { get; set; }
         public string Action { get; set; }
         public string Target { get; set; }
+        public int TargetOccurrence { get; set; }
         public string Value { get; set; }
         public string Pattern { get; set; }
         public int TimeoutSeconds { get; set; } = 30;
@@ -49,5 +50,12 @@ namespace AniloxRoll.DvtRunner
         public string LogDirectory { get; set; }
         public string ProcessIdPath { get; set; }
         public bool CloseAppOnCleanup { get; set; }
+    }
+
+    internal sealed class OriginalPropertyValue
+    {
+        public string DisplayName { get; set; }
+        public int Occurrence { get; set; }
+        public string Value { get; set; }
     }
 }

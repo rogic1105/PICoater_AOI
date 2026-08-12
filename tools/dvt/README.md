@@ -24,8 +24,35 @@ Flow tail 與還原，不會啟動相機。
 也可隨時按「中止」。這類等待不使用固定秒數，避免不同電腦初始化速度造成假失敗。
 
 `監控檢測標準（光源替代刺激）` 會在 Grab 中把光源亮度切為 100 與 255，核對欄／列
-Curve、正規值、閾值、欄曲線判定模式、檢出方向與 O/X 公式。亮暗變化只是穩定的
+Curve、正規值、閾值、欄列曲線判定模式、檢出方向與 O/X 公式。亮暗變化只是穩定的
 替代刺激，**不是正式 Mura 模擬，也不能代表真實瑕疵的光學檢出率**。
+
+`監控 IO／布局／檢測功能矩陣` 進一步把 IO 模擬器、真實 Grab、布局與檢測設定放在
+同一支情境。它依序測瀑布／即時、上下方向、OPS／Start／Crop、欄／列強化、正規值、
+門檻及 O/X；每輪會以實際影像與 Curve peak、主畫面先於 Curve、座標方向和判定公式
+做數值驗證。這才是「設定改了以後畫面與 Curve 真的正確」的功能 DVT；
+`PropertyGrid 全參數矩陣` 仍只負責輸入、保存和 owner route。
+
+`監控 IO 基本一循環` 是上述矩陣的最小前置測試。外部 Runner 啟動
+`IoBridge.IoSimulator.exe` 自動模式，只送一次 LOW → HIGH 10 秒 → LOW，將光源設為
+255 並開啟存檔，驗證 Grab 開門、首組影像、瀑布首組、Curve、尾幀排水、關門與
+`.acap` 封裝；光源底層 `TurnOn` 回傳失敗時直接判 FAIL，不混入布局和檢出參數變化。
+
+`PropertyGrid 全參數矩陣` 由 `PropertyGridCoverage.json` 管理目前 58 個可編輯參數。
+Runner 啟動前會用 reflection 對照產品 `InspectionSettings`；產品新增、刪除、改名或調整
+同名欄位順序卻未更新目錄時，情境直接 FAIL。一般功能與 Bridge 分開執行：
+
+- `PropertyGrid 全參數矩陣（一般功能）`：角色、OPS／Start／Crop、檢出標準、停止策略、
+  顯示報表、儲存與 LOG。每項至少套兩個值，後項會與前項目前值形成累積交叉測試。
+- `PropertyGrid 全參數矩陣（Bridge）`：COM／光源及 IO endpoint、啟用狀態和暫停檢出。
+  這組會刻意造成短暫斷線與重連，需在設備可被測試時獨立執行。
+
+每次設定必須產生 `ui:設定[internalName]=value` 與緊接的
+`setting route internalName ...`。Runner 完成或中止時都會按安全順序還原原值；這一層
+證明「全部參數可輸入、可保存、找到唯一 owner」，但需要影像內容的結果仍由監控檢測
+標準、背景、回顧、報表與 Bridge 專用情境驗證，不把只有路由成功誤報成功能正確。
+`機台角色` 會重建整個 UI，因此放在一般矩陣最後只做一次真實切換；關閉程式後由
+Runner 還原測試前備份的 `app-mode.json`，不在已失效的 Accessibility 樹上反向操作。
 
 ## 情境規則
 
@@ -33,8 +60,12 @@ Curve、正規值、閾值、欄曲線判定模式、檢出方向與 O/X 公式�
 - 每個操作步驟必須填 `Contract`，指向 `dvt-contract.md` 的 flow。
 - `wait-log` 只寫該步需要的最小證據，不重複完整判定規格。
 - `verify-log-absent` 用於證明情境明確禁止的 Flow 行完全未出現，例如純待機 IO 測試不得產生 START／Grab。
+- `click-control` 以 WinForms AutomationId 點擊沒有文字的 Chart；目前用來切換監控欄／列強化。
+- `verify-monitor-functional-cycle` 對單輪 IO Grab 的主畫面、欄列 Curve、方向及 O/X 做數值驗證。
 - 跨步驟、禁止行、數量與完整性仍由 `check_all_flows.py` 判定。
 - 若 checker 顯示 `NOT COVERED`，代表這次情境沒有操作到該功能，不代表 PASS。
+- `PropertyGridCoverage.json` 的每個群組必須至少被一個情境的
+  `exercise-property-group` 使用；漏掉群組時 Runner 連情境清單都不接受。
 
 ## V1 範圍
 

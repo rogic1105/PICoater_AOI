@@ -1,0 +1,45 @@
+{
+  "Id": "property-grid-core-matrix",
+  "Name": "PropertyGrid 全參數矩陣（一般功能）",
+  "Description": "逐組修改角色、佈局、檢出、停止策略、顯示報表、儲存與 LOG 設定，核對 S0 路由並還原；群組內後續設定會與前項已套用值形成累積交叉測試。",
+  "Steps": [
+    { "Id": "audit-catalog", "Contract": "S0.PropertyGridMatrix", "Title": "比對產品 PropertyGrid 與 58 項測試目錄", "Action": "audit-property-catalog", "TimeoutSeconds": 15 },
+
+    { "Id": "launch-display", "Contract": "F1", "Title": "開啟顯示與報表參數測試", "Action": "launch", "TimeoutSeconds": 45 },
+    { "Id": "display-report", "Contract": "F4/R2/D/S2", "Title": "測試圖表、強化、熱力圖、顯示模式、方向與 LOD 交叉", "Action": "exercise-property-group", "Target": "display-report", "TimeoutSeconds": 20 },
+    { "Id": "restore-display", "Contract": "DVT.Cleanup", "Title": "還原顯示與報表參數", "Action": "restore-properties", "TimeoutSeconds": 120 },
+    { "Id": "close-display", "Contract": "G2.shutdown", "Title": "關閉顯示與報表參數測試", "Action": "close-app", "TimeoutSeconds": 90 },
+    { "Id": "check-display", "Contract": "DVT", "Title": "檢查顯示與報表 Flow", "Action": "run-checker", "TimeoutSeconds": 180 },
+
+    { "Id": "launch-layout", "Contract": "F1", "Title": "開啟機台佈局參數測試", "Action": "launch", "TimeoutSeconds": 45 },
+    { "Id": "layout-evidence-boundary", "Contract": "F1/S7", "Title": "清除上一個程式週期的合圖證據", "Action": "reset-evidence", "TimeoutSeconds": 5 },
+    { "Id": "layout-ready", "Contract": "F1/S7", "Title": "等待顯示合圖佈局完成初始化", "Action": "wait-log", "Pattern": "EnableGlobalMerge", "TimeoutSeconds": 30 },
+    { "Id": "layout", "Contract": "S2.Layout", "Title": "測試 OPS、Start、Crop 與速度累積交叉", "Action": "exercise-property-group", "Target": "layout", "TimeoutSeconds": 20 },
+    { "Id": "restore-layout", "Contract": "DVT.Cleanup", "Title": "還原機台佈局參數", "Action": "restore-properties", "TimeoutSeconds": 120 },
+    { "Id": "close-layout", "Contract": "G2.shutdown", "Title": "關閉機台佈局參數測試", "Action": "close-app", "TimeoutSeconds": 90 },
+    { "Id": "check-layout", "Contract": "DVT", "Title": "檢查機台佈局 Flow", "Action": "run-checker", "TimeoutSeconds": 180 },
+
+    { "Id": "launch-inspection", "Contract": "F1", "Title": "開啟檢出標準參數測試", "Action": "launch", "TimeoutSeconds": 45 },
+    { "Id": "inspection", "Contract": "S1", "Title": "測試方向、正規值、細線濾除、判定模式與門檻交叉", "Action": "exercise-property-group", "Target": "inspection", "TimeoutSeconds": 20 },
+    { "Id": "restore-inspection", "Contract": "DVT.Cleanup", "Title": "還原檢出標準參數", "Action": "restore-properties", "TimeoutSeconds": 120 },
+    { "Id": "close-inspection", "Contract": "G2.shutdown", "Title": "關閉檢出標準參數測試", "Action": "close-app", "TimeoutSeconds": 90 },
+    { "Id": "check-inspection", "Contract": "DVT", "Title": "檢查檢出標準 Flow", "Action": "run-checker", "TimeoutSeconds": 180 },
+
+    { "Id": "launch-capture", "Contract": "F1", "Title": "開啟擷取策略參數測試", "Action": "launch", "TimeoutSeconds": 45 },
+    { "Id": "capture-policy", "Contract": "F2/F3/F8", "Title": "在非 Grab 狀態測試去背、背景時間與三種停止條件", "Action": "exercise-property-group", "Target": "capture-policy", "TimeoutSeconds": 20 },
+    { "Id": "restore-capture", "Contract": "DVT.Cleanup", "Title": "還原擷取策略參數", "Action": "restore-properties", "TimeoutSeconds": 120 },
+    { "Id": "close-capture", "Contract": "G2.shutdown", "Title": "關閉擷取策略參數測試", "Action": "close-app", "TimeoutSeconds": 90 },
+    { "Id": "check-capture", "Contract": "DVT", "Title": "檢查擷取策略 Flow", "Action": "run-checker", "TimeoutSeconds": 180 },
+
+    { "Id": "launch-storage", "Contract": "F1", "Title": "開啟儲存與 LOG 參數測試", "Action": "launch", "TimeoutSeconds": 45 },
+    { "Id": "storage-logging", "Contract": "C.Storage/C.Retention/C.Logging/DVT.LogMode", "Title": "測試本機、遠端、存檔、原圖與 LOG 交叉", "Action": "exercise-property-group", "Target": "storage-logging", "TimeoutSeconds": 30 },
+    { "Id": "restore-storage", "Contract": "DVT.Cleanup", "Title": "還原儲存與 LOG 參數", "Action": "restore-properties", "TimeoutSeconds": 120 },
+    { "Id": "close-storage", "Contract": "G2.shutdown", "Title": "關閉儲存與 LOG 參數測試", "Action": "close-app", "TimeoutSeconds": 90 },
+    { "Id": "check-storage", "Contract": "DVT", "Title": "檢查儲存與 LOG Flow", "Action": "run-checker", "TimeoutSeconds": 180 },
+
+    { "Id": "launch-role", "Contract": "F1", "Title": "開啟機台角色參數測試", "Action": "launch", "TimeoutSeconds": 45 },
+    { "Id": "role", "Contract": "S0.AppRole", "Title": "最後測試一次機台角色切換", "Action": "exercise-property-group", "Target": "role", "TimeoutSeconds": 30 },
+    { "Id": "close-role", "Contract": "G2.shutdown", "Title": "關閉機台角色參數測試", "Action": "close-app", "TimeoutSeconds": 90 },
+    { "Id": "check-role", "Contract": "DVT", "Title": "檢查機台角色 Flow", "Action": "run-checker", "TimeoutSeconds": 180 }
+  ]
+}

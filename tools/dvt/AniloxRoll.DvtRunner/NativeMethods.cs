@@ -25,6 +25,7 @@ namespace AniloxRoll.DvtRunner
         internal const int VkEnd = 0x23;
         internal const int VkUp = 0x26;
         internal const int VkDown = 0x28;
+        internal const int VkF4 = 0x73;
         private const int MkLButton = 0x0001;
         private const int SbPageUp = 2;
         private const int SbPageDown = 3;

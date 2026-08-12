@@ -1,0 +1,134 @@
+{
+  "Id": "report-verdict-cache-performance",
+  "Name": "報表 O/X 冷讀與暖讀效能",
+  "Description": "以同一份 Captures 連讀兩次，驗證每日峰值索引能消除逐筆 summary/bin 冷讀。",
+  "Steps": [
+    {
+      "Id": "stage-empty-root",
+      "Contract": "DVT.Setup",
+      "Title": "避免啟動時預熱正式資料",
+      "Action": "set-session-value",
+      "Target": "LastDataPath",
+      "Value": "D:\\Anilox\\DvtEmpty",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "reset-cache",
+      "Contract": "D1.verdict-cache",
+      "Title": "清除可重建的每日峰值索引",
+      "Action": "reset-verdict-cache",
+      "Target": "D:\\Anilox\\Captures",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "啟動主程式",
+      "Action": "launch",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "enable-flow-log",
+      "Contract": "DVT.LogMode",
+      "Title": "啟用流程驗證探針",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "open-report",
+      "Contract": "D1",
+      "Title": "切到報表",
+      "Action": "select-tab",
+      "Target": "報表",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "evidence-boundary",
+      "Contract": "D1.verdict-cache",
+      "Title": "切開冷讀量測邊界",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "cold-read",
+      "Contract": "D1.verdict-cache",
+      "Title": "第一次讀取建立每日索引",
+      "Action": "confirm-folder",
+      "Target": "讀取資料",
+      "Value": "D:\\Anilox\\Captures",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "cold-cache-proof",
+      "Contract": "D1.verdict-cache",
+      "Title": "確認第一次為冷讀",
+      "Action": "wait-log",
+      "Pattern": "DT verdict cache gen=[0-9]+ hits=0/[1-9][0-9]* days=0 loadMs=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "cold-complete",
+      "Contract": "D1.verdict-cache",
+      "Title": "等待冷讀全部完成",
+      "Action": "wait-log",
+      "Pattern": "DT verdict index apply=ok gen=[0-9]+ .* missing=0/[1-9][0-9]* .* ms=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "warm-read",
+      "Contract": "D1.verdict-cache",
+      "Title": "第二次讀取使用每日索引",
+      "Action": "confirm-folder",
+      "Target": "讀取資料",
+      "Value": "D:\\Anilox\\Captures",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "warm-cache-proof",
+      "Contract": "D1.verdict-cache",
+      "Title": "確認第二次完整命中",
+      "Action": "wait-log",
+      "Pattern": "DT verdict cache gen=[0-9]+ hits=([1-9][0-9]*)/\\1 days=[1-9][0-9]* loadMs=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "warm-complete",
+      "Contract": "D1.verdict-cache",
+      "Title": "等待暖讀全部完成",
+      "Action": "wait-log",
+      "Pattern": "DT verdict index apply=ok gen=[0-9]+ .* missing=0/[1-9][0-9]* .* ms=[0-9]+",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "verify-performance",
+      "Contract": "D1.verdict-cache",
+      "Title": "比較冷讀與暖讀",
+      "Action": "verify-verdict-cache-performance",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "還原 Runner 修改的設定",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "正常關閉主程式",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "確認資源釋放",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 60
+    }
+  ]
+}

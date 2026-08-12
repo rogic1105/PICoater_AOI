@@ -792,11 +792,16 @@ class LiveFlowValidator:
         self, session: FlowSession, report: CheckReport
     ) -> None:
         latest_presentation = None
+        latest_direction_change = None
         presentations = 0
         rows = 0
+        mapping_only_rows = 0
         failures = []
 
         for line in session.lines:
+            if line.message.startswith("ui:設定[hee_VerticalDirection]="):
+                latest_direction_change = line
+                continue
             if re.match(
                 r"^rowCurve present after=mainImage cams=\d+ mode=(IC|WF)$",
                 line.message,
@@ -808,6 +813,17 @@ class LiveFlowValidator:
                 continue
 
             rows += 1
+            if (
+                latest_direction_change is not None
+                and line.elapsed - latest_direction_change.elapsed <= 2.0
+                and (
+                    latest_presentation is None
+                    or latest_direction_change.elapsed
+                    > latest_presentation.elapsed
+                )
+            ):
+                mapping_only_rows += 1
+                continue
             if latest_presentation is None:
                 failures.append(f"{line.timestamp} rowChart 無 mainImage 呈現證據")
                 continue
@@ -834,7 +850,8 @@ class LiveFlowValidator:
             self.domain,
             "F2.row-presentation",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
-            f"presentations={presentations} rowUpdates={rows} failures={len(failures)}"
+            f"presentations={presentations} rowUpdates={rows} "
+            f"mappingOnly={mapping_only_rows} failures={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )
 

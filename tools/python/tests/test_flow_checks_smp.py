@@ -91,6 +91,42 @@ class GlobalContractValidatorTests(unittest.TestCase):
 
 
 class SettingsFlowValidatorTests(unittest.TestCase):
+    def test_curve_metric_mode_applies_to_all_row_charts(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[eca_ColumnCurveMode]=Mean",
+                "setting route eca_ColumnCurveMode owner=DataStats "
+                "effects=ColumnThresholds+ReviewCurves+LiveInspectionCurves",
+                "RV row metrics mean=True max=False",
+                "DT row metrics mean=True max=False",
+                "live inspection apply setting=eca_ColumnCurveMode "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Mean direction=Both "
+                "action=refresh",
+                "LC row metrics mean=True max=False",
+            )
+        )
+
+        self.assertEqual(CheckStatus.PASS, result(report, "S1.curve-metrics").status)
+
+    def test_curve_metric_mode_rejects_row_chart_left_on_max(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[eca_ColumnCurveMode]=Mean",
+                "setting route eca_ColumnCurveMode owner=DataStats "
+                "effects=ColumnThresholds+ReviewCurves+LiveInspectionCurves",
+                "RV row metrics mean=True max=False",
+                "DT row metrics mean=True max=True",
+                "live inspection apply setting=eca_ColumnCurveMode "
+                "hm=0.5000/1.0000 thresholdC=0.2000/0.6000 "
+                "thresholdR=0.2000/0.6000 mode=Mean direction=Both "
+                "action=refresh",
+                "LC row metrics mean=True max=False",
+            )
+        )
+
+        self.assertEqual(CheckStatus.FAIL, result(report, "S1.curve-metrics").status)
+
     def test_live_inspection_settings_scale_and_light_stimulus_pass(self):
         report = SettingsFlowValidator().validate(
             session(
@@ -502,6 +538,22 @@ class SettingsFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.FAIL, result(report, "S6.display-crop").status
+        )
+
+    def test_display_crop_accepts_blank_canvas_before_first_frame(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[cb_CropHead]=25",
+                "setting route cb_CropHead owner=LiveLayout effects=None",
+                "displayCrop applied head=25.00 tail=10.00 mode=IC "
+                "content=0x0 zoom=1.000000 fit=False frames=dynamic",
+                "displayCrop head=25.00 tail=10.00 "
+                "scope=main+column-chart data=unchanged "
+                "waterfallHistory=preserved",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "S6.display-crop").status
         )
 
     def test_display_crop_during_grab_uses_last_value_at_stop(self):
@@ -956,12 +1008,35 @@ class DataFlowValidatorTests(unittest.TestCase):
     def test_column_verdict_index_accounts_for_summary_bins_and_missing(self):
         report = DataFlowValidator().validate(
             session(
+                "DT verdict index apply=partial gen=1 summaries=1388 "
+                "pending=595/1983 cams=2776 verdicts=2776 ms=450",
                 "DT verdict index apply=ok gen=1 summaries=1388 bins=590 "
                 "missing=5/1983 cams=3956 verdicts=3956 ms=12000"
             )
         )
         self.assertEqual(
             CheckStatus.PASS, result(report, "D1.verdict-index").status
+        )
+
+    def test_column_verdict_cache_accepts_cold_then_warm_read(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict cache gen=1 hits=0/1983 days=0 loadMs=2",
+                "DT verdict cache gen=2 hits=1983/1983 days=26 loadMs=12",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.verdict-cache").status
+        )
+
+    def test_column_verdict_cache_rejects_hits_without_loaded_day(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict cache gen=2 hits=10/10 days=0 loadMs=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "D1.verdict-cache").status
         )
 
     def test_column_verdict_index_rejects_unaccounted_grabs(self):
@@ -973,6 +1048,79 @@ class DataFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.FAIL, result(report, "D1.verdict-index").status
+        )
+
+    def test_column_verdict_index_rejects_unaccounted_partial_phase(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict index apply=partial gen=1 summaries=1388 "
+                "pending=500/1983 cams=2776 verdicts=2776 ms=450"
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "D1.verdict-index").status
+        )
+
+    def test_row_verdict_normalization_crosses_threshold_both_directions(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT row verdict 260807-143112 merged=1 mode=max "
+                "mean=0.1000/0.7000 enabled=0 max=0.5000/0.6000 enabled=1 "
+                "result=pass cause=none source=visible-merged-curve",
+                "DT row verdict 260807-143112 merged=1 mode=max "
+                "mean=0.6800/0.7000 enabled=0 max=0.8500/0.6000 enabled=1 "
+                "result=fail cause=max source=visible-merged-curve",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.row-verdict").status
+        )
+
+    def test_row_chart_peak_matches_list_verdict_source(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT row curve display 260807-143112 mode=max "
+                "mean=0.6800/0.7000 max=0.8500/0.6000 scale=3.4000 points=3000",
+                "DT row verdict 260807-143112 merged=1 mode=max "
+                "mean=0.6800/0.7000 enabled=0 max=0.8500/0.6000 enabled=1 "
+                "result=fail cause=max source=visible-merged-curve",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.row-chart-verdict").status
+        )
+
+    def test_row_verdict_click_rejects_stale_list_result(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT row verdict click 260807-143112 mode=max "
+                "mean=0.6800/0.7000 enabled=0 max=0.8500/0.6000 enabled=1 "
+                "result=fail cause=max list=pass source=visible-curve-index",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL, result(report, "D1.row-verdict-click").status
+        )
+
+    def test_row_verdict_index_respects_disabled_direction(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT row verdict index apply=ok gen=4 rows=250 verdicts=0 enabled=0"
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.row-verdict-index").status
+        )
+
+    def test_row_verdict_index_accepts_partial_summary_phase(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT row verdict index apply=partial gen=4 rows=200 verdicts=200 enabled=1",
+                "DT row verdict index apply=ok gen=4 rows=250 verdicts=250 enabled=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.row-verdict-index").status
         )
 
     def test_range_preview_finishes_running_then_jumps_to_latest(self):
@@ -2158,6 +2306,22 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.FAIL, result(report, "F2.row-presentation").status
+        )
+
+    def test_direction_remap_does_not_require_new_main_image(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "rowCurve present after=mainImage cams=2 mode=WF",
+                "LC row rowChart dir=BottomToTop n=100 total=10mm view 10~0 "
+                "dataPhys 0~5mm dataChart 0~5",
+                "ui:設定[hee_VerticalDirection]=TopToBottom",
+                "LC row rowView dir=TopToBottom n=-1 total=10mm view 0~10",
+                "LC row rowChart dir=TopToBottom n=100 total=10mm view 0~10 "
+                "dataPhys 0~5mm dataChart 0~5",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "F2.row-presentation").status
         )
 
     def test_initialization_ignores_later_height_reallocation_metrics(self):
