@@ -584,7 +584,7 @@ namespace TanukiCv.Controls
         {
             if (_flowLog == null || _canvas == null) return;
             int now = Environment.TickCount;
-            if (now - _lastStateLogMs < 1000) return;
+            if (unchecked((uint)(now - _lastStateLogMs)) < 1000u) return;
             _lastStateLogMs = now;
             if (!TryComputeViewRange(_canvas.Zoom, _canvas.PanOffset, out double leftMm, out double rightMm, out double topMm, out double botMm)) return;
             _flowLog($"state viewX {leftMm:F0}~{rightMm:F0} viewY {topMm:F0}~{botMm:F0}");

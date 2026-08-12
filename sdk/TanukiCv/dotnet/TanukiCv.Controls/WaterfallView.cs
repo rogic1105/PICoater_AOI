@@ -73,7 +73,7 @@ namespace TanukiCv.Controls
         {
             if (FlowLog == null) return;
             int now = Environment.TickCount;
-            if (now - _lastStateLogMs < 1000) return;
+            if (unchecked((uint)(now - _lastStateLogMs)) < 1000u) return;
             _lastStateLogMs = now;
             FlowLog($"state 占用=0~{_writeRow}/{_totalHeight} 最新內容畫面端={(_flipVertical ? "底" : "頂")}");
         }
