@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using NUnit.Framework;
+using AniloxRoll.Monitor.Core.Data;
 using AniloxRoll.Monitor.Core.Services;
 
 namespace AniloxRoll.Monitor.Tests
@@ -141,6 +142,30 @@ namespace AniloxRoll.Monitor.Tests
                 "Merged CurveMax must cross the max threshold, not the mean threshold");
         }
 
+        [TestCase(ColumnCurveDisplayMode.Mean, false)]
+        [TestCase(ColumnCurveDisplayMode.Max, true)]
+        [TestCase(ColumnCurveDisplayMode.Both, true)]
+        public void ComputeDetailedByGrabIdRange_ColumnModeControlsListVerdict(
+            ColumnCurveDisplayMode mode,
+            bool expectedFail)
+        {
+            string csv =
+                "#CFG,2026-08-04T08:55:59.000,HessianMaxFactorV=0.5000\n" +
+                "Id,FileName,MaxExceed,MeanExceed,MeanPeak,MaxPeak,GrabHeight,LineRateHz,ExposureUs\n" +
+                "260804-085559,20260804_085559.000-1,0,0,0.10,0.30,3000,3000.0,50.0\n" +
+                "#CURVE-C,1,260804-085559,1,0.5,0.15,0.61\n";
+            WriteCsv("20260804", csv);
+
+            var threshold = new ThresholdContext(
+                0.5f, 0.2f, 0.6f,
+                0.5f, 0.2f, 0.6f,
+                mode);
+            List<GrabDetail> details = InspectionStatisticsService.ComputeDetailedByGrabIdRange(
+                _tempRoot, "260804-085559", "260804-085559", threshold);
+
+            Assert.That(details[0].CamResult[0], Is.EqualTo(expectedFail));
+        }
+
         [Test]
         public void IsColumnCurveFail_UsesSeparateMeanAndMaxThresholds()
         {
@@ -151,8 +176,8 @@ namespace AniloxRoll.Monitor.Tests
                 out float meanPeak, out float maxPeak);
 
             Assert.That(failed, Is.False);
-            Assert.That(meanPeak, Is.EqualTo(0.1f).Within(0.0001f));
-            Assert.That(maxPeak, Is.EqualTo(0.5f).Within(0.0001f));
+            Assert.That(meanPeak, Is.EqualTo(0.025f).Within(0.0001f));
+            Assert.That(maxPeak, Is.EqualTo(0.125f).Within(0.0001f));
         }
 
         [TestCase(0.21f, 0.50f, ColumnFailureCause.Mean)]

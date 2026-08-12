@@ -94,6 +94,9 @@ namespace AniloxRoll.Monitor.Core.Services
         public float CurrentRowErrMean { get; }
         public float CurrentRowErrMax { get; }
         public ColumnCurveDisplayMode ColumnCurveMode { get; }
+        public RidgeDirection RidgeDirection { get; }
+        public bool ColumnDetectionEnabled => RidgeDirection != RidgeDirection.Horizontal;
+        public bool RowDetectionEnabled => RidgeDirection != RidgeDirection.Vertical;
 
         public ThresholdContext(float currentHmV, float currentErrMean, float currentErrMax)
             : this(currentHmV, currentErrMean, currentErrMax,
@@ -113,7 +116,8 @@ namespace AniloxRoll.Monitor.Core.Services
         public ThresholdContext(
             float currentHmV, float currentErrMean, float currentErrMax,
             float currentHmH, float currentRowErrMean, float currentRowErrMax,
-            ColumnCurveDisplayMode columnCurveMode)
+            ColumnCurveDisplayMode columnCurveMode,
+            RidgeDirection ridgeDirection = RidgeDirection.Both)
         {
             CurrentHmV     = currentHmV;
             CurrentErrMean = currentErrMean;
@@ -122,6 +126,7 @@ namespace AniloxRoll.Monitor.Core.Services
             CurrentRowErrMean = currentRowErrMean;
             CurrentRowErrMax = currentRowErrMax;
             ColumnCurveMode = columnCurveMode;
+            RidgeDirection = ridgeDirection;
         }
 
         public bool IsFail(float meanPeak, float maxPeak, float captureHmV)
@@ -139,15 +144,53 @@ namespace AniloxRoll.Monitor.Core.Services
         public ColumnVerdictEvaluation EvaluateColumn(
             float meanPeak, float maxPeak, float captureHmV)
         {
+            if (!ColumnDetectionEnabled)
+                return ColumnVerdictEvaluation.NoData;
             float ratio = HessianRescaleHelper.NormalizedValueToDisplayScale(
                 captureHmV, CurrentHmV);
+            return EvaluateScaledColumn(meanPeak, maxPeak, ratio);
+        }
+
+        /// <summary>
+        /// Evaluates peaks read directly from MeanC/MaxC curve samples. Unlike CSV and
+        /// #CURVE-C peaks, these values have not been normalized by the capture-time HM.
+        /// </summary>
+        public ColumnVerdictEvaluation EvaluateRawColumnCurve(
+            float rawMeanPeak, float rawMaxPeak, float captureHmV)
+        {
+            if (!ColumnDetectionEnabled)
+                return ColumnVerdictEvaluation.NoData;
+            float ratio = HessianRescaleHelper.RawCurveToDisplayScale(
+                captureHmV, CurrentHmV);
+            return EvaluateScaledColumn(rawMeanPeak, rawMaxPeak, ratio);
+        }
+
+        public bool IsRawColumnCurveFail(
+            float rawMeanPeak, float rawMaxPeak, float captureHmV)
+        {
+            return EvaluateRawColumnCurve(
+                rawMeanPeak, rawMaxPeak, captureHmV).IsFail;
+        }
+
+        private ColumnVerdictEvaluation EvaluateScaledColumn(
+            float meanPeak, float maxPeak, float ratio)
+        {
+            return EvaluateScaled(
+                meanPeak, maxPeak, ratio,
+                CurrentErrMean, CurrentErrMax);
+        }
+
+        private ColumnVerdictEvaluation EvaluateScaled(
+            float meanPeak, float maxPeak, float ratio,
+            float meanThreshold, float maxThreshold)
+        {
             float displayMeanPeak = float.IsNaN(meanPeak) ? float.NaN : meanPeak * ratio;
             float displayMaxPeak = float.IsNaN(maxPeak) ? float.NaN : maxPeak * ratio;
             bool meanEnabled = ColumnCurveMode != ColumnCurveDisplayMode.Max;
             bool maxEnabled = ColumnCurveMode != ColumnCurveDisplayMode.Mean;
             ColumnFailureCause cause = EvaluateColumnFailureCause(
                 displayMeanPeak, displayMaxPeak,
-                CurrentErrMean, CurrentErrMax,
+                meanThreshold, maxThreshold,
                 ColumnCurveMode);
             bool hasData = (meanEnabled && !float.IsNaN(displayMeanPeak)) ||
                 (maxEnabled && !float.IsNaN(displayMaxPeak));
@@ -177,7 +220,7 @@ namespace AniloxRoll.Monitor.Core.Services
         {
             displayMeanPeak = FindPeakNormalized(meanCurve);
             displayMaxPeak = FindPeakNormalized(maxCurve);
-            ColumnVerdictEvaluation evaluation = EvaluateColumn(
+            ColumnVerdictEvaluation evaluation = EvaluateRawColumnCurve(
                 displayMeanPeak, displayMaxPeak, captureHmV);
             displayMeanPeak = evaluation.DisplayMeanPeak;
             displayMaxPeak = evaluation.DisplayMaxPeak;
@@ -195,11 +238,43 @@ namespace AniloxRoll.Monitor.Core.Services
 
         public bool? IsRowFail(float meanPeak, float maxPeak, float captureHmV)
         {
-            if (float.IsNaN(meanPeak) || float.IsNaN(maxPeak)) return null;
+            if (!RowDetectionEnabled) return null;
+            bool meanEnabled = ColumnCurveMode != ColumnCurveDisplayMode.Max;
+            bool maxEnabled = ColumnCurveMode != ColumnCurveDisplayMode.Mean;
+            bool hasData = (meanEnabled && !float.IsNaN(meanPeak)) ||
+                (maxEnabled && !float.IsNaN(maxPeak));
+            if (!hasData) return null;
             float ratio = HessianRescaleHelper.NormalizedValueToDisplayScale(
                 captureHmV, CurrentHmH);
-            return meanPeak * ratio > CurrentRowErrMean ||
-                   maxPeak * ratio > CurrentRowErrMax;
+            bool meanFail = meanEnabled && !float.IsNaN(meanPeak) &&
+                meanPeak * ratio > CurrentRowErrMean;
+            bool maxFail = maxEnabled && !float.IsNaN(maxPeak) &&
+                maxPeak * ratio > CurrentRowErrMax;
+            return meanFail || maxFail;
+        }
+
+        /// <summary>
+        /// Evaluates peaks from the merged MeanR/MaxR curves that are actually drawn.
+        /// Row curves share the persisted raw scale used by column curves.
+        /// </summary>
+        public ColumnVerdictEvaluation EvaluateRawRowCurve(
+            float rawMeanPeak, float rawMaxPeak, float captureHmV)
+        {
+            if (!RowDetectionEnabled)
+                return ColumnVerdictEvaluation.NoData;
+            float ratio = HessianRescaleHelper.RawCurveToDisplayScale(
+                captureHmV, CurrentHmH);
+            return EvaluateScaled(
+                rawMeanPeak, rawMaxPeak, ratio,
+                CurrentRowErrMean, CurrentRowErrMax);
+        }
+
+        public bool? IsRawRowCurveFail(
+            float rawMeanPeak, float rawMaxPeak, float captureHmV)
+        {
+            ColumnVerdictEvaluation evaluation = EvaluateRawRowCurve(
+                rawMeanPeak, rawMaxPeak, captureHmV);
+            return evaluation.HasData ? (bool?)evaluation.IsFail : null;
         }
     }
 
@@ -213,6 +288,11 @@ namespace AniloxRoll.Monitor.Core.Services
 
     public sealed class ColumnVerdictEvaluation
     {
+        internal static readonly ColumnVerdictEvaluation NoData =
+            new ColumnVerdictEvaluation(
+                float.NaN, float.NaN,
+                false, false, false, ColumnFailureCause.None);
+
         public ColumnVerdictEvaluation(
             float displayMeanPeak, float displayMaxPeak,
             bool meanEnabled, bool maxEnabled, bool hasData,
@@ -350,12 +430,15 @@ namespace AniloxRoll.Monitor.Core.Services
                                 detailsByGrabId[record.GrabId] = detail;
                             }
 
-                            bool failed = ctx != null
-                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
-                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
                             int cameraIndex = cameraId - 1;
-                            if (!detail.CamResult[cameraIndex].HasValue || failed)
-                                detail.CamResult[cameraIndex] = failed;
+                            if (ctx == null || ctx.ColumnDetectionEnabled)
+                            {
+                                bool failed = ctx != null
+                                    ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
+                                    : (record.MaxExceed > 0 || record.MeanExceed > 0);
+                                if (!detail.CamResult[cameraIndex].HasValue || failed)
+                                    detail.CamResult[cameraIndex] = failed;
+                            }
                             MergeRowResult(detail, ctx?.IsRowFail(
                                 record.MeanRPeak, record.MaxRPeak, captureHmV));
                         }
@@ -547,13 +630,16 @@ namespace AniloxRoll.Monitor.Core.Services
                             }
 
                             int idx = camId - 1;
-                            bool thisFail = ctx != null
-                                ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
-                                : (record.MaxExceed > 0 || record.MeanExceed > 0);
-                            if (detail.CamResult[idx] == null)
-                                detail.CamResult[idx] = thisFail;
-                            else if (thisFail)
-                                detail.CamResult[idx] = true; // 一票否決
+                            if (ctx == null || ctx.ColumnDetectionEnabled)
+                            {
+                                bool thisFail = ctx != null
+                                    ? ctx.IsFail(record.MeanPeak, record.MaxPeak, captureHmV)
+                                    : (record.MaxExceed > 0 || record.MeanExceed > 0);
+                                if (detail.CamResult[idx] == null)
+                                    detail.CamResult[idx] = thisFail;
+                                else if (thisFail)
+                                    detail.CamResult[idx] = true; // 一票否決
+                            }
                             MergeRowResult(detail, ctx?.IsRowFail(
                                 record.MeanRPeak, record.MaxRPeak, captureHmV));
                         }
@@ -583,6 +669,13 @@ namespace AniloxRoll.Monitor.Core.Services
             ThresholdContext ctx)
         {
             if (details == null || summaries == null || ctx == null) return;
+
+            if (!ctx.ColumnDetectionEnabled)
+            {
+                foreach (GrabDetail detail in details.Values)
+                    Array.Clear(detail.CamResult, 0, detail.CamResult.Length);
+                return;
+            }
 
             foreach (ColumnCurveSummaryRecord summary in summaries.Values)
             {

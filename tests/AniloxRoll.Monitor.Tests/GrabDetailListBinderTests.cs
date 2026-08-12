@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Services;
@@ -44,6 +45,18 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(listView.VirtualListSize, Is.EqualTo(1));
                 binder.Dispose();
             }
+        }
+
+        [Test]
+        public void ResultColors_AreIndependentForColumnRowAndDisabledAxes()
+        {
+            Color pass = GrabDetailListBinder.GetResultBackColor(false);
+            Color fail = GrabDetailListBinder.GetResultBackColor(true);
+            Color disabled = GrabDetailListBinder.GetResultBackColor(null);
+
+            Assert.That(pass, Is.Not.EqualTo(fail));
+            Assert.That(disabled, Is.Not.EqualTo(pass));
+            Assert.That(disabled, Is.Not.EqualTo(fail));
         }
     }
 }

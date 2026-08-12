@@ -365,7 +365,14 @@ namespace AniloxRoll.Monitor.Forms
 
                 var columnMean = new float[CameraCount][];
                 var columnMax = new float[CameraCount][];
+                var rowMean = new float[CameraCount][];
+                var rowMax = new float[CameraCount][];
                 CsvConfigSnapshot captureConfig = BuildCaptureConfigSnapshot(grabId);
+                SingleGrabCurveSummary captureSummary = null;
+                GrabIdInfo captureInfo = null;
+                string alignmentMode = "none";
+                int captureCount = 0;
+                int mergedCaptureCount = 0;
                 CaptureArchivePreviewAtlasResult preview = await Task.Run(() =>
                 {
                     CaptureArchivePreviewAtlasResult result =
@@ -375,18 +382,77 @@ namespace AniloxRoll.Monitor.Forms
                             previewMaxHeight,
                             replaceExisting: true);
 
+                    var grouped = new Dictionary<int, List<string>>();
                     for (int camId = 1; camId <= CameraCount; camId++)
                     {
                         List<string> framePaths = CaptureArchiveStore.ListVirtualRawPaths(
                             archivePath, camId);
+                        if (framePaths.Count > 0)
+                            grouped[camId] = framePaths;
                         CurveMergeHelper.MergeCurves(
-                            framePaths, out columnMean[camId - 1], out columnMax[camId - 1]);
+                            framePaths,
+                            out columnMean[camId - 1],
+                            out columnMax[camId - 1],
+                            out int mergedForCamera,
+                            System.Threading.CancellationToken.None);
+                        mergedCaptureCount += mergedForCamera;
+                    }
+
+                    FrameAlignmentResult alignment = FrameTickIndex.ResolveAlignment(grouped);
+                    alignmentMode = alignment.Mode;
+                    captureCount = alignment.AllPaths.Count;
+                    for (int camId = 1; camId <= CameraCount; camId++)
+                    {
+                        if (!grouped.TryGetValue(camId, out List<string> framePaths))
+                            continue;
+                        List<string> aligned = alignment.ByCamera.TryGetValue(
+                            camId, out List<string> alignedPaths)
+                            ? alignedPaths
+                            : framePaths;
+                        CurveMergeHelper.MergeRowCurves(
+                            aligned, out rowMean[camId - 1], out rowMax[camId - 1]);
+                    }
+                    CurveMergeHelper.MergeRowCurvesOverlap(
+                        rowMean, rowMax, CameraCount,
+                        out float[] mergedRowMean, out float[] mergedRowMax);
+                    if (captureCount > 0 && mergedCaptureCount == captureCount)
+                    {
+                        captureInfo = BuildCaptureGrabInfo(
+                            grabId, alignment.AllPaths, captureDate);
+                        captureSummary = new SingleGrabCurveSummary(
+                            columnMean, columnMax,
+                            mergedRowMean, mergedRowMax,
+                            captureCount);
                     }
                     return result;
                 });
                 if (preview.FailedArchiveCount != 0 || preview.AtlasCount != 3)
                     throw new InvalidDataException(
                         $"預覽圖集不完整：atlas={preview.AtlasCount}/3 failed={preview.FailedArchiveCount}。");
+
+                var cacheWatch = Stopwatch.StartNew();
+                string summaryStatus = "skip-incomplete";
+                string peakIndexStatus = "skip-incomplete";
+                if (captureSummary != null && captureInfo != null)
+                {
+                    summaryStatus = SingleGrabCurveSummaryStore.QueueSave(
+                        captureRoot, captureInfo, CameraCount, captureSummary)
+                        ? "queued"
+                        : "failed";
+                    ColumnCurvePeakIndexResult cacheResult =
+                        ColumnCurvePeakIndex.BuildAndStoreSummaryProjection(
+                            captureRoot, captureInfo, captureConfig,
+                            captureSummary, CameraCount);
+                    peakIndexStatus = cacheResult.SummaryGrabCount == 1
+                        ? "ok"
+                        : "failed";
+                }
+                cacheWatch.Stop();
+                FlowTrace.Log(
+                    $"capture report cache grab={grabId} summary={summaryStatus} " +
+                    $"peakIndex={peakIndexStatus} captures={captureCount} " +
+                    $"merged={mergedCaptureCount} align={alignmentMode} " +
+                    $"ms={cacheWatch.ElapsedMilliseconds}");
 
                 _inspectionLogService?.AppendColumnCurveSummary(
                     grabId,
@@ -420,6 +486,35 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _captureLayouts.TryRemove(grabId, out _);
             }
+        }
+
+        private static GrabIdInfo BuildCaptureGrabInfo(
+            string grabId, IEnumerable<string> paths, DateTime fallback)
+        {
+            DateTime earliest = DateTime.MaxValue;
+            DateTime latest = DateTime.MinValue;
+            if (paths != null)
+            {
+                foreach (string path in paths)
+                {
+                    string baseName = CaptureArchiveStore.IsVirtualPath(path)
+                        ? CaptureArchiveStore.GetVirtualBaseName(path)
+                        : Path.GetFileName(CaptureFileNaming.BaseFromImagePath(path));
+                    if (!InspectionCsvReader.TryParseTimestamp(
+                        baseName, out DateTime timestamp))
+                        continue;
+                    if (timestamp < earliest) earliest = timestamp;
+                    if (timestamp > latest) latest = timestamp;
+                }
+            }
+            if (earliest == DateTime.MaxValue || latest == DateTime.MinValue)
+                earliest = latest = fallback;
+            return new GrabIdInfo
+            {
+                GrabId = grabId,
+                Earliest = earliest,
+                Latest = latest
+            };
         }
 
         private CsvConfigSnapshot BuildCaptureConfigSnapshot(string grabId)
@@ -506,15 +601,13 @@ namespace AniloxRoll.Monitor.Forms
             float thMean = direction == "h" ? _settings.ErrorValueMeanH : _settings.ErrorValueMeanV;
             float thMax  = direction == "h" ? _settings.ErrorValueMaxH  : _settings.ErrorValueMaxV;
 
-            ColumnCurveDisplayMode columnMode = direction == "v"
-                ? _settings.ColumnCurveMode
-                : ColumnCurveDisplayMode.Both;
+            ColumnCurveDisplayMode curveMode = _settings.ColumnCurveMode;
             ColumnFailureCause cause = ThresholdContext.EvaluateColumnFailureCause(
-                meanPeak, maxPeak, thMean, thMax, columnMode);
+                meanPeak, maxPeak, thMean, thMax, curveMode);
             bool exceed = cause != ColumnFailureCause.None;
             int di = direction == "h" ? 1 : 0;
             LogLiveInspectionStimulusSample(
-                di, direction, meanPeak, maxPeak, thMean, thMax, columnMode, exceed);
+                di, direction, meanPeak, maxPeak, thMean, thMax, curveMode, exceed);
             if (exceed != _muraExceedLatch[di])   // 邊緣觸發：進入/離開超標各記一行
             {
                 _muraExceedLatch[di] = exceed;
@@ -927,9 +1020,11 @@ namespace AniloxRoll.Monitor.Forms
             _liveOverviewHelper?.SetThresholds(
                 _settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
             _liveOverviewHelper?.SetVisibleMetrics(
-                _settings.ShowColumnMean, _settings.ShowColumnMax);
+                _settings.ShowCurveMean, _settings.ShowCurveMax);
             _liveRowDisplay?.SetThresholds(
                 _settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _liveRowDisplay?.SetVisibleMetrics(
+                _settings.ShowCurveMean, _settings.ShowCurveMax);
 
             bool columnNormalizationChanged =
                 settingName == nameof(InspectionSettings.dc_HessianMaxFactorV);

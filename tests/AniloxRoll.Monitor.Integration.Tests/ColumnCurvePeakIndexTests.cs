@@ -27,6 +27,47 @@ namespace AniloxRoll.Monitor.Integration.Tests
         }
 
         [Test]
+        public void BuildSummaries_ReturnsAvailableRecordsBeforeBinFallback()
+        {
+            DateTime date = new DateTime(2026, 8, 11, 11, 0, 0);
+            var ready = new GrabIdInfo
+            {
+                GrabId = "260811-110000",
+                Earliest = date,
+                Latest = date
+            };
+            var pending = new GrabIdInfo
+            {
+                GrabId = "260811-110100",
+                Earliest = date.AddMinutes(1),
+                Latest = date.AddMinutes(1)
+            };
+            var summary = new SingleGrabCurveSummary(
+                new[] { new[] { 25.5f, 51f }, (float[])null },
+                new[] { new[] { 76.5f, 102f }, (float[])null },
+                new[] { 25.5f, 51f },
+                new[] { 76.5f, 102f },
+                1);
+            Assert.That(SingleGrabCurveSummaryStore.TrySave(
+                _tempRoot, ready, 2, summary), Is.True);
+
+            ColumnCurvePeakIndexResult result = ColumnCurvePeakIndex.BuildSummaries(
+                _tempRoot,
+                new List<GrabIdInfo> { ready, pending },
+                new Dictionary<string, float>(),
+                new Dictionary<string, CsvConfigSnapshot>(),
+                2,
+                CancellationToken.None);
+
+            Assert.That(result.SummaryGrabCount, Is.EqualTo(1));
+            Assert.That(result.BinFallbackGrabCount, Is.EqualTo(0));
+            Assert.That(result.ByGrabId.ContainsKey(ready.GrabId), Is.True);
+            Assert.That(result.ByGrabId.ContainsKey(pending.GrabId), Is.False);
+            Assert.That(result.PendingBinGrabInfos, Has.Count.EqualTo(1));
+            Assert.That(result.PendingBinGrabInfos[0].GrabId, Is.EqualTo(pending.GrabId));
+        }
+
+        [Test]
         public void Build_MissingSummary_UsesMergedColumnBins()
         {
             DateTime date = new DateTime(2026, 8, 4, 13, 54, 0);
@@ -45,6 +86,30 @@ namespace AniloxRoll.Monitor.Integration.Tests
             };
             var captureHm = new Dictionary<string, float> { [grabId] = 0.5f };
 
+            ColumnCurvePeakIndexResult summaryPhase = ColumnCurvePeakIndex.BuildSummaries(
+                _tempRoot, infos, captureHm,
+                new Dictionary<string, CsvConfigSnapshot>(),
+                2, CancellationToken.None);
+            Assert.That(summaryPhase.SummaryGrabCount, Is.EqualTo(0));
+            Assert.That(summaryPhase.PendingBinGrabInfos, Has.Count.EqualTo(1));
+
+            var progressBatches = new List<ColumnCurvePeakIndexResult>();
+            ColumnCurvePeakIndexResult binPhase = ColumnCurvePeakIndex.BuildBinFallback(
+                _tempRoot, summaryPhase.PendingBinGrabInfos, captureHm,
+                new Dictionary<string, CsvConfigSnapshot>(),
+                2, CancellationToken.None,
+                progressBatches.Add,
+                progressBatchSize: 1);
+            Assert.That(binPhase.BinFallbackGrabCount, Is.EqualTo(1));
+            Assert.That(binPhase.ByGrabId.ContainsKey(grabId), Is.True);
+            Assert.That(progressBatches, Has.Count.EqualTo(1));
+            Assert.That(progressBatches[0].ByGrabId.ContainsKey(grabId), Is.True);
+            Assert.That(progressBatches[0].RowByGrabId.ContainsKey(grabId), Is.True);
+
+            // Exercise the complete cold path independently from the projection index
+            // materialized by the explicit fallback phase above.
+            File.Delete(CaptureStoragePaths.DailyCurvePeakIndex(_tempRoot, date));
+
             ColumnCurvePeakIndexResult result = ColumnCurvePeakIndex.Build(
                 _tempRoot, infos, captureHm,
                 new Dictionary<string, CsvConfigSnapshot>(),
@@ -54,10 +119,145 @@ namespace AniloxRoll.Monitor.Integration.Tests
             Assert.That(result.BinFallbackGrabCount, Is.EqualTo(1));
             Assert.That(result.MissingGrabCount, Is.EqualTo(0));
             Assert.That(result.CameraCount, Is.EqualTo(1));
-            Assert.That(result.ByGrabId[grabId][0].MeanPeak, Is.EqualTo(0.3f).Within(0.0001f));
-            Assert.That(result.ByGrabId[grabId][0].MaxPeak, Is.EqualTo(0.6f).Within(0.0001f));
+            Assert.That(result.ByGrabId[grabId][0].RawMeanPeak, Is.EqualTo(0.3f).Within(0.0001f));
+            Assert.That(result.ByGrabId[grabId][0].RawMaxPeak, Is.EqualTo(0.6f).Within(0.0001f));
             Assert.That(result.ByGrabId[grabId][0].CaptureHmV, Is.EqualTo(0.5f));
             Assert.That(result.ByGrabId[grabId][1], Is.Null);
+            Assert.That(result.RowByGrabId[grabId].RawMeanPeak,
+                Is.EqualTo(0.2f).Within(0.0001f));
+            Assert.That(result.RowByGrabId[grabId].RawMaxPeak,
+                Is.EqualTo(0.7f).Within(0.0001f));
+        }
+
+        [Test]
+        public void BuildSummaries_SecondReadUsesDailyProjectionIndex()
+        {
+            DateTime date = new DateTime(2026, 8, 11, 11, 0, 0);
+            const string grabId = "260811-110000";
+            var info = new GrabIdInfo
+            {
+                GrabId = grabId,
+                Earliest = date,
+                Latest = date.AddSeconds(9)
+            };
+            var summary = new SingleGrabCurveSummary(
+                new[] { new[] { 25.5f, 51f }, (float[])null },
+                new[] { new[] { 76.5f, 102f }, (float[])null },
+                new[] { 25.5f, 51f },
+                new[] { 76.5f, 102f },
+                10);
+            Assert.That(SingleGrabCurveSummaryStore.TrySave(
+                _tempRoot, info, 2, summary), Is.True);
+
+            var infos = new List<GrabIdInfo> { info };
+            var configs = new Dictionary<string, CsvConfigSnapshot>();
+            ColumnCurvePeakIndexResult first = ColumnCurvePeakIndex.BuildSummaries(
+                _tempRoot, infos, new Dictionary<string, float>(), configs,
+                2, CancellationToken.None);
+
+            Assert.That(first.CacheGrabCount, Is.EqualTo(0));
+            Assert.That(first.SummaryGrabCount, Is.EqualTo(1));
+            Assert.That(File.Exists(
+                CaptureStoragePaths.DailyCurvePeakIndex(_tempRoot, date)), Is.True);
+
+            File.Delete(CaptureStoragePaths.GrabCurveSummary(
+                _tempRoot, date, grabId));
+            ColumnCurvePeakIndexResult second = ColumnCurvePeakIndex.BuildSummaries(
+                _tempRoot, infos, new Dictionary<string, float>(), configs,
+                2, CancellationToken.None);
+
+            Assert.That(second.CacheGrabCount, Is.EqualTo(1));
+            Assert.That(second.CacheDayCount, Is.EqualTo(1));
+            Assert.That(second.SummaryGrabCount, Is.EqualTo(1));
+            Assert.That(second.PendingBinGrabInfos, Is.Empty);
+            Assert.That(second.ByGrabId[grabId][0].RawMeanPeak,
+                Is.EqualTo(first.ByGrabId[grabId][0].RawMeanPeak));
+            Assert.That(second.RowByGrabId[grabId].RawMaxPeak,
+                Is.EqualTo(first.RowByGrabId[grabId].RawMaxPeak));
+        }
+
+        [Test]
+        public void BuildSummaries_ChangedIdentityDoesNotUseStaleProjectionIndex()
+        {
+            DateTime date = new DateTime(2026, 8, 11, 11, 0, 0);
+            const string grabId = "260811-110000";
+            var original = new GrabIdInfo
+            {
+                GrabId = grabId,
+                Earliest = date,
+                Latest = date.AddSeconds(9)
+            };
+            var summary = new SingleGrabCurveSummary(
+                new[] { new[] { 25.5f }, (float[])null },
+                new[] { new[] { 51f }, (float[])null }, 1);
+            Assert.That(SingleGrabCurveSummaryStore.TrySave(
+                _tempRoot, original, 2, summary), Is.True);
+            ColumnCurvePeakIndex.BuildSummaries(
+                _tempRoot, new List<GrabIdInfo> { original },
+                new Dictionary<string, float>(),
+                new Dictionary<string, CsvConfigSnapshot>(),
+                2, CancellationToken.None);
+
+            var changed = new GrabIdInfo
+            {
+                GrabId = grabId,
+                Earliest = date,
+                Latest = date.AddSeconds(10)
+            };
+            ColumnCurvePeakIndexResult result = ColumnCurvePeakIndex.BuildSummaries(
+                _tempRoot, new List<GrabIdInfo> { changed },
+                new Dictionary<string, float>(),
+                new Dictionary<string, CsvConfigSnapshot>(),
+                2, CancellationToken.None);
+
+            Assert.That(result.CacheGrabCount, Is.EqualTo(0));
+            Assert.That(result.SummaryGrabCount, Is.EqualTo(0));
+            Assert.That(result.PendingBinGrabInfos, Has.Count.EqualTo(1));
+        }
+
+        [Test]
+        public void BuildAndStoreSummaryProjection_MakesFirstReportReadACacheHit()
+        {
+            DateTime date = new DateTime(2026, 8, 12, 9, 30, 0);
+            const string grabId = "260812-093000";
+            var info = new GrabIdInfo
+            {
+                GrabId = grabId,
+                Earliest = date,
+                Latest = date.AddSeconds(9)
+            };
+            var summary = new SingleGrabCurveSummary(
+                new[] { new[] { 25.5f, 51f }, (float[])null },
+                new[] { new[] { 76.5f, 102f }, (float[])null },
+                new[] { 25.5f, 51f },
+                new[] { 76.5f, 102f },
+                10);
+
+            ColumnCurvePeakIndexResult stored =
+                ColumnCurvePeakIndex.BuildAndStoreSummaryProjection(
+                    _tempRoot, info, null, summary, 2);
+
+            Assert.That(stored.SummaryGrabCount, Is.EqualTo(1));
+            Assert.That(File.Exists(
+                CaptureStoragePaths.DailyCurvePeakIndex(_tempRoot, date)), Is.True);
+            Assert.That(File.Exists(
+                CaptureStoragePaths.GrabCurveSummary(_tempRoot, date, grabId)), Is.False,
+                "The projection writer must not pretend that the asynchronous summary writer ran.");
+
+            ColumnCurvePeakIndexResult loaded = ColumnCurvePeakIndex.BuildSummaries(
+                _tempRoot,
+                new List<GrabIdInfo> { info },
+                new Dictionary<string, float>(),
+                new Dictionary<string, CsvConfigSnapshot>(),
+                2,
+                CancellationToken.None);
+
+            Assert.That(loaded.CacheGrabCount, Is.EqualTo(1));
+            Assert.That(loaded.PendingBinGrabInfos, Is.Empty);
+            Assert.That(loaded.ByGrabId[grabId][0].RawMaxPeak,
+                Is.EqualTo(0.4f).Within(0.0001f));
+            Assert.That(loaded.RowByGrabId[grabId].RawMeanPeak,
+                Is.EqualTo(0.2f).Within(0.0001f));
         }
 
         [Test]
@@ -109,6 +309,10 @@ namespace AniloxRoll.Monitor.Integration.Tests
             File.WriteAllText(Path.Combine(directory, baseName + CaptureFileNaming.RawJpg), "raw");
             WriteCurveBin(Path.Combine(directory, baseName + CaptureFileNaming.MeanC), mean);
             WriteCurveBin(Path.Combine(directory, baseName + CaptureFileNaming.MaxC), max);
+            WriteCurveBin(Path.Combine(directory, baseName + CaptureFileNaming.MeanR),
+                new[] { 25.5f, 51f });
+            WriteCurveBin(Path.Combine(directory, baseName + CaptureFileNaming.MaxR),
+                new[] { 127.5f, 178.5f });
         }
 
         private static void WriteCurveBin(string path, float[] values)

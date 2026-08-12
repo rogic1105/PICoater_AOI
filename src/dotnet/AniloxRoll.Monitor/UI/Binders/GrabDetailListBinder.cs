@@ -30,6 +30,7 @@ namespace AniloxRoll.Monitor.UI.Binders
     {
         private static readonly Color DetailPass = Color.FromArgb(232, 245, 233);
         private static readonly Color DetailFail = Color.FromArgb(255, 235, 238);
+        private static readonly Color DetailUnknown = SystemColors.Window;
 
         private readonly ListView _listView;
         private readonly int _cameraCount;
@@ -217,43 +218,50 @@ namespace AniloxRoll.Monitor.UI.Binders
             var detail = _visibleDetails[index];
             if (detail == null)
                 return BuildPlaceholderItem();
-            var item = new ListViewItem(detail.GrabId);
+            var item = new ListViewItem(detail.GrabId)
+            {
+                UseItemStyleForSubItems = false,
+                BackColor = DetailUnknown
+            };
             bool rowHasFail = false;
             for (int i = 0; i < _cameraCount; i++)
             {
                 bool? result = detail.CamResult != null && i < detail.CamResult.Length
                     ? detail.CamResult[i]
                     : null;
-                if (result == null)
-                    item.SubItems.Add("—");
-                else if (result == false)
-                    item.SubItems.Add("○");
-                else
-                {
-                    item.SubItems.Add("×");
-                    rowHasFail = true;
-                }
+                AddResultSubItem(item, result);
+                rowHasFail |= result == true;
             }
-            if (!detail.RowResult.HasValue)
-                item.SubItems.Add("—");
-            else if (!detail.RowResult.Value)
-                item.SubItems.Add("○");
-            else
-            {
-                item.SubItems.Add("×");
-                rowHasFail = true;
-            }
+            AddResultSubItem(item, detail.RowResult);
+            rowHasFail |= detail.RowResult == true;
 
             item.Tag = rowHasFail;
-            item.BackColor = rowHasFail ? DetailFail : DetailPass;
             return item;
+        }
+
+        private static void AddResultSubItem(ListViewItem item, bool? failed)
+        {
+            string text = !failed.HasValue ? "—" : failed.Value ? "×" : "○";
+            ListViewItem.ListViewSubItem subItem = item.SubItems.Add(text);
+            subItem.BackColor = GetResultBackColor(failed);
+        }
+
+        internal static Color GetResultBackColor(bool? failed)
+        {
+            if (!failed.HasValue) return DetailUnknown;
+            return failed.Value ? DetailFail : DetailPass;
         }
 
         private ListViewItem BuildPlaceholderItem()
         {
-            var item = new ListViewItem(string.Empty) { Tag = false, BackColor = DetailPass };
+            var item = new ListViewItem(string.Empty)
+            {
+                Tag = false,
+                BackColor = DetailUnknown,
+                UseItemStyleForSubItems = false
+            };
             for (int i = 0; i <= _cameraCount; i++)
-                item.SubItems.Add("—");
+                AddResultSubItem(item, null);
             return item;
         }
 
@@ -277,7 +285,7 @@ namespace AniloxRoll.Monitor.UI.Binders
         private void OnDrawSubItem(object sender, DrawListViewSubItemEventArgs e)
         {
             bool rowHasFail = e.Item.Tag is bool failed && failed;
-            Color backColor = rowHasFail ? DetailFail : DetailPass;
+            Color backColor = e.SubItem.BackColor;
             using (var brush = new SolidBrush(backColor))
                 e.Graphics.FillRectangle(brush, e.Bounds);
 

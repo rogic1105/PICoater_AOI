@@ -73,8 +73,11 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
   最終可見合併曲線判定。多幀先合成每台相機 Curve，再與欄圖表共用
   `CurveOverviewMerger + MergeLayout(Midline)` 套用 OPS／Start 與重疊歸屬；每台相機只檢查
   最終畫面實際由它顯示的點，被相鄰相機遮掉的重疊區峰值不得造成 X。
+  索引保存的 `RawMeanPeak/RawMaxPeak` 是 `.bin/.mcsf` 原始 Curve 除以 255，判定必須走
+  `EvaluateRawColumnCurve` 並套 `captureHm * currentHm`；CSV／`#CURVE-C` 已正規化峰值才走
+  `EvaluateColumn` 的 `currentHm / captureHm`。不得把兩種峰值交給同一縮放入口。
   `CurveMean` 峰值只對「欄平均閾值」，`CurveMax` 峰值只對「欄最大閾值」。
-- `欄曲線判定` 同時控制欄圖表顯示、監控欄 MURA 與報表 O/X：顯示平均只啟用 Mean／平均閾值，
+- `欄列曲線判定` 同時控制欄列圖表顯示、監控欄列 MURA 與報表 O/X：顯示平均只啟用 Mean／平均閾值，
   顯示最大只啟用 Max／最大閾值，顯示兩者則任一超標即 X。List、色卡、期間統計與 DVT 必須共用
   `ThresholdContext.EvaluateColumn`，不可各自重寫公式。
 - 擷取完成後寫入 `#CURVE-C,1,grabId,camId,HM_V,meanPeak,maxPeak`；它會覆蓋逐幀

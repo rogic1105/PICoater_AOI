@@ -36,6 +36,7 @@ namespace AniloxRoll.Monitor.Tests
             yield return Route(nameof(InspectionSettings.cb_CropHead), SettingFeatureOwner.LiveLayout);
             yield return Route(nameof(InspectionSettings.cc_CropTail), SettingFeatureOwner.LiveLayout);
             yield return Route(nameof(InspectionSettings.hda_EnhanceHeatmap), SettingFeatureOwner.Enhance);
+            yield return Route(nameof(InspectionSettings.MuraDetectPaused), SettingFeatureOwner.MuraPause);
             yield return Route(nameof(InspectionSettings.gb_ChartScaleMode), SettingFeatureOwner.ChartScale);
             yield return Route(nameof(InspectionSettings.fb_BackgroundSampleSeconds), SettingFeatureOwner.None);
             yield return Route(

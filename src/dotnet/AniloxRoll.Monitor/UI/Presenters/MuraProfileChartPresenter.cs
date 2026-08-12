@@ -72,7 +72,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_ctx.ChartDataPatch == null) return;
             _muraProfileHelper = new ColumnCurveChartHelper(_ctx.ChartDataPatch);
             _muraProfileHelper.SetVisibleMetrics(
-                _ctx.Settings.ShowColumnMean, _ctx.Settings.ShowColumnMax);
+                _ctx.Settings.ShowCurveMean, _ctx.Settings.ShowCurveMax);
             if (_ctx.ChartDataRow != null)
             {
                 _rowDisplay = new RowCurveDisplayAdapter(
@@ -84,6 +84,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 _rowDisplay.SetThresholds(
                     _ctx.Settings.ErrorValueMeanH,
                     _ctx.Settings.ErrorValueMaxH);
+                _rowDisplay.SetVisibleMetrics(
+                    _ctx.Settings.ShowCurveMean,
+                    _ctx.Settings.ShowCurveMax);
             }
             _ctx.ChartDataPatch.PostPaint += OnColumnChartPostPaint;
             if (_ctx.ChartDataRow != null)
@@ -382,6 +385,16 @@ namespace AniloxRoll.Monitor.UI.Presenters
             else
                 _rowDisplay.UpdateData(mean, max);
             _rowHasData = true;
+            float displayMeanPeak = ThresholdContext.FindPeakNormalized(mean);
+            float displayMaxPeak = ThresholdContext.FindPeakNormalized(max);
+            float valueScale = HessianRescaleHelper.RawCurveToDisplayScale(
+                captureHmV, _ctx.Settings.HessianMaxFactorH);
+            FlowTrace.Dvt(
+                $"DT row curve display {grabId} " +
+                $"mode={_ctx.Settings.ColumnCurveMode.ToString().ToLowerInvariant()} " +
+                $"mean={displayMeanPeak:F4}/{_ctx.Settings.ErrorValueMeanH:F4} " +
+                $"max={displayMaxPeak:F4}/{_ctx.Settings.ErrorValueMaxH:F4} " +
+                $"scale={valueScale:F4} points={mean.Length}");
             FlowTrace.Log($"DT row curve load {grabId} source=shared storage={data.StorageSource} " +
                 $"points={mean.Length} pitch={_rowDisplay.RowPitchMm:F6}mm");
         }
@@ -408,9 +421,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
             if (_muraProfileHelper == null) return;
             _muraProfileHelper.SetThresholds(_ctx.Settings.ErrorValueMeanV, _ctx.Settings.ErrorValueMaxV);
             _muraProfileHelper.SetVisibleMetrics(
-                _ctx.Settings.ShowColumnMean, _ctx.Settings.ShowColumnMax);
+                _ctx.Settings.ShowCurveMean, _ctx.Settings.ShowCurveMax);
             _rowDisplay?.SetThresholds(
                 _ctx.Settings.ErrorValueMeanH, _ctx.Settings.ErrorValueMaxH);
+            _rowDisplay?.SetVisibleMetrics(
+                _ctx.Settings.ShowCurveMean, _ctx.Settings.ShowCurveMax);
             // 單片模式只從記憶體中的原始 Curve 重算，不重新讀檔、不重新 prefit。
             // 這讓正規值連續變更只改曲線高度，不改欄／列的物理座標範圍。
             if (_getActiveStatMode() == _ctx.GrpDataSingleSheet && _presentedData != null)

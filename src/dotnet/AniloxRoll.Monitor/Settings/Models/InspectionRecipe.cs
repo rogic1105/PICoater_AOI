@@ -78,7 +78,7 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         [DisplayName("去背演算法")]    public BackgroundAlgorithm Algorithm { get; set; } = InspectionDefaults.Algorithm;
         [DisplayName("Ridge 方向")]    public RidgeDirection RidgeDir { get; set; } = InspectionDefaults.RidgeDir;
-        [DisplayName("欄曲線判定")] public ColumnCurveDisplayMode ColumnCurveMode { get; set; } = InspectionDefaults.ColumnCurveMode;
+        [DisplayName("欄列曲線判定")] public ColumnCurveDisplayMode ColumnCurveMode { get; set; } = InspectionDefaults.ColumnCurveMode;
         [DisplayName("Hessian Max Factor V")] public float HessianMaxFactorV { get; set; } = InspectionDefaults.HessianMaxFactorV;
         [DisplayName("Hessian Max Factor H")] public float HessianMaxFactorH { get; set; } = InspectionDefaults.HessianMaxFactorH;
 

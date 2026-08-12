@@ -34,6 +34,13 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public double RowPitchMm => _chart.RowPitchMm;
         public void SetThresholds(float mean, float max) => _chart.SetThresholds(mean, max);
+        public void SetVisibleMetrics(bool showMean, bool showMax)
+        {
+            _chart.SetVisibleMetrics(showMean, showMax);
+            if (FlowName != null)
+                Core.Services.FlowTrace.Dvt(
+                    $"{FlowName} metrics mean={showMean} max={showMax}");
+        }
         public void SetRowPitchFromSpeed(double speedMPerMin, double lineRateHz)
             => _chart.SetRowPitchFromSpeed(speedMPerMin, lineRateHz);
         public void SetRowPitch(double mmPerRow) => _chart.SetRowPitch(mmPerRow);

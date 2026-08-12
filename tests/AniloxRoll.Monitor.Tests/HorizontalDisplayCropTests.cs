@@ -89,5 +89,31 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(left, Is.EqualTo(20d));
             Assert.That(right, Is.EqualTo(170d));
         }
+
+        [Test]
+        public void ColumnChartExistingFullRange_IsClampedToDisplayCrop()
+        {
+            double left = 0d;
+            double right = 200d;
+
+            CurveMergeHelper.ResolveHorizontalDisplayRange(
+                0d, 200, 1d, 20d, 30d, ref left, ref right);
+
+            Assert.That(left, Is.EqualTo(20d));
+            Assert.That(right, Is.EqualTo(170d));
+        }
+
+        [Test]
+        public void ColumnChartExistingZoomInsideCrop_IsPreserved()
+        {
+            double left = 40d;
+            double right = 100d;
+
+            CurveMergeHelper.ResolveHorizontalDisplayRange(
+                0d, 200, 1d, 20d, 30d, ref left, ref right);
+
+            Assert.That(left, Is.EqualTo(40d));
+            Assert.That(right, Is.EqualTo(100d));
+        }
     }
 }

@@ -392,11 +392,16 @@ namespace TanukiCv.Controls
             area.AxisX.StripLines.Clear();
             if (_showThresholds)
             {
-                area.AxisX.StripLines.Add(MakeStripLine(_errorValueMax,  ChartDashStyle.Solid));
-                area.AxisX.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
+                if (_showMaxMetric)
+                    area.AxisX.StripLines.Add(MakeStripLine(_errorValueMax, ChartDashStyle.Solid));
+                if (_showMeanMetric)
+                    area.AxisX.StripLines.Add(MakeStripLine(_errorValueMean, ChartDashStyle.Dash));
             }
 
-            double xMax = Math.Max(1.0, Math.Max(_errorValueMean, _errorValueMax) * 1.1);
+            double activeThreshold = _showMeanMetric && _showMaxMetric
+                ? Math.Max(_errorValueMean, _errorValueMax)
+                : _showMeanMetric ? _errorValueMean : _errorValueMax;
+            double xMax = Math.Max(1.0, activeThreshold * 1.1);
             area.AxisX.Maximum = xMax;
         }
     }

@@ -122,8 +122,8 @@ namespace AniloxRoll.Monitor.Core.Data
         public float dd_HessianMaxFactorH { get => Recipe.HessianMaxFactorH; set => Recipe.HessianMaxFactorH = value; }
         [Category(CategoryInspection)][DisplayName("細線濾除")][PropertyOrder(8)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float de_RidgeSigma { get => Recipe.RidgeSigma; set => Recipe.RidgeSigma = value; }
-        [Category(CategoryInspection)][DisplayName("欄曲線判定")][PropertyOrder(9)]
-        [Description("同時決定欄圖表顯示哪些曲線，以及報表 O/X 使用哪些門檻。")]
+        [Category(CategoryInspection)][DisplayName("欄列曲線判定")][PropertyOrder(9)]
+        [Description("同時決定欄列圖表顯示哪些曲線，以及報表 O/X 使用哪些門檻。")]
         public ColumnCurveDisplayMode eca_ColumnCurveMode { get => Recipe.ColumnCurveMode; set => Recipe.ColumnCurveMode = value; }
         [Category(CategoryInspection)][DisplayName("欄平均閾值")][PropertyOrder(10)][TypeConverter(typeof(LeftAlignNumericConverter))]
         public float ec_ErrorValueMeanV { get => Recipe.ErrorValueMeanV; set => Recipe.ErrorValueMeanV = value; }
@@ -150,8 +150,8 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public BackgroundAlgorithm Algorithm       { get => Recipe.Algorithm;       set => Recipe.Algorithm       = value; }
         [Browsable(false)] public RidgeDirection      RidgeDir        { get => Recipe.RidgeDir;        set => Recipe.RidgeDir        = value; }
         [Browsable(false)] public ColumnCurveDisplayMode ColumnCurveMode { get => Recipe.ColumnCurveMode; set => Recipe.ColumnCurveMode = value; }
-        [Browsable(false)] public bool ShowColumnMean => ColumnCurveMode != ColumnCurveDisplayMode.Max;
-        [Browsable(false)] public bool ShowColumnMax => ColumnCurveMode != ColumnCurveDisplayMode.Mean;
+        [Browsable(false)] public bool ShowCurveMean => ColumnCurveMode != ColumnCurveDisplayMode.Max;
+        [Browsable(false)] public bool ShowCurveMax => ColumnCurveMode != ColumnCurveDisplayMode.Mean;
         [Browsable(false)] public float  HessianMaxFactorV      { get => Recipe.HessianMaxFactorV;      set => Recipe.HessianMaxFactorV      = value; }
         [Browsable(false)] public float  HessianMaxFactorH      { get => Recipe.HessianMaxFactorH;      set => Recipe.HessianMaxFactorH      = value; }
         [Browsable(false)] public float  RidgeSigma             { get => Recipe.RidgeSigma;             set => Recipe.RidgeSigma             = value; }
@@ -161,37 +161,37 @@ namespace AniloxRoll.Monitor.Core.Data
         [Browsable(false)] public double AniloxRollSpeedMPerMin  { get => Recipe.AniloxRollSpeedMPerMin;  set => Recipe.AniloxRollSpeedMPerMin  = value; }
 
         // ===== 3. 圖表設定 =====
-        [Category(CategoryCharts)][DisplayName("─ 檢測報表 ─")][ReadOnly(true)][PropertyOrder(1)]
-        public string ga_ChartHeader => "";
-        [Category(CategoryCharts)][DisplayName("y座標")][PropertyOrder(2)]
-        public ChartScaleMode gb_ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
-        [Category(CategoryCharts)][DisplayName("月產量")][PropertyOrder(3)][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public int gc_YearlyYMax { get => Chart.YearlyYMax; set => Chart.YearlyYMax = value; }
-        [Category(CategoryCharts)][DisplayName("日產量")][PropertyOrder(4)][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public int gd_MonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
-        [Category(CategoryCharts)][DisplayName("時產量")][PropertyOrder(5)][TypeConverter(typeof(LeftAlignNumericConverter))]
-        public int ge_DailyYMax { get => Chart.DailyYMax; set => Chart.DailyYMax = value; }
-
-        [Category(CategoryCharts)][DisplayName("─ 主畫面 ─")][ReadOnly(true)][PropertyOrder(6)]
+        [Category(CategoryCharts)][DisplayName("─ 主畫面 ─")][ReadOnly(true)][PropertyOrder(1)]
         public string ha_DisplayHeader => "";
         // 合圖方式選項已退場（2026-06-13 上機決策：app 永遠 Global 合圖；單張模式留 sample）。
         // PG 隱藏 + setter 強制 Global（絞殺式：Vertical 分支變死路，Stage4 刪死碼）。
         [Browsable(false)]
         public StitchMode hb_StitchMode { get => StitchMode.Global; set => ImageView.StitchMode = StitchMode.Global; }
-        [Category(CategoryCharts)][DisplayName("監控強化")][PropertyOrder(7)][TypeConverter(typeof(BoolYesNoConverter))]
+        [Category(CategoryCharts)][DisplayName("監控強化")][PropertyOrder(2)][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hc_EnableMuraEnhance { get => ImageView.EnableMuraEnhance; set => ImageView.EnableMuraEnhance = value; }
-        [Category(CategoryCharts)][DisplayName("回顧強化")][PropertyOrder(8)][TypeConverter(typeof(BoolYesNoConverter))]
+        [Category(CategoryCharts)][DisplayName("回顧強化")][PropertyOrder(3)][TypeConverter(typeof(BoolYesNoConverter))]
         public bool hd_EnableReviewEnhance { get => ImageView.EnableReviewEnhance; set => ImageView.EnableReviewEnhance = value; }
-        [Category(CategoryCharts)][DisplayName("強化熱力圖")][PropertyOrder(9)][Description("冷色、暖色、藍黃紅或綠階；只有主畫面的欄／列強化圖上色，原圖、縮圖、檢測與存檔資料不變。")]
+        [Category(CategoryCharts)][DisplayName("強化熱力圖")][PropertyOrder(4)][Description("冷色、暖色、藍黃紅或綠階；只有主畫面的欄／列強化圖上色，原圖、縮圖、檢測與存檔資料不變。")]
         public EnhanceHeatmapMode hda_EnhanceHeatmap { get => ImageView.EnhanceHeatmap; set => ImageView.EnhanceHeatmap = value; }
-        [Category(CategoryCharts)][DisplayName("主畫面顯示")][PropertyOrder(10)][Description("即時=CPU 繪、跟回顧畫布同源；瀑布=全幅合圖即時捲動。變更後重開抓取生效。")]
+        [Category(CategoryCharts)][DisplayName("主畫面顯示")][PropertyOrder(5)][Description("即時=CPU 繪、跟回顧畫布同源；瀑布=全幅合圖即時捲動。變更後重開抓取生效。")]
         public MainDisplayMode he_MainDisplay { get => ImageView.MainDisplay; set => ImageView.MainDisplay = value; }
-        [Category(CategoryCharts)][DisplayName("上下方向")][PropertyOrder(11)][Description("監控與回顧主畫面共用；預設由下而上。")]
+        [Category(CategoryCharts)][DisplayName("上下方向")][PropertyOrder(6)][Description("監控與回顧主畫面共用；預設由下而上。")]
         public VerticalDisplayDirection hee_VerticalDirection { get => ImageView.VerticalDirection; set => ImageView.VerticalDirection = value; }
-        [Category(CategoryCharts)][DisplayName("動態LOD")][PropertyOrder(12)][Description("Off=關；GPU=TanukiCv GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。即時模式即時生效。")]
+        [Category(CategoryCharts)][DisplayName("動態LOD")][PropertyOrder(7)][Description("Off=關；GPU=TanukiCv GPU 縮；CPU=純 CPU 縮。放大巨圖看細節用（顯示成本大降）。即時模式即時生效。")]
         public LiveLodMode hf_LiveLod { get => ImageView.LiveLod; set => ImageView.LiveLod = value; }
-        [Category(CategoryCharts)][DisplayName("瀑布滿了")][PropertyOrder(13)][Description("瀑布圖填滿總高後：重來=清空黑幕從頭；循環=從頭覆蓋最舊的連續捲。")]
+        [Category(CategoryCharts)][DisplayName("瀑布滿了")][PropertyOrder(8)][Description("瀑布圖填滿總高後：重來=清空黑幕從頭；循環=從頭覆蓋最舊的連續捲。")]
         public WaterfallFullMode hh_WaterfallFullMode { get => ImageView.WaterfallFullMode; set => ImageView.WaterfallFullMode = value; }
+
+        [Category(CategoryCharts)][DisplayName("─ 檢測報表 ─")][ReadOnly(true)][PropertyOrder(9)]
+        public string ga_ChartHeader => "";
+        [Category(CategoryCharts)][DisplayName("y座標")][PropertyOrder(10)]
+        public ChartScaleMode gb_ChartScaleMode { get => Chart.ScaleMode; set => Chart.ScaleMode = value; }
+        [Category(CategoryCharts)][DisplayName("月產量")][PropertyOrder(11)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public int gc_YearlyYMax { get => Chart.YearlyYMax; set => Chart.YearlyYMax = value; }
+        [Category(CategoryCharts)][DisplayName("日產量")][PropertyOrder(12)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public int gd_MonthlyYMax { get => Chart.MonthlyYMax; set => Chart.MonthlyYMax = value; }
+        [Category(CategoryCharts)][DisplayName("時產量")][PropertyOrder(13)][TypeConverter(typeof(LeftAlignNumericConverter))]
+        public int ge_DailyYMax { get => Chart.DailyYMax; set => Chart.DailyYMax = value; }
 
         // 向後相容：程式碼中直接存取的快捷屬性
         [Browsable(false)] public bool EnableMuraEnhance   { get => ImageView.EnableMuraEnhance;   set => ImageView.EnableMuraEnhance   = value; }

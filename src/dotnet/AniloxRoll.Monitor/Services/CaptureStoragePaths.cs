@@ -36,6 +36,13 @@ namespace AniloxRoll.Monitor.Core.Services
         public static string GrabCurveSummary(string root, DateTime captureDate, string grabId) =>
             Path.Combine(DateImageDir(root, captureDate), "_curve_summary", grabId + ".mcsf");
 
+        /// <summary>
+        /// Rebuildable daily scalar index projected from the curves that are actually displayed.
+        /// It lives with the capture day so retention removes the cache with its source data.
+        /// </summary>
+        public static string DailyCurvePeakIndex(string root, DateTime captureDate) =>
+            Path.Combine(DateImageDir(root, captureDate), "_curve_summary", "curve-peaks.mcpi");
+
         /// <summary>One appendable archive per grab, stored beside that day's capture outputs.</summary>
         public static string GrabArchive(string root, DateTime captureDate, string grabId) =>
             Path.Combine(DateImageDir(root, captureDate), grabId + CaptureArchiveStore.Extension);

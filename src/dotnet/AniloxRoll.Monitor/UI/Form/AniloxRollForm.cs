@@ -840,13 +840,13 @@ namespace AniloxRoll.Monitor.Forms
 
             _reviewOverviewHelper = new ColumnCurveChartHelper(this.chartReviewColumn);
             _reviewOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            _reviewOverviewHelper.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
+            _reviewOverviewHelper.SetVisibleMetrics(_settings.ShowCurveMean, _settings.ShowCurveMax);
             if (chartReviewColumn.ChartAreas.Count > 0)
                 chartReviewColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
             _liveOverviewHelper = new ColumnCurveChartHelper(this.chartLiveColumn);
             _liveOverviewHelper.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-            _liveOverviewHelper.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
+            _liveOverviewHelper.SetVisibleMetrics(_settings.ShowCurveMean, _settings.ShowCurveMax);
             if (chartLiveColumn.ChartAreas.Count > 0)
                 chartLiveColumn.ChartAreas[0].AxisX.ScaleView.Zoomable = false;
 
@@ -860,11 +860,13 @@ namespace AniloxRoll.Monitor.Forms
             _liveRowSync = new RowCurveSyncCoordinator(_liveRowDisplay);
             _liveRowSync.DataAccepted += OnLiveRowCurveAccepted;
             _liveRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _liveRowDisplay.SetVisibleMetrics(_settings.ShowCurveMean, _settings.ShowCurveMax);
 
             _reviewRowChartHelper = new RowCurveChartHelper(this.chartReviewRow);
             _reviewRowDisplay = new RowCurveDisplayAdapter(_reviewRowChartHelper, GetVerticalDisplayDirection) { FlowName = "RV row" };
             _reviewRowSync = new RowCurveSyncCoordinator(_reviewRowDisplay);
             _reviewRowDisplay.SetThresholds(_settings.ErrorValueMeanH, _settings.ErrorValueMaxH);
+            _reviewRowDisplay.SetVisibleMetrics(_settings.ShowCurveMean, _settings.ShowCurveMax);
 
             chartReviewColumn.PostPaint += (s, e) => LogReviewChartPaint(isRow: false);
             chartReviewRow.PostPaint += (s, e) => LogReviewChartPaint(isRow: true);
@@ -1340,7 +1342,7 @@ namespace AniloxRoll.Monitor.Forms
             nameof(InspectionRecipe.ErrorValueMaxV),   "Error Value Max V",  "欄最大閾值",
             nameof(InspectionRecipe.ErrorValueMeanH),  "Error Value Mean H", "列平均閾值",
             nameof(InspectionRecipe.ErrorValueMaxH),   "Error Value Max H",  "列最大閾值",
-            nameof(InspectionRecipe.ColumnCurveMode),  "Column Curve Mode",  "欄曲線判定",
+            nameof(InspectionRecipe.ColumnCurveMode),  "Column Curve Mode",  "欄列曲線判定",
             nameof(InspectionRecipe.Algorithm),        "去背演算法",
             nameof(InspectionRecipe.RidgeDir),         "Ridge 方向",
         };
@@ -1449,7 +1451,8 @@ namespace AniloxRoll.Monitor.Forms
             if ((impacts & SettingImpact.ColumnThresholds) != 0)
             {
                 _reviewOverviewHelper?.SetThresholds(_settings.ErrorValueMeanV, _settings.ErrorValueMaxV);
-                _reviewOverviewHelper?.SetVisibleMetrics(_settings.ShowColumnMean, _settings.ShowColumnMax);
+                _reviewOverviewHelper?.SetVisibleMetrics(_settings.ShowCurveMean, _settings.ShowCurveMax);
+                _reviewRowDisplay?.SetVisibleMetrics(_settings.ShowCurveMean, _settings.ShowCurveMax);
             }
             if ((impacts & SettingImpact.RowThresholds) != 0)
             {

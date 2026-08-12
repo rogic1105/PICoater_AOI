@@ -60,6 +60,57 @@ namespace AniloxRoll.Monitor.Tests
             Assert.That(result.Cause, Is.EqualTo(ColumnFailureCause.Max));
         }
 
+        [TestCase(0.5f, 0.5f, 0.4f)]
+        [TestCase(0.5f, 1.0f, 0.8f)]
+        [TestCase(0.5f, 1.5f, 1.2f)]
+        public void EvaluateColumn_CurrentNormalizationScalesPeakLinearly(
+            float captureNormalization,
+            float currentNormalization,
+            float expectedPeak)
+        {
+            var context = new ThresholdContext(
+                currentNormalization, 2f, 2f,
+                1f, 2f, 2f,
+                ColumnCurveDisplayMode.Max);
+
+            ColumnVerdictEvaluation result = context.EvaluateColumn(
+                float.NaN, 0.4f, captureNormalization);
+
+            Assert.That(result.DisplayMaxPeak, Is.EqualTo(expectedPeak).Within(0.0001f));
+            Assert.That(result.IsFail, Is.False);
+        }
+
+        [Test]
+        public void EvaluateRawColumnCurve_UsesSameScaleAsDisplayedCurve()
+        {
+            var context = new ThresholdContext(
+                1f, 0.30f, 0.60f,
+                1f, 0.20f, 0.60f,
+                ColumnCurveDisplayMode.Both);
+
+            ColumnVerdictEvaluation result = context.EvaluateRawColumnCurve(
+                0.06982818f, 1.52019489f, 0.3f);
+
+            Assert.That(result.DisplayMeanPeak, Is.EqualTo(0.02094845f).Within(0.0001f));
+            Assert.That(result.DisplayMaxPeak, Is.EqualTo(0.45605847f).Within(0.0001f));
+            Assert.That(result.IsFail, Is.False);
+        }
+
+        [TestCase(ColumnCurveDisplayMode.Mean, true, false)]
+        [TestCase(ColumnCurveDisplayMode.Max, false, true)]
+        [TestCase(ColumnCurveDisplayMode.Both, true, true)]
+        public void EvaluateColumn_ReportsExactlyTheEnabledMetrics(
+            ColumnCurveDisplayMode mode,
+            bool meanEnabled,
+            bool maxEnabled)
+        {
+            ColumnVerdictEvaluation result = Create(mode).EvaluateColumn(
+                0.1f, 0.1f, 1f);
+
+            Assert.That(result.MeanEnabled, Is.EqualTo(meanEnabled));
+            Assert.That(result.MaxEnabled, Is.EqualTo(maxEnabled));
+        }
+
         [Test]
         public void EvaluateColumn_SingleMeanValueBelowThreshold_Passes()
         {
@@ -89,6 +140,77 @@ namespace AniloxRoll.Monitor.Tests
                 out _);
 
             Assert.That(result, Is.Null);
+        }
+
+        [TestCase(ColumnCurveDisplayMode.Mean, 0.10f, 0.90f, false)]
+        [TestCase(ColumnCurveDisplayMode.Mean, 0.30f, 0.10f, true)]
+        [TestCase(ColumnCurveDisplayMode.Max, 0.90f, 0.50f, false)]
+        [TestCase(ColumnCurveDisplayMode.Max, 0.10f, 0.70f, true)]
+        [TestCase(ColumnCurveDisplayMode.Both, 0.30f, 0.10f, true)]
+        [TestCase(ColumnCurveDisplayMode.Both, 0.10f, 0.70f, true)]
+        public void IsRowFail_AppliesSelectedDetectionMetrics(
+            ColumnCurveDisplayMode mode,
+            float meanPeak,
+            float maxPeak,
+            bool expected)
+        {
+            bool? result = Create(mode).IsRowFail(meanPeak, maxPeak, 1f);
+
+            Assert.That(result, Is.EqualTo(expected));
+        }
+
+        [Test]
+        public void IsRowFail_WhenSelectedMetricIsMissing_ReturnsUnknown()
+        {
+            bool? result = Create(ColumnCurveDisplayMode.Mean).IsRowFail(
+                float.NaN, 0.90f, 1f);
+
+            Assert.That(result, Is.Null);
+        }
+
+        [Test]
+        public void EvaluateRawRowCurve_NormalizationCanCrossThresholdBothDirections()
+        {
+            var low = new ThresholdContext(
+                1f, 1f, 1f,
+                0.5f, 0.7f, 0.6f,
+                ColumnCurveDisplayMode.Max,
+                RidgeDirection.Both);
+            var high = new ThresholdContext(
+                1f, 1f, 1f,
+                3.4f, 0.7f, 0.6f,
+                ColumnCurveDisplayMode.Max,
+                RidgeDirection.Both);
+
+            ColumnVerdictEvaluation lowResult = low.EvaluateRawRowCurve(
+                float.NaN, 0.25f, 1f);
+            ColumnVerdictEvaluation highResult = high.EvaluateRawRowCurve(
+                float.NaN, 0.25f, 1f);
+
+            Assert.That(lowResult.DisplayMaxPeak, Is.EqualTo(0.125f).Within(0.0001f));
+            Assert.That(lowResult.IsFail, Is.False);
+            Assert.That(highResult.DisplayMaxPeak, Is.EqualTo(0.85f).Within(0.0001f));
+            Assert.That(highResult.IsFail, Is.True);
+        }
+
+        [TestCase(RidgeDirection.Vertical, true, false)]
+        [TestCase(RidgeDirection.Horizontal, false, true)]
+        [TestCase(RidgeDirection.Both, true, true)]
+        public void DetectionDirection_EnablesOnlyRequestedListAxes(
+            RidgeDirection direction, bool columnEnabled, bool rowEnabled)
+        {
+            var context = new ThresholdContext(
+                1f, 0.2f, 0.6f,
+                1f, 0.2f, 0.6f,
+                ColumnCurveDisplayMode.Both,
+                direction);
+
+            Assert.That(context.ColumnDetectionEnabled, Is.EqualTo(columnEnabled));
+            Assert.That(context.RowDetectionEnabled, Is.EqualTo(rowEnabled));
+            Assert.That(context.EvaluateRawColumnCurve(1f, 1f, 1f).HasData,
+                Is.EqualTo(columnEnabled));
+            Assert.That(context.EvaluateRawRowCurve(1f, 1f, 1f).HasData,
+                Is.EqualTo(rowEnabled));
         }
 
         [TestCase(ColumnCurveDisplayMode.Mean, 0.21f, 0.10f, ColumnFailureCause.Mean)]
@@ -131,8 +253,8 @@ namespace AniloxRoll.Monitor.Tests
             ColumnCurvePeakRecord[] records = ColumnCurvePeakIndex.ProjectVisibleRecords(
                 "grab", means, maxes, config, 1f, 2);
 
-            Assert.That(records[0].MeanPeak, Is.EqualTo(30f / 255f).Within(0.0001f));
-            Assert.That(records[1].MeanPeak, Is.EqualTo(70f / 255f).Within(0.0001f));
+            Assert.That(records[0].RawMeanPeak, Is.EqualTo(30f / 255f).Within(0.0001f));
+            Assert.That(records[1].RawMeanPeak, Is.EqualTo(70f / 255f).Within(0.0001f));
         }
 
         private static ThresholdContext Create(

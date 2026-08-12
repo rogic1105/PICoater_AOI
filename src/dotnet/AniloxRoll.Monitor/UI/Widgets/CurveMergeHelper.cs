@@ -78,13 +78,27 @@ namespace AniloxRoll.Monitor.UI.Widgets
             ref double viewLeft,
             ref double viewRight)
         {
-            if (!double.IsNaN(viewLeft) && !double.IsNaN(viewRight)) return;
             if (trimHeadMm <= 0 && trimTailMm <= 0) return;
 
             HorizontalDisplayCrop crop = HorizontalDisplayCrop.Compute(
                 pointCount, dataStartMm, pointPitchMm, trimHeadMm, trimTailMm);
-            viewLeft = crop.VisibleStartMm;
-            viewRight = crop.VisibleStartMm + crop.VisibleWidthPx * Math.Max(0, pointPitchMm);
+            double cropLeft = crop.VisibleStartMm;
+            double cropRight = crop.VisibleStartMm +
+                crop.VisibleWidthPx * Math.Max(0, pointPitchMm);
+            if (double.IsNaN(viewLeft) || double.IsNaN(viewRight))
+            {
+                viewLeft = cropLeft;
+                viewRight = cropRight;
+                return;
+            }
+
+            viewLeft = Math.Max(viewLeft, cropLeft);
+            viewRight = Math.Min(viewRight, cropRight);
+            if (viewRight <= viewLeft)
+            {
+                viewLeft = cropLeft;
+                viewRight = cropRight;
+            }
         }
 
         internal static void ScaleMergedCurveValues(float[] mean, float[] max, float valueScale)

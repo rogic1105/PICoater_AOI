@@ -142,6 +142,7 @@
     <Compile Include="Services\IoGrabController.cs" />
     <Compile Include="Services\IoState.cs" />
     <Compile Include="Services\ColumnCurvePeakIndex.cs" />
+    <Compile Include="Services\CurvePeakProjectionIndexStore.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
     <Compile Include="Services\InspectionCsvReader.cs" />
     <Compile Include="Services\InspectionConfigRepository.cs" />

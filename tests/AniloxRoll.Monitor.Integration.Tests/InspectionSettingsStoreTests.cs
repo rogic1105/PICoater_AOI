@@ -91,6 +91,30 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void SaveAndLoad_PersistsLiveInspectionDisplayPolicy()
+        {
+            var settings = new InspectionSettings
+            {
+                cb_CropHead = 12.5,
+                cc_CropTail = 34.5,
+                dc_HessianMaxFactorV = 0.7f,
+                dd_HessianMaxFactorH = 1.3f,
+                eca_ColumnCurveMode = ColumnCurveDisplayMode.Mean
+            };
+
+            InspectionSettingsStore.Save(settings);
+            InspectionSettings loaded = InspectionSettingsStore.Load();
+
+            Assert.That(loaded.cb_CropHead, Is.EqualTo(12.5).Within(0.001));
+            Assert.That(loaded.cc_CropTail, Is.EqualTo(34.5).Within(0.001));
+            Assert.That(loaded.dc_HessianMaxFactorV, Is.EqualTo(0.7f).Within(0.001f));
+            Assert.That(loaded.dd_HessianMaxFactorH, Is.EqualTo(1.3f).Within(0.001f));
+            Assert.That(loaded.eca_ColumnCurveMode, Is.EqualTo(ColumnCurveDisplayMode.Mean));
+            Assert.That(loaded.MuraDetectPaused, Is.False,
+                "Pause is an operational safety state and must reset on restart.");
+        }
+
+        [Test]
         public void Load_WhenConfigIsMissing_DefaultsMainDisplayToWaterfall()
         {
             var loaded = InspectionSettingsStore.Load();

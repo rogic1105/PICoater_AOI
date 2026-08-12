@@ -99,6 +99,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private float _singleGrabDetailIndexHmH;
         private float _singleGrabDetailIndexRowErrMean;
         private float _singleGrabDetailIndexRowErrMax;
+        private RidgeDirection _singleGrabDetailIndexRidgeDirection;
         private bool _singleGrabDetailIndexReady;
         private bool _showFailOnly;
         private bool _preserveDetailListDuringSelection;
@@ -112,6 +113,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             new Dictionary<string, CsvConfigSnapshot>(StringComparer.Ordinal);
         private Dictionary<string, ColumnCurvePeakRecord[]> _columnCurvePeaks =
             new Dictionary<string, ColumnCurvePeakRecord[]>(StringComparer.Ordinal);
+        private Dictionary<string, RowCurvePeakRecord> _rowCurvePeaks =
+            new Dictionary<string, RowCurvePeakRecord>(StringComparer.Ordinal);
         private CancellationTokenSource _columnCurvePeakIndexCts;
         private int _columnCurvePeakIndexGeneration;
 
@@ -555,11 +558,11 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void OnSingleGrabCurvePresented(
             string root, string grabId, SingleGrabCurveData data)
         {
-            ApplyMergedColumnVerdict(grabId, data);
+            ApplyMergedCurveVerdicts(grabId, data);
             SingleGrabCurvePresented?.Invoke(root, grabId, data);
         }
 
-        private void ApplyMergedColumnVerdict(string grabId, SingleGrabCurveData data)
+        private void ApplyMergedCurveVerdicts(string grabId, SingleGrabCurveData data)
         {
             if (string.IsNullOrWhiteSpace(grabId) || data == null) return;
 
@@ -579,30 +582,32 @@ namespace AniloxRoll.Monitor.UI.Presenters
             ColumnCurvePeakRecord[] records = ColumnCurvePeakIndex.ProjectVisibleRecords(
                 grabId, data.ColumnMean, data.ColumnMax,
                 config, captureHmV, _ctx.CameraCount);
-            if (records == null) return;
-            _columnCurvePeaks[grabId] = records;
-            int cameraCount = Math.Min(detail.CamResult.Length, records.Length);
-
-            for (int i = 0; i < cameraCount; i++)
+            Array.Clear(detail.CamResult, 0, detail.CamResult.Length);
+            if (threshold.ColumnDetectionEnabled && records != null)
             {
-                ColumnCurvePeakRecord record = records[i];
-                if (record == null) continue;
-                ColumnVerdictEvaluation evaluation = threshold.EvaluateColumn(
-                    record.MeanPeak, record.MaxPeak, record.CaptureHmV);
-                if (!evaluation.HasData) continue;
+                _columnCurvePeaks[grabId] = records;
+                int cameraCount = Math.Min(detail.CamResult.Length, records.Length);
+                for (int i = 0; i < cameraCount; i++)
+                {
+                    ColumnCurvePeakRecord record = records[i];
+                    if (record == null) continue;
+                    ColumnVerdictEvaluation evaluation = threshold.EvaluateRawColumnCurve(
+                        record.RawMeanPeak, record.RawMaxPeak, record.CaptureHmV);
+                    if (!evaluation.HasData) continue;
 
-                detail.CamResult[i] = evaluation.IsFail;
-                FlowTrace.Log(
-                    $"DT verdict {grabId} cam={i + 1} " +
-                    $"mode={threshold.ColumnCurveMode.ToString().ToLowerInvariant()} " +
-                    $"mean={evaluation.DisplayMeanPeak:F4}/{threshold.CurrentErrMean:F4} " +
-                    $"enabled={(threshold.ColumnCurveMode == ColumnCurveDisplayMode.Max ? 0 : 1)} " +
-                    $"max={evaluation.DisplayMaxPeak:F4}/{threshold.CurrentErrMax:F4} " +
-                    $"enabled={(threshold.ColumnCurveMode == ColumnCurveDisplayMode.Mean ? 0 : 1)} " +
-                    $"result={(evaluation.IsFail ? "fail" : "pass")} " +
-                    $"cause={evaluation.Cause.ToString().ToLowerInvariant()} " +
-                    "source=visible-merged-curve");
+                    detail.CamResult[i] = evaluation.IsFail;
+                    LogCurveVerdict(grabId, "column", i + 1, evaluation,
+                        threshold.CurrentErrMean, threshold.CurrentErrMax, threshold);
+                }
             }
+
+            RowCurvePeakRecord rowRecord = CreateRowCurvePeakRecord(
+                grabId, data.MergedRowMean, data.MergedRowMax, captureHmV);
+            if (rowRecord != null)
+                _rowCurvePeaks[grabId] = rowRecord;
+            else
+                _rowCurvePeaks.Remove(grabId);
+            ApplyRowCurveVerdict(detail, rowRecord, threshold, log: true);
 
             _ctx.GrabDetailList.Refresh(grabId);
             if (string.Equals(Convert.ToString(_ctx.CbDataGrabId.SelectedItem),
@@ -675,7 +680,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                 && _singleGrabDetailIndexColumnMode == _ctx.Settings.ColumnCurveMode
                 && _singleGrabDetailIndexHmH == _ctx.Settings.HessianMaxFactorH
                 && _singleGrabDetailIndexRowErrMean == _ctx.Settings.ErrorValueMeanH
-                && _singleGrabDetailIndexRowErrMax == _ctx.Settings.ErrorValueMaxH;
+                && _singleGrabDetailIndexRowErrMax == _ctx.Settings.ErrorValueMaxH
+                && _singleGrabDetailIndexRidgeDirection == _ctx.Settings.RidgeDir;
         }
 
         private void EnsureSingleGrabDetailIndex()
@@ -708,8 +714,9 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _singleGrabDetailIndexHmH = _ctx.Settings.HessianMaxFactorH;
             _singleGrabDetailIndexRowErrMean = _ctx.Settings.ErrorValueMeanH;
             _singleGrabDetailIndexRowErrMax = _ctx.Settings.ErrorValueMaxH;
+            _singleGrabDetailIndexRidgeDirection = _ctx.Settings.RidgeDir;
             _singleGrabDetailIndexReady = true;
-            ApplyColumnCurvePeakVerdicts(CreateThresholdContext());
+            ApplyCurvePeakVerdicts(CreateThresholdContext());
             StartColumnCurvePeakIndexBuild(resetExisting: false);
             FlowTrace.Log($"DT stats index rows={_singleGrabDetailIndex.Count} ms={sw.ElapsedMilliseconds}");
         }
@@ -717,14 +724,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private void StartColumnCurvePeakIndexBuild(bool resetExisting)
         {
             CancelColumnCurvePeakIndexBuild();
-            if (resetExisting) _columnCurvePeaks.Clear();
+            if (resetExisting)
+            {
+                _columnCurvePeaks.Clear();
+                _rowCurvePeaks.Clear();
+            }
             if (string.IsNullOrWhiteSpace(_statsDataRootPath) || _grabIdInfos.Count == 0)
                 return;
 
             int generation = ++_columnCurvePeakIndexGeneration;
             string root = _statsDataRootPath;
             var infos = _grabIdInfos
-                .Where(info => !_columnCurvePeaks.ContainsKey(info.GrabId))
+                .Where(info => !_columnCurvePeaks.ContainsKey(info.GrabId) ||
+                    !_rowCurvePeaks.ContainsKey(info.GrabId))
                 .Select(info => new GrabIdInfo
             {
                 GrabId = info.GrabId,
@@ -739,7 +751,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             var cts = new CancellationTokenSource();
             _columnCurvePeakIndexCts = cts;
 
-            Task.Run(() => ColumnCurvePeakIndex.Build(
+            Task.Run(() => ColumnCurvePeakIndex.BuildSummaries(
                 root, infos, captureHm, captureConfigs, _ctx.CameraCount, cts.Token), cts.Token)
                 .ContinueWith(task =>
                 {
@@ -748,50 +760,271 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     if (_ctx.CbDataGrabId.IsDisposed || !_ctx.CbDataGrabId.IsHandleCreated)
                         return;
                     _ctx.CbDataGrabId.BeginInvoke((Action)(() =>
-                        CompleteColumnCurvePeakIndexBuild(generation, root, task.Result)));
+                        CompleteColumnCurvePeakSummaryBuild(
+                            generation, root, task.Result,
+                            captureHm, captureConfigs, cts)));
                 }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
         }
 
-        private void CompleteColumnCurvePeakIndexBuild(
-            int generation, string root, ColumnCurvePeakIndexResult result)
+        private void CompleteColumnCurvePeakSummaryBuild(
+            int generation,
+            string root,
+            ColumnCurvePeakIndexResult summaries,
+            IDictionary<string, float> captureHm,
+            IDictionary<string, CsvConfigSnapshot> captureConfigs,
+            CancellationTokenSource cts)
         {
-            if (generation != _columnCurvePeakIndexGeneration || result == null ||
+            if (generation != _columnCurvePeakIndexGeneration || summaries == null ||
                 !string.Equals(root, _statsDataRootPath, StringComparison.OrdinalIgnoreCase))
                 return;
 
+            ApplyColumnCurvePeakIndexResult(summaries);
+            int rowApplied;
+            int applied = ApplyCurvePeakVerdicts(
+                CreateThresholdContext(), out rowApplied);
+            RefreshCurvePeakVerdictViews();
+            FlowTrace.Log(
+                $"DT verdict index apply=partial gen={generation} " +
+                $"summaries={summaries.SummaryGrabCount} " +
+                $"pending={summaries.PendingBinGrabInfos.Count}/{summaries.RequestedGrabCount} " +
+                $"cams={applied} verdicts={applied} ms={summaries.ElapsedMilliseconds}");
+            FlowTrace.Log(
+                $"DT verdict cache gen={generation} hits={summaries.CacheGrabCount}/" +
+                $"{summaries.RequestedGrabCount} days={summaries.CacheDayCount} " +
+                $"loadMs={summaries.CacheLoadMilliseconds}");
+            FlowTrace.Log(
+                $"DT row verdict index apply=partial gen={generation} " +
+                $"rows={rowApplied} verdicts={rowApplied} " +
+                $"enabled={(CreateThresholdContext().RowDetectionEnabled ? 1 : 0)}");
+
+            if (summaries.PendingBinGrabInfos.Count == 0)
+            {
+                CompleteColumnCurvePeakIndexBuild(
+                    generation, root, summaries, null, cts, refreshViews: false);
+                return;
+            }
+
+            List<GrabIdInfo> pending = summaries.PendingBinGrabInfos
+                .Select(info => new GrabIdInfo
+                {
+                    GrabId = info.GrabId,
+                    Earliest = info.Earliest,
+                    Latest = info.Latest
+                }).ToList();
+            Task.Factory.StartNew(() => ColumnCurvePeakIndex.BuildBinFallback(
+                root, pending, captureHm, captureConfigs,
+                _ctx.CameraCount, cts.Token,
+                progress => QueueColumnCurvePeakProgress(
+                    generation, root, progress, cts),
+                progressBatchSize: 8),
+                cts.Token,
+                TaskCreationOptions.LongRunning,
+                TaskScheduler.Default)
+                .ContinueWith(task =>
+                {
+                    if (task.IsCanceled || task.IsFaulted || cts.IsCancellationRequested)
+                        return;
+                    if (_ctx.CbDataGrabId.IsDisposed || !_ctx.CbDataGrabId.IsHandleCreated)
+                        return;
+                    _ctx.CbDataGrabId.BeginInvoke((Action)(() =>
+                        CompleteColumnCurvePeakIndexBuild(
+                            generation, root, summaries, task.Result, cts,
+                            refreshViews: true)));
+                }, CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
+        }
+
+        private void QueueColumnCurvePeakProgress(
+            int generation,
+            string root,
+            ColumnCurvePeakIndexResult progress,
+            CancellationTokenSource cts)
+        {
+            if (progress == null || cts.IsCancellationRequested ||
+                _ctx.CbDataGrabId.IsDisposed || !_ctx.CbDataGrabId.IsHandleCreated)
+                return;
+            try
+            {
+                _ctx.CbDataGrabId.BeginInvoke((Action)(() =>
+                {
+                    if (generation != _columnCurvePeakIndexGeneration ||
+                        cts.IsCancellationRequested ||
+                        !string.Equals(root, _statsDataRootPath, StringComparison.OrdinalIgnoreCase))
+                        return;
+
+                    ApplyColumnCurvePeakIndexResult(progress);
+                    int rowApplied;
+                    ApplyCurvePeakVerdicts(CreateThresholdContext(), out rowApplied);
+                    _ctx.GrabDetailList.RefreshAll();
+                    FlowTrace.Dvt(
+                        $"DT verdict index progress gen={generation} " +
+                        $"batch={progress.BinFallbackGrabCount} " +
+                        $"cams={progress.CameraCount} rows={progress.RowByGrabId.Count}");
+                }));
+            }
+            catch (InvalidOperationException)
+            {
+                // The form can close between the handle check and BeginInvoke.
+            }
+        }
+
+        private void CompleteColumnCurvePeakIndexBuild(
+            int generation,
+            string root,
+            ColumnCurvePeakIndexResult summaries,
+            ColumnCurvePeakIndexResult bins,
+            CancellationTokenSource cts,
+            bool refreshViews)
+        {
+            if (generation != _columnCurvePeakIndexGeneration || summaries == null ||
+                !string.Equals(root, _statsDataRootPath, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            if (bins != null)
+                ApplyColumnCurvePeakIndexResult(bins);
+
+            int rowApplied;
+            int applied = ApplyCurvePeakVerdicts(
+                CreateThresholdContext(), out rowApplied);
+            if (refreshViews)
+                RefreshCurvePeakVerdictViews();
+            int binCount = bins?.BinFallbackGrabCount ?? 0;
+            int missingCount = bins?.MissingGrabCount ?? 0;
+            long elapsed = summaries.ElapsedMilliseconds +
+                (bins?.ElapsedMilliseconds ?? 0L);
+            FlowTrace.Log(
+                $"DT verdict index apply=ok gen={generation} " +
+                $"summaries={summaries.SummaryGrabCount} bins={binCount} " +
+                $"missing={missingCount}/{summaries.RequestedGrabCount} " +
+                $"cams={applied} verdicts={applied} ms={elapsed}");
+            FlowTrace.Log(
+                $"DT row verdict index apply=ok gen={generation} " +
+                $"rows={rowApplied} verdicts={rowApplied} " +
+                $"enabled={(CreateThresholdContext().RowDetectionEnabled ? 1 : 0)}");
+
+            if (ReferenceEquals(_columnCurvePeakIndexCts, cts))
+            {
+                _columnCurvePeakIndexCts = null;
+                cts.Dispose();
+            }
+        }
+
+        private void ApplyColumnCurvePeakIndexResult(ColumnCurvePeakIndexResult result)
+        {
             foreach (var entry in result.ByGrabId)
                 _columnCurvePeaks[entry.Key] = entry.Value;
+            foreach (var entry in result.RowByGrabId)
+                _rowCurvePeaks[entry.Key] = entry.Value;
+        }
 
-            int applied = ApplyColumnCurvePeakVerdicts(CreateThresholdContext());
+        private void RefreshCurvePeakVerdictViews()
+        {
             _ctx.GrabDetailList.RefreshAll();
             RefreshStats(updateRangeCurve: false);
             RefreshPeriodCharts();
-            FlowTrace.Log(
-                $"DT verdict index apply=ok gen={generation} " +
-                $"summaries={result.SummaryGrabCount} bins={result.BinFallbackGrabCount} " +
-                $"missing={result.MissingGrabCount}/{result.RequestedGrabCount} " +
-                $"cams={result.CameraCount} verdicts={applied} ms={result.ElapsedMilliseconds}");
         }
 
-        private int ApplyColumnCurvePeakVerdicts(ThresholdContext threshold)
+        private int ApplyCurvePeakVerdicts(ThresholdContext threshold)
         {
+            int rowApplied;
+            return ApplyCurvePeakVerdicts(threshold, out rowApplied);
+        }
+
+        private int ApplyCurvePeakVerdicts(
+            ThresholdContext threshold, out int rowApplied)
+        {
+            rowApplied = 0;
             if (threshold == null || _singleGrabDetailIndex.Count == 0) return 0;
             int applied = 0;
+            foreach (GrabDetail detail in _singleGrabDetailIndex.Values)
+                Array.Clear(detail.CamResult, 0, detail.CamResult.Length);
             foreach (var entry in _columnCurvePeaks)
             {
                 if (!_singleGrabDetailIndex.TryGetValue(entry.Key, out GrabDetail detail))
                     continue;
+                if (!threshold.ColumnDetectionEnabled) continue;
                 ColumnCurvePeakRecord[] records = entry.Value;
                 for (int i = 0; i < records.Length && i < detail.CamResult.Length; i++)
                 {
                     ColumnCurvePeakRecord record = records[i];
                     if (record == null) continue;
-                    detail.CamResult[i] = threshold.IsFail(
-                        record.MeanPeak, record.MaxPeak, record.CaptureHmV);
+                    detail.CamResult[i] = threshold.IsRawColumnCurveFail(
+                        record.RawMeanPeak, record.RawMaxPeak, record.CaptureHmV);
                     applied++;
                 }
             }
+            foreach (GrabDetail detail in _singleGrabDetailIndex.Values)
+            {
+                _rowCurvePeaks.TryGetValue(detail.GrabId, out RowCurvePeakRecord rowRecord);
+                if (ApplyRowCurveVerdict(detail, rowRecord, threshold, log: false))
+                    rowApplied++;
+            }
             return applied;
+        }
+
+        private static RowCurvePeakRecord CreateRowCurvePeakRecord(
+            string grabId, float[] mean, float[] max, float captureHmV)
+        {
+            float meanPeak = ThresholdContext.FindPeakNormalized(mean);
+            float maxPeak = ThresholdContext.FindPeakNormalized(max);
+            if (float.IsNaN(meanPeak) && float.IsNaN(maxPeak)) return null;
+            return new RowCurvePeakRecord
+            {
+                GrabId = grabId,
+                CaptureHmV = captureHmV,
+                RawMeanPeak = meanPeak,
+                RawMaxPeak = maxPeak
+            };
+        }
+
+        private static bool ApplyRowCurveVerdict(
+            GrabDetail detail, RowCurvePeakRecord record,
+            ThresholdContext threshold, bool log)
+        {
+            if (detail == null || threshold == null) return false;
+            if (!threshold.RowDetectionEnabled)
+            {
+                detail.RowResult = null;
+                return false;
+            }
+            if (record == null)
+            {
+                detail.RowResult = null;
+                return false;
+            }
+
+            ColumnVerdictEvaluation evaluation = threshold.EvaluateRawRowCurve(
+                record.RawMeanPeak, record.RawMaxPeak, record.CaptureHmV);
+            detail.RowResult = evaluation.HasData ? (bool?)evaluation.IsFail : null;
+            if (log && evaluation.HasData)
+            {
+                LogCurveVerdict(
+                    detail.GrabId, "row", 0, evaluation,
+                    threshold.CurrentRowErrMean,
+                    threshold.CurrentRowErrMax,
+                    threshold);
+            }
+            return evaluation.HasData;
+        }
+
+        private static void LogCurveVerdict(
+            string grabId, string axis, int cameraId,
+            ColumnVerdictEvaluation evaluation,
+            float meanThreshold, float maxThreshold,
+            ThresholdContext threshold)
+        {
+            string prefix = axis == "column"
+                ? $"DT verdict {grabId} cam={cameraId}"
+                : $"DT row verdict {grabId} merged=1";
+            FlowTrace.Log(
+                prefix + " " +
+                $"mode={threshold.ColumnCurveMode.ToString().ToLowerInvariant()} " +
+                $"mean={evaluation.DisplayMeanPeak:F4}/{meanThreshold:F4} " +
+                $"enabled={(threshold.ColumnCurveMode == ColumnCurveDisplayMode.Max ? 0 : 1)} " +
+                $"max={evaluation.DisplayMaxPeak:F4}/{maxThreshold:F4} " +
+                $"enabled={(threshold.ColumnCurveMode == ColumnCurveDisplayMode.Mean ? 0 : 1)} " +
+                $"result={(evaluation.IsFail ? "fail" : "pass")} " +
+                $"cause={evaluation.Cause.ToString().ToLowerInvariant()} " +
+                "source=visible-merged-curve");
         }
 
         private void CancelColumnCurvePeakIndexBuild()
@@ -865,7 +1098,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
             _ctx.Settings.HessianMaxFactorH,
             _ctx.Settings.ErrorValueMeanH,
             _ctx.Settings.ErrorValueMaxH,
-            _ctx.Settings.ColumnCurveMode);
+            _ctx.Settings.ColumnCurveMode,
+            _ctx.Settings.RidgeDir);
 
         // ══════════════════════════════════════════════════════════════
         // Detail ListView
@@ -924,8 +1158,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     : null;
                 ColumnVerdictEvaluation evaluation = record == null
                     ? null
-                    : threshold.EvaluateColumn(
-                        record.MeanPeak, record.MaxPeak, record.CaptureHmV);
+                    : threshold.EvaluateRawColumnCurve(
+                        record.RawMeanPeak, record.RawMaxPeak, record.CaptureHmV);
                 bool? listResult = detail != null && i < detail.CamResult.Length
                     ? detail.CamResult[i]
                     : null;
@@ -943,6 +1177,26 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     $"list={(listResult.HasValue ? listResult.Value ? "fail" : "pass" : "unknown")} " +
                     $"source={source}");
             }
+            _rowCurvePeaks.TryGetValue(grabId, out RowCurvePeakRecord rowRecord);
+            ColumnVerdictEvaluation rowEvaluation = rowRecord == null
+                ? null
+                : threshold.EvaluateRawRowCurve(
+                    rowRecord.RawMeanPeak, rowRecord.RawMaxPeak,
+                    rowRecord.CaptureHmV);
+            bool? rowListResult = detail?.RowResult;
+            string rowSource = rowEvaluation == null || !rowEvaluation.HasData
+                ? "missing"
+                : "visible-curve-index";
+            FlowTrace.Log(
+                $"DT row verdict click {grabId} mode={mode} " +
+                $"mean={(rowEvaluation == null ? "nan" : rowEvaluation.DisplayMeanPeak.ToString("F4", CultureInfo.InvariantCulture))}/" +
+                $"{threshold.CurrentRowErrMean:F4} enabled={(threshold.ColumnCurveMode == ColumnCurveDisplayMode.Max ? 0 : 1)} " +
+                $"max={(rowEvaluation == null ? "nan" : rowEvaluation.DisplayMaxPeak.ToString("F4", CultureInfo.InvariantCulture))}/" +
+                $"{threshold.CurrentRowErrMax:F4} enabled={(threshold.ColumnCurveMode == ColumnCurveDisplayMode.Mean ? 0 : 1)} " +
+                $"result={(rowEvaluation == null || !rowEvaluation.HasData ? "unknown" : rowEvaluation.IsFail ? "fail" : "pass")} " +
+                $"cause={(rowEvaluation == null ? "none" : rowEvaluation.Cause.ToString().ToLowerInvariant())} " +
+                $"list={(rowListResult.HasValue ? rowListResult.Value ? "fail" : "pass" : "unknown")} " +
+                $"source={rowSource}");
             FlowTrace.Log($"DT verdict click done {grabId} cams={_ctx.CameraCount}");
         }
 

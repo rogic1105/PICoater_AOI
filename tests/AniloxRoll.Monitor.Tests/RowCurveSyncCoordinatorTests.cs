@@ -111,5 +111,43 @@ namespace AniloxRoll.Monitor.Tests
                 Assert.That(helper.TotalMm, Is.EqualTo(1000));
             }
         }
+
+        [TestCase(true, false)]
+        [TestCase(false, true)]
+        [TestCase(true, true)]
+        public void SetVisibleMetrics_AppliesSeriesThresholdLinesAndAxisToRowChart(
+            bool showMean, bool showMax)
+        {
+            using (var chart = new Chart())
+            {
+                var helper = new RowCurveChartHelper(chart);
+                var display = new RowCurveDisplayAdapter(
+                    helper, () => VerticalDisplayDirection.BottomToTop);
+
+                display.SetThresholds(0.8f, 2.0f);
+                display.SetVisibleMetrics(showMean, showMax);
+
+                Assert.That(chart.Series["Mean"].Enabled, Is.EqualTo(showMean));
+                Assert.That(chart.Series["Max"].Enabled, Is.EqualTo(showMax));
+
+                var thresholdLines = chart.ChartAreas[0].AxisX.StripLines;
+                Assert.That(thresholdLines.Count, Is.EqualTo((showMean ? 1 : 0) + (showMax ? 1 : 0)));
+                int thresholdIndex = 0;
+                if (showMax)
+                {
+                    Assert.That(thresholdLines[thresholdIndex].IntervalOffset, Is.EqualTo(2.0).Within(1e-6));
+                    Assert.That(thresholdLines[thresholdIndex].BorderDashStyle, Is.EqualTo(ChartDashStyle.Solid));
+                    thresholdIndex++;
+                }
+                if (showMean)
+                {
+                    Assert.That(thresholdLines[thresholdIndex].IntervalOffset, Is.EqualTo(0.8).Within(1e-6));
+                    Assert.That(thresholdLines[thresholdIndex].BorderDashStyle, Is.EqualTo(ChartDashStyle.Dash));
+                }
+
+                double expectedAxisMaximum = showMax ? 2.2 : 1.0;
+                Assert.That(chart.ChartAreas[0].AxisX.Maximum, Is.EqualTo(expectedAxisMaximum).Within(1e-6));
+            }
+        }
     }
 }
