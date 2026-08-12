@@ -175,10 +175,10 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             }
         }
 
-        public void TurnOn(int channel, int brightness)
+        public bool TurnOn(int channel, int brightness)
         {
             LightController controller = GetConnectedController();
-            controller?.TurnOn(channel, brightness);
+            return controller != null && controller.TurnOn(channel, brightness);
         }
 
         public void TurnOff(int channel)

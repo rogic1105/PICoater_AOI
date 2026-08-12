@@ -65,6 +65,32 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void IoMode_IgnoresConfiguredTime_AndWaitsForStartLow()
+        {
+            _coordinator.Arm(
+                CaptureStopCondition.IoSignal,
+                true,
+                5,
+                2,
+                30000,
+                "grab-io-long-high");
+
+            _coordinator.HandleTimerElapsed(7);
+
+            Assert.That(_requests, Is.Empty);
+            Assert.That(_coordinator.State, Is.EqualTo(CaptureStopState.ArmedIo));
+
+            CaptureStopRequest request;
+            Assert.That(
+                _coordinator.TryRequestIoStop(
+                    IoStopRequestReason.StartLow,
+                    out request),
+                Is.True);
+            Assert.That(request.Trigger, Is.EqualTo(CaptureStopTrigger.IoRequest));
+            Assert.That(request.DrainIoTail, Is.True);
+        }
+
+        [Test]
         public void TimeMode_WaitsForFirstSet_IgnoresIo_ThenStopsOnTimer()
         {
             bool waits = _coordinator.Arm(

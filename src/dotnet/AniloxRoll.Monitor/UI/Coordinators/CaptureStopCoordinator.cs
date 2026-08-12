@@ -84,14 +84,14 @@ namespace AniloxRoll.Monitor.UI.Coordinators
     /// trigger for a capture. Actual grab shutdown remains in the Form.
     ///
     /// State + Event -> Next State + Action:
-    /// Idle + Arm(IO) -> ArmedIo + arm safety timer.
+    /// Idle + Arm(IO) -> ArmedIo + wait for IO stop request.
     /// Idle + Arm(Time) -> WaitingForFirstSet + wait without a timer.
     /// Idle + Arm(Height) -> ArmedHeight + watch common rows.
     /// WaitingForFirstSet + FirstSetReady -> ArmedTime + arm fixed timer.
     /// WaitingForFirstSet + FirstSetFailed -> StopPending + cancel timer.
     /// ArmedIo + IO request -> StopPending + request stop; drain only StartLow.
     /// WaitingForFirstSet/ArmedTime/ArmedHeight + IO request -> unchanged + ignore.
-    /// ArmedIo/ArmedTime + TimerElapsed -> StopPending + request stop.
+    /// ArmedTime + TimerElapsed -> StopPending + request stop.
     /// ArmedHeight + CommonRowsReached -> StopPending + request stop.
     /// StopPending + any terminal trigger -> StopPending + ignore duplicate.
     /// Any active state + Complete/Cancel -> Idle + disarm timer.
@@ -170,16 +170,13 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                         break;
 
                     case CaptureStopCondition.IoSignal:
-                        int effectiveSeconds =
-                            configuredSeconds + boundaryGraceSeconds;
                         _state = CaptureStopState.ArmedIo;
-                        _duration.Arm(effectiveSeconds);
                         waitsForFirstSet = false;
                         logLine =
                             $"grab stop armed condition={condition} " +
-                            $"limit={effectiveSeconds}s " +
+                            $"limit=io-low " +
                             $"configured={configuredSeconds}s " +
-                            $"grace={boundaryGraceSeconds}s " +
+                            $"grace=unused " +
                             $"source={source} grab={_grabId}";
                         break;
 
@@ -285,8 +282,7 @@ namespace AniloxRoll.Monitor.UI.Coordinators
             lock (_gate)
             {
                 if (_disposed ||
-                    (_state != CaptureStopState.ArmedIo &&
-                     _state != CaptureStopState.ArmedTime))
+                    _state != CaptureStopState.ArmedTime)
                     return;
 
                 _state = CaptureStopState.StopPending;

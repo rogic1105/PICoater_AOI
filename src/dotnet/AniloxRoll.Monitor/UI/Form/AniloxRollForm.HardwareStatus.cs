@@ -72,9 +72,13 @@ namespace AniloxRoll.Monitor.Forms
 
         private void LightTurnOn()
         {
-            _lightConnectionCoordinator?.TurnOn(
-                _settings.LightChannel,
-                _settings.LightBrightness);
+            bool sent = _lightConnectionCoordinator != null &&
+                _lightConnectionCoordinator.TurnOn(
+                    _settings.LightChannel,
+                    _settings.LightBrightness);
+            FlowTrace.Log(
+                $"light turn on result={(sent ? "sent" : "failed")} " +
+                $"channel={_settings.LightChannel} brightness={_settings.LightBrightness}");
         }
 
         private void LightTurnOff()
