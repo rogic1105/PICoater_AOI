@@ -238,6 +238,7 @@ namespace AniloxRoll.Monitor.Forms
                 lbl.Cursor = Cursors.Hand;
                 lbl.Padding = new Padding(6, 2, 6, 2);
                 lbl.TextAlign = ContentAlignment.MiddleCenter;
+                lbl.AccessibleName = lbl.Name;
             }
 
             _dataStatsPresenter.Initialize();

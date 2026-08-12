@@ -1,0 +1,134 @@
+{
+  "Id": "report-period-list-navigation",
+  "Name": "Report year/month/day list navigation",
+  "Description": "Click the actual year, month and day labels and verify that the report virtual list matches each selected period.",
+  "Steps": [
+    {
+      "Id": "stage-empty-root",
+      "Contract": "DVT.Setup",
+      "Title": "Force an explicit report folder read",
+      "Action": "set-session-value",
+      "Target": "LastDataPath",
+      "Value": "D:\\Anilox\\DvtEmpty",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "launch",
+      "Contract": "F1",
+      "Title": "Launch product",
+      "Action": "launch",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "enable-flow-log",
+      "Contract": "DVT.LogMode",
+      "Title": "Enable flow verification log",
+      "Action": "set-property",
+      "Target": "記錄範圍",
+      "Value": "流程驗證",
+      "TimeoutSeconds": 10
+    },
+    {
+      "Id": "open-report",
+      "Contract": "D1",
+      "Title": "Open report tab",
+      "Action": "select-tab",
+      "Target": "報表",
+      "TimeoutSeconds": 15
+    },
+    {
+      "Id": "read-data",
+      "Contract": "D1",
+      "Title": "Read report data",
+      "Action": "confirm-folder",
+      "Target": "讀取資料",
+      "Value": "D:\\Anilox\\Captures",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "verdict-ready",
+      "Contract": "D1.verdict-cache",
+      "Title": "Wait for report index",
+      "Action": "wait-log",
+      "Pattern": "DT verdict index apply=ok gen=[0-9]+ .* missing=0/[1-9][0-9]* .* ms=[0-9]+",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "evidence-boundary",
+      "Contract": "D4.period-list",
+      "Title": "Reset navigation evidence",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "click-year",
+      "Contract": "D4.period-list",
+      "Title": "Click year label",
+      "Action": "click-control",
+      "Target": "lblChartNavYear",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "verify-year",
+      "Contract": "D4.period-list",
+      "Title": "Verify year list population",
+      "Action": "wait-log",
+      "Pattern": "DT period list source=Year range=(\\d{6}-\\d{6})~(\\d{6}-\\d{6}) expected=(\\d+) indexed=\\3 visible=\\3 ms=\\d+",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "click-month",
+      "Contract": "D4.period-list",
+      "Title": "Click month label",
+      "Action": "click-control",
+      "Target": "lblChartNavMonth",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "verify-month",
+      "Contract": "D4.period-list",
+      "Title": "Verify month list population",
+      "Action": "wait-log",
+      "Pattern": "DT period list source=Month range=(\\d{6}-\\d{6})~(\\d{6}-\\d{6}) expected=(\\d+) indexed=\\3 visible=\\3 ms=\\d+",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "click-day",
+      "Contract": "D4.period-list",
+      "Title": "Click day label",
+      "Action": "click-control",
+      "Target": "lblChartNavDay",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "verify-day",
+      "Contract": "D4.period-list",
+      "Title": "Verify day list population",
+      "Action": "wait-log",
+      "Pattern": "DT period list source=Day range=(\\d{6}-\\d{6})~(\\d{6}-\\d{6}) expected=(\\d+) indexed=\\3 visible=\\3 ms=\\d+",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "restore-settings",
+      "Contract": "DVT.Cleanup",
+      "Title": "Restore settings",
+      "Action": "restore-properties",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "close-app",
+      "Contract": "G2.shutdown",
+      "Title": "Close product",
+      "Action": "close-app",
+      "TimeoutSeconds": 60
+    },
+    {
+      "Id": "shutdown-complete",
+      "Contract": "G2.shutdown",
+      "Title": "Verify resource cleanup",
+      "Action": "wait-log",
+      "Pattern": "shutdown resources released",
+      "TimeoutSeconds": 60
+    }
+  ]
+}

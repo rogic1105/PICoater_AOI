@@ -419,6 +419,19 @@ namespace AniloxRoll.Monitor.UI.Presenters
                     _statsPresenter.Update(
                         InspectionStatisticsService.ComputeStatsFromDetails(_currentDetails));
                     FlowTrace.Log($"DT list reload range={startGrabId}~{endGrabId} rows={_currentDetails.Count} ms={swList.ElapsedMilliseconds} source=index");
+                    GrabIdRangeSource source =
+                        _dateGrabIdNavigator.ActiveRangeSource;
+                    if (source == GrabIdRangeSource.Year ||
+                        source == GrabIdRangeSource.Month ||
+                        source == GrabIdRangeSource.Day)
+                    {
+                        FlowTrace.Log(
+                            $"DT period list source={source} " +
+                            $"range={startGrabId}~{endGrabId} " +
+                            $"expected={rangeInfos.Count} indexed={_currentDetails.Count} " +
+                            $"visible={_ctx.GrabDetailList.VisibleCount} " +
+                            $"ms={swList.ElapsedMilliseconds}");
+                    }
                 }
                 else
                     _statsPresenter.Update(

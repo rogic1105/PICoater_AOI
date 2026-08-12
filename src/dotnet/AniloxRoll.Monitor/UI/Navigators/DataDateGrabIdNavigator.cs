@@ -30,6 +30,7 @@ namespace AniloxRoll.Monitor.UI.Navigators
         public EventGuard GrabIdNavGuard { get; } = new EventGuard();
         public EventGuard GrabIdCrossGuard { get; } = new EventGuard();
         public GroupBox ActiveStatMode { get; private set; }
+        public GrabIdRangeSource ActiveRangeSource => _rangeSource;
 
         public DataDateGrabIdNavigator(
             DataStatisticsContext ctx,
@@ -387,7 +388,9 @@ namespace AniloxRoll.Monitor.UI.Navigators
                 _ctx.CbGrabIdEnd.SelectedIndex = lo;     // 最新
             }
             _rangeSource = source;
-            FlowTrace.Log($"ui:【期間-{GetPeriodLabel(source)}】→ 範圍 {infos[hi].GrabId}~{infos[lo].GrabId}");
+            FlowTrace.Log(
+                $"ui:【期間-{GetPeriodLabel(source)}】→ 範圍 " +
+                $"{infos[hi].GrabId}~{infos[lo].GrabId} expected={hi - lo + 1}");
             SetActiveStatGroupBox(_ctx.GroupBoxGrabIdRange);   // mode=範圍 + UpdateSourceHighlights
             _refreshStats();
         }

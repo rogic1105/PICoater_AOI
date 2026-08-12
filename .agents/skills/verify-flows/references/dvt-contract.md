@@ -2591,12 +2591,20 @@ cbDataIdStart|End 手動變更
 
 ### D4 年/月/日期間（lblChartNav 點選）
 ```
-T1: ui:【期間-年|月|日】→ 範圍 {最舊}~{最新}   ← 取 cbDataYield 當前值設範圍 + 該期間綠高亮（互斥）
+T1: ui:【期間-年|月|日】→ 範圍 {最舊}~{最新} expected=N
+    ← 取 cbDataYield 當前值設範圍 + 該期間綠高亮（互斥）；N=該期間理論序號數
+T1: DT list reload range={最舊}~{最新} rows=N ms=N source=index
+T1: DT period list source={Year|Month|Day} range={最舊}~{最新} expected=N indexed=N visible=N ms=N
+    ← indexed=判定索引實際取得筆數；visible=listViewGrabDetail.VirtualListSize；三者必相等
 T1: ui:【期間-年|月|日】→ 取消綁定 保留範圍 {最舊}~{最新}
     ← 範圍模式再點同一 active 期間：轉 Custom、綠高亮熄滅；起訖序號不變且不重算
 T1: ui:【期間-全局】→ 全範圍                    ← 點 groupBoxGrabIdRange
 （active 期間改對應 cbDataYield → 範圍跟著更新；取消綁定或非 active 來源不觸發）
 ```
+
+`DATA/D4.period-list` 依序配對 intent 與 `DT period list`；起訖、理論筆數、索引筆數及
+Virtual List 實際顯示筆數任一不一致即 FAIL。只切換 `cbDataYieldYear/Month/Day` 不算覆蓋
+lblChartNav 點擊；DVT 必須以 `lblChartNavYear/Month/Day` 的 control id 真正點擊三個 Label。
 
 ### D5 良率導航 / Y 軸暫時切換 / 篩選異常
 ```

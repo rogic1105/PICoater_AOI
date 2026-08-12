@@ -252,6 +252,11 @@ namespace AniloxRoll.DvtRunner
                         _captureMayBeActive = false;
                     return "native button clicked: " + step.Target;
 
+                case "click-control":
+                    await _ui.ClickAutomationIdAsync(
+                        step.Target, step.TimeoutSeconds, cancellationToken);
+                    return "control clicked: " + step.Target;
+
                 case "wheel":
                     return await _ui.WheelAsync(
                         step.Target,

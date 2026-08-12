@@ -1414,6 +1414,37 @@ class DataFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.PASS, result(report, "D3.fit").status)
 
+    def test_period_labels_drive_matching_visible_list(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【期間-年】→ 範圍 260101-000001~260812-100235 expected=2147",
+                "DT list reload range=260101-000001~260812-100235 rows=2147 ms=5 source=index",
+                "DT period list source=Year range=260101-000001~260812-100235 expected=2147 indexed=2147 visible=2147 ms=5",
+                "ui:【期間-月】→ 範圍 260801-000001~260812-100235 expected=147",
+                "DT list reload range=260801-000001~260812-100235 rows=147 ms=1 source=index",
+                "DT period list source=Month range=260801-000001~260812-100235 expected=147 indexed=147 visible=147 ms=1",
+                "ui:【期間-日】→ 範圍 260812-080001~260812-100235 expected=7",
+                "DT list reload range=260812-080001~260812-100235 rows=7 ms=0 source=index",
+                "DT period list source=Day range=260812-080001~260812-100235 expected=7 indexed=7 visible=7 ms=0",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "D4.period-list").status,
+        )
+
+    def test_period_list_fails_when_visible_count_is_stale(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【期間-日】→ 範圍 260812-080001~260812-100235 expected=7",
+                "DT period list source=Day range=260812-080001~260812-100235 expected=7 indexed=7 visible=2147 ms=0",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "D4.period-list").status,
+        )
+
     def test_report_single_fit_accepts_reentrant_paint_before_final_intent(self):
         report = DataFlowValidator().validate(
             session(

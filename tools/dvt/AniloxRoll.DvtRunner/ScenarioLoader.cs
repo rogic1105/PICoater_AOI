@@ -31,6 +31,7 @@ namespace AniloxRoll.DvtRunner
                 "set-property",
                 "click",
                 "click-button",
+                "click-control",
                 "wheel",
                 "drag",
                 "select-tab",

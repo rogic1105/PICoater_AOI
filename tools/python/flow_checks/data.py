@@ -52,6 +52,7 @@ class DataFlowValidator:
         self._check_range_debounce(session, report)
         self._check_range_list_preview(session, report)
         self._check_range_preview(session, report)
+        self._check_period_list(session, report)
         self._check_y_scale_toggle(session, report)
         self._check_fail_filter(session, report)
         self._check_ui_stall(session, report)
@@ -1146,6 +1147,74 @@ class DataFlowValidator:
             CheckStatus.PASS if not fallbacks else CheckStatus.FAIL,
             f"fallbacks={len(fallbacks)}"
             + (f" first={fallbacks[0].timestamp} {fallbacks[0].message}" if fallbacks else ""),
+        )
+
+    def _check_period_list(self, session: FlowSession, report: CheckReport) -> None:
+        intent_pattern = re.compile(
+            r"^ui:【期間-(年|月|日)】→ 範圍 "
+            r"(\d{6}-\d{6})~(\d{6}-\d{6}) expected=(\d+)$"
+        )
+        list_pattern = re.compile(
+            r"^DT period list source=(Year|Month|Day) "
+            r"range=(\d{6}-\d{6})~(\d{6}-\d{6}) "
+            r"expected=(\d+) indexed=(\d+) visible=(\d+) ms=(\d+)$"
+        )
+        source_names = {"年": "Year", "月": "Month", "日": "Day"}
+        pending = []
+        invalid = []
+        verified = 0
+
+        for line in session.lines:
+            intent = intent_pattern.match(line.message)
+            if intent:
+                pending.append(
+                    (source_names[intent.group(1)], intent.group(2),
+                     intent.group(3), int(intent.group(4)))
+                )
+                continue
+
+            actual = list_pattern.match(line.message)
+            if not actual:
+                continue
+            source = actual.group(1)
+            match_index = next(
+                (index for index, item in enumerate(pending)
+                 if item[0] == source),
+                -1,
+            )
+            if match_index < 0:
+                invalid.append("missing-intent: " + line.message)
+                continue
+            expected = pending.pop(match_index)
+            values = (
+                source,
+                actual.group(2),
+                actual.group(3),
+                int(actual.group(4)),
+            )
+            indexed = int(actual.group(5))
+            visible = int(actual.group(6))
+            if values != expected or indexed != expected[3] or visible != expected[3]:
+                invalid.append(line.message)
+                continue
+            verified += 1
+
+        if not pending and verified == 0 and not invalid:
+            report.add(
+                self.domain, "D4.period-list", CheckStatus.NOT_COVERED,
+                "未點選年／月／日期間標籤",
+            )
+            return
+        invalid.extend(
+            "missing-list: " + source + " " + start + "~" + end
+            for source, start, end, _ in pending
+        )
+        report.add(
+            self.domain,
+            "D4.period-list",
+            CheckStatus.PASS if not invalid else CheckStatus.FAIL,
+            f"verified={verified} invalid={len(invalid)}"
+            + (f" first={invalid[0]}" if invalid else ""),
         )
 
     def _check_range_debounce(self, session: FlowSession, report: CheckReport) -> None:

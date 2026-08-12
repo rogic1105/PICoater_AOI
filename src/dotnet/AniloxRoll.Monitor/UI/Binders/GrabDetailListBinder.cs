@@ -45,6 +45,7 @@ namespace AniloxRoll.Monitor.UI.Binders
         }
 
         public Func<bool> IsSelectionActive { private get; set; }
+        public int VisibleCount => _listView.VirtualListSize;
         public event EventHandler<GrabDetailRowCommittedEventArgs> RowCommitted;
 
         public void Initialize()

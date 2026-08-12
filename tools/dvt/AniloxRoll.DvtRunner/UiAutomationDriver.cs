@@ -463,6 +463,35 @@ namespace AniloxRoll.DvtRunner
                 "Timed out waiting to click native button: " + name);
         }
 
+        public async Task ClickAutomationIdAsync(
+            string automationId,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IntPtr handle =
+                    NativeMethods.FindDescendantWindowByAccessibleName(
+                        _process.MainWindowHandle,
+                        automationId,
+                        string.Empty);
+                if (handle != IntPtr.Zero &&
+                    NativeMethods.IsWindowEnabled(handle) &&
+                    NativeMethods.IsWindowVisible(handle))
+                {
+                    NativeMethods.SetForegroundWindow(
+                        _process.MainWindowHandle);
+                    if (NativeMethods.ClickWindowCenter(handle))
+                        return;
+                }
+                await Task.Delay(150, cancellationToken);
+            }
+            throw new TimeoutException(
+                "Timed out waiting to click control id: " + automationId);
+        }
+
         public async Task<string> WheelAsync(
             string name,
             string value,
