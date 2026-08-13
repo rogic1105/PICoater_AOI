@@ -42,6 +42,17 @@ namespace TanukiCv.Controls
         public void SetRowPitch(double mmPerRow) { if (mmPerRow > 0) _rowPitchMm = mmPerRow; }
 
         /// <summary>
+        /// Sets the physical data extent before replacement curve values arrive. This lets an
+        /// image-derived viewport and its row chart share one fitted range without drawing
+        /// placeholder curve points.
+        /// </summary>
+        public void SetExpectedDataLength(int rowCount)
+        {
+            if (rowCount > 0)
+                _totalMm = rowCount * _rowPitchMm;
+        }
+
+        /// <summary>
         /// 更新 row-wise 曲線資料。meanData[i] / maxData[i] 為 row i 的值（0–255 raw）。
         /// </summary>
         public void UpdateData(float[] meanData, float[] maxData)

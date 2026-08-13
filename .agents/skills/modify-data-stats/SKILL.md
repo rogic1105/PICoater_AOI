@@ -68,6 +68,18 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
   報表調整欄正規值或 Mean/Max 門檻時，以 CSV `#CURVE-C` 摘要重判全資料，不逐筆重讀 bin；
   不改寫歷史 CSV。若外部修改 bin，必須同步重建 CSV 索引，不得讓 Curve 與判定分歧。
 
+### 報表 Curve 判定責任
+- `ReportCurveVerdictIndexCoordinator` 只管理非同步索引生命週期：generation/cancel、先讀
+  `_curve_summary`、缺資料再讀 bin，以及結果是否仍屬於目前資料根目錄。
+  每次 Start／Cancel 只前進一個 generation；舊 generation、Dispose 後回呼與背景例外都不可
+  改寫目前 O/X，例外必留下 `DT verdict index apply=failed` 並使 DVT 失敗。
+- `ReportCurveVerdictIndex` 是明細、欄峰值、列峰值與目前判定參數 identity 的同一狀態 owner；
+  不讀檔、不更新控制項。資料根目錄改變時必須清空全部峰值；同一根目錄刷新明細時，只能保留
+  仍存在序號的峰值，避免相同 GrabId 誤用上一份資料或已刪除序號留下幽靈判定。
+- `CurvePeakVerdictProjector` 是 O/X 投影的純公式入口；欄與列都必須經 `ThresholdContext`，
+  `ReportCurveVerdictPresenter` 負責可見合併 Curve／峰值索引的 O/X 套用與 DVT 稽核證據；
+  `DataStatisticsPresenter` 只決定何時更新 List、色卡與期間圖表。
+
 ### 報表欄判定
 - **報表欄 O/X 的 SSoT**：監控逐幀判定仍可立即告警；報表則以同一序號、同一相機的
   最終可見合併曲線判定。多幀先合成每台相機 Curve，再與欄圖表共用
@@ -101,8 +113,9 @@ description: Modify the Data tab, inspection CSV schema, statistics, report list
 - 只有所有預期 capture 的 MeanC/MaxC 都成功讀取（`merged == captures`）才可落匯總；remote copy 未完成或 bin 損壞時記 `skip-incomplete`，避免固化部分資料。
 - 匯總 writer 平常對序號互動讓路，pending raw profile 達 72 MB 才 pressure drain，96 MB 為硬上限；不可在每格同步 `Flush(true)`，也不可用無界背景 task 製造記憶體或磁碟競爭。單序號 raw Curve LRU 為 512 筆／256 MB，30,000 筆資料仍須維持固定上限。
 - `SingleGrabCurveCache` 只保存 rescale 前的完整 Mean/Max 合併結果（LRU 64 筆／64 MB），相同 key 的前景與背景載入 single-flight；Presenter 依滾動方向只預讀下一個未命中相鄰序號，資料夾重載時必清空。
-- 報表單序號快速滾動時，ComboBox 文字逐格更新；統計卡、List 高亮與 Curve 排程由
-  `DataStatisticsPresenter` 以 33ms 固定週期合併，只處理當下最新序號。不得把逐格重繪重新接回
+- 報表單序號快速滾動時，ComboBox 文字逐格更新；`ReportSingleGrabSelectionCoordinator` 以
+  33ms 固定週期合併，只把當下最新序號交給 `DataStatisticsPresenter` 更新統計卡、List 高亮與 Curve。
+  不得把逐格重繪重新接回
   `SelectedIndexChanged`。
 - 回顧單序號快速滾動時，欄／列 Curve 走 latest-only；低解析圖片優先讀 `.acap` 單筆 1080p
   PreviewAtlas。圖片與 Curve 都採 running 依序完成上畫、33ms 最短呈現週期內 pending 只留最新；

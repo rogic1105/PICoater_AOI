@@ -44,6 +44,7 @@ namespace AniloxRoll.Monitor.UI.Managers
         public void SetRowPitchFromSpeed(double speedMPerMin, double lineRateHz)
             => _chart.SetRowPitchFromSpeed(speedMPerMin, lineRateHz);
         public void SetRowPitch(double mmPerRow) => _chart.SetRowPitch(mmPerRow);
+        public void SetExpectedDataLength(int rowCount) => _chart.SetExpectedDataLength(rowCount);
         public void Clear() => _chart.Clear();
 
         private void ApplyDirection()

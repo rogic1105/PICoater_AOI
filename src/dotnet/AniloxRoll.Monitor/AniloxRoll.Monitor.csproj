@@ -125,6 +125,9 @@
     <Compile Include="Interop\NativeMethods.cs" />
     <Compile Include="Services\AoiService.cs" />
     <Compile Include="Services\CaptureArchiveStore.cs" />
+    <Compile Include="Services\CaptureArchiveLegacyConverter.cs" />
+    <Compile Include="Services\CaptureArchiveMigration.cs" />
+    <Compile Include="Services\CaptureArchiveThumbnailMaintenance.cs" />
     <Compile Include="Services\HessianStandardMapCodec.cs" />
     <Compile Include="Services\CapturePreviewAtlasCodec.cs" />
     <Compile Include="Services\CaptureFileNaming.cs" />
@@ -142,6 +145,8 @@
     <Compile Include="Services\IoGrabController.cs" />
     <Compile Include="Services\IoState.cs" />
     <Compile Include="Services\ColumnCurvePeakIndex.cs" />
+    <Compile Include="Services\CurvePeakVerdictProjector.cs" />
+    <Compile Include="Services\ReportCurveVerdictIndex.cs" />
     <Compile Include="Services\CurvePeakProjectionIndexStore.cs" />
     <Compile Include="Services\InspectionStatisticsService.cs" />
     <Compile Include="Services\InspectionCsvReader.cs" />
@@ -224,6 +229,8 @@
     <Compile Include="UI\Coordinators\ReviewImageLoadGate.cs" />
     <Compile Include="UI\Coordinators\ReviewPeriodLoadCoordinator.cs" />
     <Compile Include="UI\Coordinators\DataRangePreviewCoordinator.cs" />
+    <Compile Include="UI\Coordinators\ReportCurveVerdictIndexCoordinator.cs" />
+    <Compile Include="UI\Coordinators\ReportSingleGrabSelectionCoordinator.cs" />
     <Compile Include="UI\Coordinators\ReviewFolderCoordinator.cs" />
     <Compile Include="UI\Coordinators\SettingImpactClassifier.cs" />
     <Compile Include="UI\Coordinators\MainWorkspaceLayoutController.cs" />
@@ -251,6 +258,7 @@
     <Compile Include="UI\Widgets\CanvasParameterTextBuilder.cs" />
     <Compile Include="UI\Widgets\PropertyGridNumericWheelInterceptor.cs" />
     <Compile Include="UI\Presenters\DataStatisticsPresenter.cs" />
+    <Compile Include="UI\Presenters\ReportCurveVerdictPresenter.cs" />
     <Compile Include="UI\Presenters\MuraProfileChartPresenter.cs" />
     <Compile Include="UI\Presenters\ReviewChartPresenter.cs" />
     <Compile Include="UI\Presenters\YieldPeriodChartPresenter.cs" />

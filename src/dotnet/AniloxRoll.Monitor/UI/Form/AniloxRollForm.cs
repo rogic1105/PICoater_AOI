@@ -986,6 +986,8 @@ namespace AniloxRoll.Monitor.Forms
                         $"viewX={range.LeftMm:F0}~{range.RightMm:F0} " +
                         $"viewY={range.TopMm:F0}~{range.BottomMm:F0}");
                     BeginReviewPrefitProbe(grabId);
+                    _reviewRowSync?.SetExpectedDataLength(
+                        range.ContentHeight * InspectionEngineConfig.DefaultSaveResizeScale);
                     ApplyReviewViewRangeToCharts(
                         range.LeftMm, range.RightMm, range.TopMm, range.BottomMm,
                         prepared: true);

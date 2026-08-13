@@ -1,9 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 
@@ -34,13 +30,12 @@ namespace AniloxRoll.Monitor.Core.Services
         public byte[] Data { get; set; }
     }
 
-    internal sealed class CaptureArchiveConversionResult
+    internal sealed class CaptureArchiveFrame
     {
-        public int ArchiveCount { get; set; }
-        public int FrameCount { get; set; }
-        public long PayloadBytes { get; set; }
-        public int SkippedArchiveCount { get; set; }
-        public int FailedArchiveCount { get; set; }
+        public string BaseName { get; set; }
+        public int CameraId { get; set; }
+        public long FrameTicks { get; set; }
+        public IList<CaptureArchiveAsset> Assets { get; set; }
     }
 
     internal sealed class CaptureArchiveValidationResult
@@ -53,16 +48,6 @@ namespace AniloxRoll.Monitor.Core.Services
         public int InvalidArchiveCount { get; set; }
         public int InvalidRecordCount { get; set; }
         public int PartialFileCount { get; set; }
-    }
-
-    internal sealed class CaptureArchiveThumbnailResult
-    {
-        public int ArchiveCount { get; set; }
-        public int FrameCount { get; set; }
-        public int ThumbnailCount { get; set; }
-        public long ThumbnailBytes { get; set; }
-        public int SkippedThumbnailCount { get; set; }
-        public int FailedFrameCount { get; set; }
     }
 
     internal sealed class CaptureArchivePreviewAtlasResult
@@ -114,21 +99,6 @@ namespace AniloxRoll.Monitor.Core.Services
             public long LastWriteTicks;
             public string GrabId;
             public Dictionary<string, ArchiveEntry> Entries;
-        }
-
-        private sealed class LegacyFrame
-        {
-            public string BaseName;
-            public int CameraId;
-            public long FrameTicks;
-        }
-
-        private sealed class ThumbnailFrame
-        {
-            public string BaseName;
-            public int CameraId;
-            public long FrameTicks;
-            public List<CaptureArchiveAsset> Assets;
         }
 
         public static string CreateVirtualRawPath(string archivePath, string baseName)
@@ -374,81 +344,68 @@ namespace AniloxRoll.Monitor.Core.Services
             return written;
         }
 
-        public static CaptureArchiveConversionResult ConvertLegacyRoot(
-            string captureRoot,
-            bool overwrite,
-            Action<string> progress = null)
+        internal static long ReplaceArchive(
+            string archivePath,
+            string grabId,
+            IList<CaptureArchiveFrame> frames)
         {
-            var result = new CaptureArchiveConversionResult();
-            if (string.IsNullOrWhiteSpace(captureRoot) || !Directory.Exists(captureRoot))
-                return result;
+            if (string.IsNullOrWhiteSpace(archivePath))
+                throw new ArgumentNullException(nameof(archivePath));
+            if (string.IsNullOrWhiteSpace(grabId))
+                throw new ArgumentNullException(nameof(grabId));
+            if (frames == null)
+                throw new ArgumentNullException(nameof(frames));
 
-            string[] csvPaths = Directory.GetFiles(captureRoot, "*.csv", SearchOption.AllDirectories);
-            Array.Sort(csvPaths, StringComparer.OrdinalIgnoreCase);
-            foreach (string csvPath in csvPaths)
+            string fullPath = Path.GetFullPath(archivePath);
+            string tempPath = fullPath + ".part-" + Guid.NewGuid().ToString("N");
+            long payloadBytes = 0;
+            string directory = Path.GetDirectoryName(fullPath);
+            if (!string.IsNullOrEmpty(directory))
+                Directory.CreateDirectory(directory);
+            object pathLock = GetPathLock(fullPath);
+            lock (pathLock)
             {
-                var byGrab = ReadLegacyFrames(csvPath);
-                foreach (KeyValuePair<string, List<LegacyFrame>> grab in byGrab)
+                try
                 {
-                    if (grab.Value.Count == 0) continue;
-                    string firstBase = grab.Value[0].BaseName;
-                    if (!InspectionCsvReader.TryParseTimestamp(
-                        Path.GetFileName(firstBase), out DateTime captureDate))
-                        continue;
-                    string archivePath = CaptureStoragePaths.GrabArchive(
-                        captureRoot, captureDate, grab.Key);
-                    if (File.Exists(archivePath) && !overwrite)
+                    using (var stream = new FileStream(
+                        tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
+                        1024 * 1024, FileOptions.SequentialScan))
+                    using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
                     {
-                        result.SkippedArchiveCount++;
-                        continue;
-                    }
-
-                    string tempPath = archivePath + ".part-" + Guid.NewGuid().ToString("N");
-                    try
-                    {
-                        Dictionary<string, long> ticks = LoadLegacyTicks(
-                            CaptureStoragePaths.DateImageDir(captureRoot, captureDate));
-                        Directory.CreateDirectory(Path.GetDirectoryName(archivePath));
-                        using (var stream = new FileStream(
-                            tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None,
-                            1024 * 1024, FileOptions.SequentialScan))
-                        using (var writer = new BinaryWriter(stream, Encoding.UTF8, true))
+                        WriteFileHeader(writer, grabId);
+                        for (int frameIndex = 0; frameIndex < frames.Count; frameIndex++)
                         {
-                            WriteFileHeader(writer, grab.Key);
-                            foreach (LegacyFrame frame in grab.Value)
+                            CaptureArchiveFrame frame = frames[frameIndex];
+                            if (frame == null || string.IsNullOrWhiteSpace(frame.BaseName) ||
+                                frame.Assets == null)
+                                continue;
+                            for (int assetIndex = 0; assetIndex < frame.Assets.Count; assetIndex++)
                             {
-                                if (ticks.TryGetValue(Path.GetFileName(frame.BaseName), out long frameTicks))
-                                    frame.FrameTicks = frameTicks;
-                                List<CaptureArchiveAsset> assets = LoadLegacyAssets(frame.BaseName);
-                                for (int i = 0; i < assets.Count; i++)
-                                {
-                                    CaptureArchiveAsset asset = assets[i];
-                                    WriteRecord(
-                                        writer, Path.GetFileName(frame.BaseName), frame.CameraId,
-                                        frame.FrameTicks, asset.Kind, asset.Data);
-                                    result.PayloadBytes += asset.Data.Length;
-                                }
-                                result.FrameCount++;
+                                CaptureArchiveAsset asset = frame.Assets[assetIndex];
+                                if (asset == null || asset.Data == null || asset.Data.Length == 0)
+                                    continue;
+                                WriteRecord(
+                                    writer, frame.BaseName, frame.CameraId,
+                                    frame.FrameTicks, asset.Kind, asset.Data);
+                                payloadBytes += asset.Data.Length;
                             }
-                            writer.Flush();
-                            stream.Flush(true);
                         }
-                        if (File.Exists(archivePath)) File.Delete(archivePath);
-                        File.Move(tempPath, archivePath);
-                        InvalidateIndex(archivePath);
-                        result.ArchiveCount++;
-                        progress?.Invoke(archivePath);
+                        writer.Flush();
+                        stream.Flush(true);
                     }
-                    catch (Exception ex)
-                    {
-                        result.FailedArchiveCount++;
-                        Trace.WriteLine(
-                            $"[CaptureArchive.Convert] {grab.Key}: {ex.GetType().Name}: {ex.Message}");
-                        TryDelete(tempPath);
-                    }
+                    if (File.Exists(fullPath))
+                        File.Replace(tempPath, fullPath, null, true);
+                    else
+                        File.Move(tempPath, fullPath);
+                    InvalidateIndex(fullPath);
+                }
+                catch
+                {
+                    TryDelete(tempPath);
+                    throw;
                 }
             }
-            return result;
+            return payloadBytes;
         }
 
         public static CaptureArchiveValidationResult ValidateRoot(string captureRoot)
@@ -497,312 +454,6 @@ namespace AniloxRoll.Monitor.Core.Services
                         result.InvalidRecordCount++;
                 }
             }
-            return result;
-        }
-
-        public static CaptureArchiveThumbnailResult AddThumbnails(
-            string captureRoot,
-            int targetWidth,
-            Action<string> progress = null)
-        {
-            var result = new CaptureArchiveThumbnailResult();
-            if (string.IsNullOrWhiteSpace(captureRoot) ||
-                !Directory.Exists(captureRoot) ||
-                targetWidth <= 0)
-                return result;
-
-            string[] archives = Directory.GetFiles(
-                captureRoot, "*" + Extension, SearchOption.AllDirectories);
-            Array.Sort(archives, StringComparer.OrdinalIgnoreCase);
-            foreach (string archivePath in archives)
-            {
-                bool archiveChanged = false;
-                string grabId = Path.GetFileNameWithoutExtension(archivePath);
-                List<string> rawPaths = ListAllVirtualRawPaths(archivePath);
-                var pending = new List<ThumbnailFrame>(rawPaths.Count);
-                for (int i = 0; i < rawPaths.Count; i++)
-                {
-                    string rawPath = rawPaths[i];
-                    string baseName = GetVirtualBaseName(rawPath);
-                    if (string.IsNullOrEmpty(baseName) ||
-                        !InspectionCsvReader.TryExtractCameraId(baseName, out int cameraId))
-                    {
-                        result.FailedFrameCount++;
-                        continue;
-                    }
-
-                    var assets = new List<CaptureArchiveAsset>(3);
-                    AddThumbnailAsset(
-                        assets, rawPath,
-                        CaptureFileNaming.StripRawJpg(rawPath) + CaptureFileNaming.ThumbRawJpg,
-                        CaptureAssetKind.ThumbnailRawJpeg,
-                        targetWidth, result);
-                    string basePath = CaptureFileNaming.StripRawJpg(rawPath);
-                    AddThumbnailAsset(
-                        assets, basePath + CaptureFileNaming.ProcC,
-                        basePath + CaptureFileNaming.ThumbProcC,
-                        CaptureAssetKind.ThumbnailColumnJpeg,
-                        targetWidth, result);
-                    AddThumbnailAsset(
-                        assets, basePath + CaptureFileNaming.ProcR,
-                        basePath + CaptureFileNaming.ThumbProcR,
-                        CaptureAssetKind.ThumbnailRowJpeg,
-                        targetWidth, result);
-
-                    if (assets.Count == 0) continue;
-                    TryGetFrameTicks(rawPath, out long frameTicks);
-                    pending.Add(new ThumbnailFrame
-                    {
-                        BaseName = baseName,
-                        CameraId = cameraId,
-                        FrameTicks = frameTicks,
-                        Assets = assets
-                    });
-                }
-
-                for (int i = 0; i < pending.Count; i++)
-                {
-                    ThumbnailFrame frame = pending[i];
-                    try
-                    {
-                        result.ThumbnailBytes += AppendFrame(
-                            archivePath, grabId, frame.BaseName, frame.CameraId,
-                            frame.FrameTicks, frame.Assets);
-                        result.ThumbnailCount += frame.Assets.Count;
-                        result.FrameCount++;
-                        archiveChanged = true;
-                    }
-                    catch (Exception ex)
-                    {
-                        result.FailedFrameCount++;
-                        Trace.WriteLine(
-                            $"[CaptureArchive.Thumbnail] {frame.BaseName}: " +
-                            $"{ex.GetType().Name}: {ex.Message}");
-                    }
-                }
-                if (archiveChanged)
-                {
-                    result.ArchiveCount++;
-                    progress?.Invoke(archivePath);
-                }
-            }
-            return result;
-        }
-
-        public static CaptureArchivePreviewAtlasResult AddPreviewAtlases(
-            string captureRoot,
-            int maxWidth,
-            int maxHeight,
-            bool replaceExisting = false,
-            Action<string> progress = null)
-        {
-            return CapturePreviewAtlasCodec.AddToRoot(
-                captureRoot, maxWidth, maxHeight,
-                replaceExisting, progress);
-        }
-
-        public static CaptureArchivePreviewAtlasResult AddPreviewAtlasesToArchive(
-            string archivePath,
-            int maxWidth,
-            int maxHeight,
-            bool replaceExisting = false,
-            Action<string> progress = null)
-        {
-            return CapturePreviewAtlasCodec.AddToArchive(
-                archivePath,
-                maxWidth,
-                maxHeight,
-                replaceExisting,
-                progress);
-        }
-
-        private static void AddThumbnailAsset(
-            List<CaptureArchiveAsset> assets,
-            string sourcePath,
-            string thumbnailPath,
-            CaptureAssetKind thumbnailKind,
-            int targetWidth,
-            CaptureArchiveThumbnailResult result)
-        {
-            if (!Exists(sourcePath)) return;
-            if (Exists(thumbnailPath))
-            {
-                result.SkippedThumbnailCount++;
-                return;
-            }
-
-            byte[] source = ReadAllBytes(sourcePath);
-            byte[] thumbnail = CreateJpegThumbnail(source, targetWidth);
-            if (thumbnail == null || thumbnail.Length == 0)
-            {
-                result.FailedFrameCount++;
-                return;
-            }
-            assets.Add(new CaptureArchiveAsset
-            {
-                Kind = thumbnailKind,
-                Data = thumbnail
-            });
-        }
-
-        private static byte[] CreateJpegThumbnail(byte[] jpeg, int targetWidth)
-        {
-            if (jpeg == null || jpeg.Length == 0) return null;
-            try
-            {
-                using (var input = new MemoryStream(jpeg, false))
-                using (var source = Image.FromStream(input, false, false))
-                {
-                    int width = Math.Min(targetWidth, source.Width);
-                    int height = Math.Max(
-                        1, (int)Math.Round(source.Height * width / (double)source.Width));
-                    using (var resized = new Bitmap(width, height, PixelFormat.Format24bppRgb))
-                    {
-                        using (Graphics graphics = Graphics.FromImage(resized))
-                        {
-                            graphics.Clear(Color.Black);
-                            graphics.InterpolationMode = InterpolationMode.HighQualityBilinear;
-                            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
-                            graphics.DrawImage(source, 0, 0, width, height);
-                        }
-                        using (var output = new MemoryStream())
-                        {
-                            ImageCodecInfo codec = GetJpegCodec();
-                            if (codec == null)
-                                resized.Save(output, ImageFormat.Jpeg);
-                            else
-                            {
-                                using (var parameters = new EncoderParameters(1))
-                                {
-                                    parameters.Param[0] = new EncoderParameter(
-                                        System.Drawing.Imaging.Encoder.Quality, 75L);
-                                    resized.Save(output, codec, parameters);
-                                }
-                            }
-                            return output.ToArray();
-                        }
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine(
-                    $"[CaptureArchive.Thumbnail] encode failed: " +
-                    $"{ex.GetType().Name}: {ex.Message}");
-                return null;
-            }
-        }
-
-        private static ImageCodecInfo GetJpegCodec()
-        {
-            ImageCodecInfo[] codecs = ImageCodecInfo.GetImageEncoders();
-            for (int i = 0; i < codecs.Length; i++)
-                if (codecs[i].FormatID == ImageFormat.Jpeg.Guid)
-                    return codecs[i];
-            return null;
-        }
-
-        private static Dictionary<string, List<LegacyFrame>> ReadLegacyFrames(string csvPath)
-        {
-            var byGrab = new Dictionary<string, List<LegacyFrame>>(StringComparer.Ordinal);
-            try
-            {
-                using (var reader = InspectionCsvReader.OpenShared(csvPath))
-                {
-                    string line;
-                    var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                    while ((line = reader.ReadLine()) != null)
-                    {
-                        if (!InspectionCsvReader.TryParseRecord(line, out var record) ||
-                            !InspectionCsvReader.TryExtractCameraId(record.FileName, out int cameraId) ||
-                            !InspectionCsvReader.TryParseTimestamp(record.FileName, out DateTime timestamp))
-                            continue;
-                        string identity = record.GrabId + "\n" + record.FileName;
-                        if (!seen.Add(identity)) continue;
-                        if (!byGrab.TryGetValue(record.GrabId, out List<LegacyFrame> frames))
-                            byGrab[record.GrabId] = frames = new List<LegacyFrame>();
-                        frames.Add(new LegacyFrame
-                        {
-                            BaseName = Path.Combine(
-                                CaptureStoragePaths.DateImageDir(
-                                    CaptureRootFromCsvPath(csvPath), timestamp), record.FileName),
-                            CameraId = cameraId
-                        });
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Trace.WriteLine(
-                    $"[CaptureArchive.ReadCsv] {csvPath}: {ex.GetType().Name}: {ex.Message}");
-            }
-            return byGrab;
-        }
-
-        private static string CaptureRootFromCsvPath(string csvPath)
-        {
-            DirectoryInfo month = Directory.GetParent(csvPath);
-            DirectoryInfo year = month?.Parent;
-            return year?.Parent?.FullName ?? string.Empty;
-        }
-
-        private static List<CaptureArchiveAsset> LoadLegacyAssets(string basePath)
-        {
-            var assets = new List<CaptureArchiveAsset>(7);
-            AddLegacyAsset(assets, CaptureAssetKind.RawJpeg, basePath + CaptureFileNaming.RawJpg);
-            AddLegacyAsset(assets, CaptureAssetKind.ProcessedColumnJpeg,
-                ResolveLegacyExisting(basePath, CaptureFileNaming.ProcC,
-                    CaptureFileNaming.ProcCPrevious, CaptureFileNaming.ProcLegacy));
-            AddLegacyAsset(assets, CaptureAssetKind.ProcessedRowJpeg,
-                ResolveLegacyExisting(basePath, CaptureFileNaming.ProcR,
-                    CaptureFileNaming.ProcRPrevious, CaptureFileNaming.ProcLegacy));
-            AddLegacyAsset(assets, CaptureAssetKind.MeanColumnCurve,
-                ResolveLegacyExisting(basePath, CaptureFileNaming.MeanC,
-                    CaptureFileNaming.MeanCPrevious, CaptureFileNaming.MeanCLegacy));
-            AddLegacyAsset(assets, CaptureAssetKind.MaxColumnCurve,
-                ResolveLegacyExisting(basePath, CaptureFileNaming.MaxC,
-                    CaptureFileNaming.MaxCPrevious, CaptureFileNaming.MaxCLegacy));
-            AddLegacyAsset(assets, CaptureAssetKind.MeanRowCurve,
-                ResolveLegacyExisting(basePath, CaptureFileNaming.MeanR,
-                    CaptureFileNaming.MeanRPrevious, CaptureFileNaming.MeanRLegacy));
-            AddLegacyAsset(assets, CaptureAssetKind.MaxRowCurve,
-                ResolveLegacyExisting(basePath, CaptureFileNaming.MaxR,
-                    CaptureFileNaming.MaxRPrevious, CaptureFileNaming.MaxRLegacy));
-            return assets;
-        }
-
-        private static void AddLegacyAsset(
-            List<CaptureArchiveAsset> assets, CaptureAssetKind kind, string path)
-        {
-            if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
-            assets.Add(new CaptureArchiveAsset { Kind = kind, Data = File.ReadAllBytes(path) });
-        }
-
-        private static string ResolveLegacyExisting(
-            string basePath, string current, string previous, string legacy)
-        {
-            string path = basePath + current;
-            if (File.Exists(path)) return path;
-            path = basePath + previous;
-            return File.Exists(path) ? path : basePath + legacy;
-        }
-
-        private static Dictionary<string, long> LoadLegacyTicks(string dateDirectory)
-        {
-            var result = new Dictionary<string, long>(StringComparer.Ordinal);
-            string path = Path.Combine(dateDirectory, "_ticks.csv");
-            if (!File.Exists(path)) return result;
-            try
-            {
-                foreach (string line in File.ReadLines(path))
-                {
-                    int comma = line.LastIndexOf(',');
-                    if (comma <= 0) continue;
-                    if (long.TryParse(line.Substring(comma + 1), out long ticks))
-                        result[line.Substring(0, comma)] = ticks;
-                }
-            }
-            catch { }
             return result;
         }
 
@@ -1136,75 +787,4 @@ namespace AniloxRoll.Monitor.Core.Services
         }
     }
 
-    /// <summary>PowerShell-facing entry point for the one-time legacy capture migration.</summary>
-    public static class CaptureArchiveMigration
-    {
-        public static string ConvertLegacyRoot(string captureRoot, bool overwrite)
-        {
-            CaptureArchiveConversionResult result = CaptureArchiveStore.ConvertLegacyRoot(
-                captureRoot, overwrite);
-            return string.Format(
-                "archives={0};frames={1};payloadBytes={2};skipped={3};failed={4}",
-                result.ArchiveCount,
-                result.FrameCount,
-                result.PayloadBytes,
-                result.SkippedArchiveCount,
-                result.FailedArchiveCount);
-        }
-
-        public static string ValidateRoot(string captureRoot)
-        {
-            CaptureArchiveValidationResult result = CaptureArchiveStore.ValidateRoot(captureRoot);
-            return string.Format(
-                "archives={0};rawFrames={1};records={2};payloadBytes={3};" +
-                "previewAtlases={4};invalidArchives={5};invalidRecords={6};partialFiles={7}",
-                result.ArchiveCount,
-                result.RawFrameCount,
-                result.RecordCount,
-                result.PayloadBytes,
-                result.PreviewAtlasCount,
-                result.InvalidArchiveCount,
-                result.InvalidRecordCount,
-                result.PartialFileCount);
-        }
-
-        public static string AddThumbnails(string captureRoot, int targetWidth)
-        {
-            CaptureArchiveThumbnailResult result =
-                CaptureArchiveStore.AddThumbnails(captureRoot, targetWidth);
-            return string.Format(
-                "archives={0};frames={1};thumbnails={2};thumbnailBytes={3};" +
-                "skipped={4};failed={5}",
-                result.ArchiveCount,
-                result.FrameCount,
-                result.ThumbnailCount,
-                result.ThumbnailBytes,
-                result.SkippedThumbnailCount,
-                result.FailedFrameCount);
-        }
-
-        public static string AddPreviewAtlases(
-            string captureRoot, int maxWidth, int maxHeight,
-            bool replaceExisting)
-        {
-            CaptureArchivePreviewAtlasResult result =
-                CaptureArchiveStore.AddPreviewAtlases(
-                    captureRoot, maxWidth, maxHeight,
-                    replaceExisting);
-            return string.Format(
-                "archives={0};atlases={1};atlasBytes={2};skipped={3};failed={4}",
-                result.ArchiveCount,
-                result.AtlasCount,
-                result.AtlasBytes,
-                result.SkippedAtlasCount,
-                result.FailedArchiveCount);
-        }
-
-        public static string AddPreviewAtlases(
-            string captureRoot, int maxWidth, int maxHeight)
-        {
-            return AddPreviewAtlases(
-                captureRoot, maxWidth, maxHeight, false);
-        }
-    }
 }

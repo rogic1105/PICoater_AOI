@@ -84,6 +84,25 @@ namespace AniloxRoll.Monitor.Tests
         }
 
         [Test]
+        public void SetExpectedDataLength_PreparesPhysicalExtentWithoutPlaceholderData()
+        {
+            using (var chart = new Chart())
+            {
+                var helper = new RowCurveChartHelper(chart);
+                var display = new RowCurveDisplayAdapter(
+                    helper, () => VerticalDisplayDirection.TopToBottom);
+                var sync = new RowCurveSyncCoordinator(display);
+                sync.SetRowPitch(0.5);
+
+                sync.SetExpectedDataLength(3000);
+
+                Assert.That(helper.TotalMm, Is.EqualTo(1500));
+                Assert.That(chart.Series["Mean"].Points, Is.Empty);
+                Assert.That(chart.Series["Max"].Points, Is.Empty);
+            }
+        }
+
+        [Test]
         public void UpdateDataPreservingView_ChangesValuesWithoutMovingPhysicalRange()
         {
             using (var chart = new Chart())

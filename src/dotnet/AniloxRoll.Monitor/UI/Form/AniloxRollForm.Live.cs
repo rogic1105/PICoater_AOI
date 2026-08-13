@@ -376,11 +376,12 @@ namespace AniloxRoll.Monitor.Forms
                 CaptureArchivePreviewAtlasResult preview = await Task.Run(() =>
                 {
                     CaptureArchivePreviewAtlasResult result =
-                        CaptureArchiveStore.AddPreviewAtlasesToArchive(
+                        CapturePreviewAtlasCodec.AddToArchive(
                             archivePath,
                             previewMaxWidth,
                             previewMaxHeight,
-                            replaceExisting: true);
+                            replaceExisting: true,
+                            progress: null);
 
                     var grouped = new Dictionary<int, List<string>>();
                     for (int camId = 1; camId <= CameraCount; camId++)

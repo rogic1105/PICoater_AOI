@@ -52,6 +52,8 @@ against current code with `rg` before editing because lookup data can become sta
 | `UI/Coordinators/StorageHealthCoordinator.cs` | 儲存健康觀測 owner：本機／遠端容量、TCP 445、分享可寫、遠端 app heartbeat 與 2 秒重探；不負責保留刪檔或遠端複製 policy。 |
 | `UI/Coordinators/CaptureStopCoordinator.cs` | 每輪 IO／時間／高度停止條件的狀態機：快照條件與數值、首幀後啟動時間計時、IO tail 決策、高度門檻與單一 terminal request。 |
 | `UI/Coordinators/LatestGrabLoadCoordinator.cs` | 回顧／報表／預覽共用的單序號 latest-only／single-flight 排程與 stale token owner；不負責讀檔或畫畫面。 |
+| `UI/Coordinators/ReportCurveVerdictIndexCoordinator.cs` | 報表欄／列峰值 index 的非同步生命週期 owner：generation/cancel、先讀 `_curve_summary`、缺少時背景讀 bin、只接受目前資料根目錄的結果。 |
+| `UI/Coordinators/ReportSingleGrabSelectionCoordinator.cs` | 報表單序號快速選取的 33ms latest-only owner：合併中間 intent、記錄 skipped 數並保證最後序號交給 presenter。 |
 | `UI/Coordinators/ReviewPeriodLoadCoordinator.cs` | 回顧時段載入的 FIFO single-flight、重複 request 去重與 generation 失效 owner。 |
 | `UI/Services/ImageCacheService.cs` | ProcessBatch 產出但不直接顯示的 Bitmap 生命週期唯一 owner；下一次 workflow 前統一 Dispose。 |
 | `UI/Services/ReviewImageDataLoader.cs` | 回顧單片完整載入 service：查影像/CFG、幀對齊、每台拼接、欄列 curve 合併與灰階轉換；背景執行且不持有 WinForms 狀態。 |
@@ -68,6 +70,9 @@ against current code with `rg` before editing because lookup data can become sta
 | `sdk/TanukiCv/dotnet/TanukiCv.Controls/Interaction/MultiClickDetector.cs` | 雙擊與三擊手勢辨識 |
 | `UI/Widgets/CurveMergeHelper.cs` | 曲線 bin 讀取與全覽曲線合併的 app adapter |
 | `UI/Presenters/DataStatisticsPresenter.cs` | 報表統計、導航、明細清單與圖表的 feature presenter |
+| `UI/Presenters/ReportCurveVerdictPresenter.cs` | 報表欄／列 O/X 的呈現 owner：套用單序號可見合併 Curve、設定重判與 List 實際結果 DVT 稽核；不直接操作 WinForms 控制項。 |
+| `Services/ReportCurveVerdictIndex.cs` | 報表明細、欄峰值、列峰值與當前判定參數 identity 的同一狀態 owner；不碰 UI／檔案 IO。 |
+| `Services/CurvePeakVerdictProjector.cs` | 將記憶體欄／列峰值依當前 `ThresholdContext` 雙向重判為報表 O/X 的純邏輯 owner。 |
 | `UI/Presenters/ReviewStitchCoordinator.cs` | 回顧單片／時段載入指揮：async token、busy lease、prepared layout、報表 Curve 共用與顯示事件發布；不持有圖表公式。 |
 | `UI/Presenters/ReviewChartPresenter.cs` | 回顧欄／列圖表唯一套用 owner：正規值轉換、單片合圖、時序 Curve 與視野連動。 |
 | `UI/State/ReviewDisplayContent.cs` | 當前回顧 Bitmap／欄列 Curve 的所有權與清理；不排程 IO、不操作控制項。 |
@@ -79,7 +84,10 @@ against current code with `rg` before editing because lookup data can become sta
 | `Services/FlowTrace.cs` | 產品 `[Flow]` trace 的單一輸出介面 |
 | `Services/FrameTickIndex.cs` | 跨相機時間槽對齊唯一決策點：硬體 tick 優先，任一 tick 缺失時整批 fallback 檔名，並回報實際模式。 |
 | `UI/Widgets/WaterfallView.cs` | App 對瀑布顯示流程的相容入口 |
-| `Services/CaptureArchiveStore.cs` | 每序號 `.acap` 容器、CRC、虛擬路徑、隨機記錄讀寫與舊資料轉換 owner。 |
+| `Services/CaptureArchiveStore.cs` | 每序號 `.acap` 容器、CRC、虛擬路徑、隨機記錄讀寫與格式驗證 owner；不負責 JPEG 解碼或縮圖重編碼。 |
+| `Services/CaptureArchiveLegacyConverter.cs` | 舊 CSV／圖片／`_ticks.csv` 探索與搬遷 owner；把舊資料投影成 archive frame，再交 Store 原子取代，不自行實作容器格式。 |
+| `Services/CaptureArchiveMigration.cs` | PowerShell 一次性搬遷／驗證命令 facade；只組合 Store、縮圖 maintenance 與 preview-atlas codec，執行期 Grab／回顧不依賴它。 |
+| `Services/CaptureArchiveThumbnailMaintenance.cs` | 舊 `.acap` 每幀縮圖的一次性補建 owner；負責 JPEG decode/resize/re-encode，透過 Store 公開讀寫面追加，不擁有容器格式。 |
 | `Services/CapturePreviewAtlasCodec.cs` | `.acap` raw／欄／列 1080p 預覽合圖的生成、metadata 編解碼與相機切片 owner；完整 JPEG 仍是真實來源。 |
 | `Services/CaptureFileNaming.cs` | 擷取影像、曲線與背景檔名規則及 legacy 解析 |
 | `Services/CaptureStoragePaths.cs` | 每日 CSV 與日期影像目錄的路徑規則 |

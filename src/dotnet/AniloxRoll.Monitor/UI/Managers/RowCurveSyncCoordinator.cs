@@ -32,6 +32,9 @@ namespace AniloxRoll.Monitor.UI.Managers
 
         public void SetRowPitch(double mmPerRow) => _display?.SetRowPitch(mmPerRow);
 
+        public void SetExpectedDataLength(int rowCount)
+            => _display?.SetExpectedDataLength(rowCount);
+
         public void SuspendUntilNextData()
         {
             // New content must never inherit the previous image's fitted viewport. Keep the

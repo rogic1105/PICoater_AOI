@@ -80,6 +80,16 @@ magic(4)="MCBF" | version(4=int) | scale_factor(4=float) | array_length(4=int) |
 ### Capture archive compatibility
 - `{grabId}.acap` stores independent raw/processed JPEG and C/R curve records for one grab.
 - `CaptureArchiveStore` owns the container index, CRC validation, virtual paths, and random record reads.
+- `CaptureArchiveLegacyConverter` owns legacy CSV/image/tick discovery and maps those files into
+  archive frames. It must call the Store's atomic replacement surface and never write container
+  headers, records, or CRC itself.
+- `CapturePreviewAtlasCodec` owns preview-atlas build/decode. Runtime capture calls this owner
+  directly; the Store does not wrap image-cache generation.
+- `CaptureArchiveThumbnailMaintenance` owns the one-time legacy per-frame thumbnail decode/resize/
+  re-encode workflow. It may call the Store's public append/read surface, but container framing,
+  indexing, CRC, and runtime Grab persistence must not move into maintenance code.
+- `CaptureArchiveMigration` is only the PowerShell-facing command facade for legacy conversion,
+  validation, thumbnail backfill, and atlas backfill. Runtime capture/review must not depend on it.
 - All readers must accept both archive virtual paths and legacy individual files; UI code must not
   parse the binary format or treat the archive as one stitched image.
 - Rebuildable preview caches live inside the same archive. New archives prefer one raw/C/R

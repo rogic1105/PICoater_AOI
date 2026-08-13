@@ -208,7 +208,7 @@ namespace AniloxRoll.Monitor.Integration.Tests
             Assert.That(parsed.GrabId, Is.EqualTo(grabId));
             Assert.That(InspectionCsvReader.TryParseTimestamp(baseName, out _), Is.True);
 
-            CaptureArchiveConversionResult converted = CaptureArchiveStore.ConvertLegacyRoot(
+            CaptureArchiveConversionResult converted = CaptureArchiveLegacyConverter.ConvertRoot(
                 _root, false);
 
             Assert.That(converted.ArchiveCount, Is.EqualTo(1),
@@ -216,6 +216,46 @@ namespace AniloxRoll.Monitor.Integration.Tests
             string archive = CaptureStoragePaths.GrabArchive(_root, date, grabId);
             string rawPath = CaptureArchiveStore.CreateVirtualRawPath(archive, baseName);
             Assert.That(CaptureArchiveStore.ReadAllBytes(rawPath), Is.EqualTo(new byte[] { 4, 5, 6 }));
+        }
+
+        [Test]
+        public void ConvertLegacyRoot_OverwriteAtomicallyReplacesExistingArchive()
+        {
+            DateTime date = new DateTime(2026, 7, 22, 12, 3, 5, 5);
+            string grabId = "260722-120305";
+            string baseName = "20260722_120305.005-1";
+            string dateDir = CaptureStoragePaths.DateImageDir(_root, date);
+            string csvPath = CaptureStoragePaths.DailyCsv(_root, date);
+            Directory.CreateDirectory(dateDir);
+            Directory.CreateDirectory(Path.GetDirectoryName(csvPath));
+            File.WriteAllText(csvPath,
+                "Id,FileName,MaxExceed,MeanExceed\r\n" +
+                grabId + "," + baseName + ",0,0\r\n");
+            string legacyRaw = Path.Combine(
+                dateDir, baseName + CaptureFileNaming.RawJpg);
+            File.WriteAllBytes(legacyRaw, new byte[] { 7, 8, 9 });
+            string archive = CaptureStoragePaths.GrabArchive(_root, date, grabId);
+            CaptureArchiveStore.AppendFrame(
+                archive, grabId, baseName, 1, 1,
+                new[]
+                {
+                    new CaptureArchiveAsset
+                    {
+                        Kind = CaptureAssetKind.RawJpeg,
+                        Data = new byte[] { 1, 2, 3 }
+                    }
+                });
+
+            CaptureArchiveConversionResult converted =
+                CaptureArchiveLegacyConverter.ConvertRoot(_root, true);
+
+            string rawPath = CaptureArchiveStore.CreateVirtualRawPath(
+                archive, baseName);
+            Assert.That(converted.ArchiveCount, Is.EqualTo(1));
+            Assert.That(CaptureArchiveStore.ReadAllBytes(rawPath),
+                Is.EqualTo(new byte[] { 7, 8, 9 }));
+            Assert.That(Directory.GetFiles(
+                dateDir, "*.part-*", SearchOption.TopDirectoryOnly), Is.Empty);
         }
 
         [Test]
@@ -312,10 +352,10 @@ namespace AniloxRoll.Monitor.Integration.Tests
                 });
 
             CaptureArchiveThumbnailResult first =
-                CaptureArchiveStore.AddThumbnails(_root, 64);
+                CaptureArchiveThumbnailMaintenance.AddThumbnails(_root, 64);
             long lengthAfterFirst = new FileInfo(archive).Length;
             CaptureArchiveThumbnailResult second =
-                CaptureArchiveStore.AddThumbnails(_root, 64);
+                CaptureArchiveThumbnailMaintenance.AddThumbnails(_root, 64);
 
             string rawPath = CaptureArchiveStore.CreateVirtualRawPath(
                 archive, baseName);
@@ -377,13 +417,13 @@ namespace AniloxRoll.Monitor.Integration.Tests
             }
 
             CaptureArchivePreviewAtlasResult first =
-                CaptureArchiveStore.AddPreviewAtlasesToArchive(archive, 100, 60);
+                CapturePreviewAtlasCodec.AddToArchive(archive, 100, 60, false, null);
             long lengthAfterFirst = new FileInfo(archive).Length;
             CaptureArchivePreviewAtlasResult second =
-                CaptureArchiveStore.AddPreviewAtlasesToArchive(archive, 100, 60);
+                CapturePreviewAtlasCodec.AddToArchive(archive, 100, 60, false, null);
             CaptureArchivePreviewAtlasResult replaced =
-                CaptureArchiveStore.AddPreviewAtlasesToArchive(
-                    archive, 50, 30, replaceExisting: true);
+                CapturePreviewAtlasCodec.AddToArchive(
+                    archive, 50, 30, replaceExisting: true, progress: null);
             var grouped = new Dictionary<int, List<string>>
             {
                 { 1, CaptureArchiveStore.ListVirtualRawPaths(archive, 1) },
