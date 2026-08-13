@@ -339,6 +339,7 @@ namespace AniloxRoll.DvtRunner
             CancellationToken cancellationToken,
             int occurrence = 0)
         {
+            LastPropertySelectionMode = "unknown";
             if (string.Equals(
                 await GetPropertyValueAsync(
                     displayName,
@@ -347,7 +348,10 @@ namespace AniloxRoll.DvtRunner
                     cancellationToken),
                 value,
                 StringComparison.Ordinal))
+            {
+                LastPropertySelectionMode = "already-current";
                 return;
+            }
 
             AutomationElement element = await BringDataItemIntoViewAsync(
                 displayName, occurrence, timeoutSeconds, cancellationToken);
@@ -423,6 +427,7 @@ namespace AniloxRoll.DvtRunner
                         // The value and route are the commit boundary. A
                         // setting such as AppRole can rebuild the layout, so
                         // do not touch the pre-change AutomationElement.
+                        LastPropertySelectionMode = "value-pattern";
                         return;
                     }
                     await Task.Delay(150, cancellationToken);
@@ -431,8 +436,35 @@ namespace AniloxRoll.DvtRunner
 
             // Some WinForms PropertyGrid enum editors expose ValuePattern but
             // mark it read-only, or do not commit text that was not chosen
-            // from the standard-value list. Select each standard value by
-            // keyboard and verify the actual value.
+            // from the standard-value list. Prefer the exact visible option
+            // text; retain keyboard enumeration for accessibility hosts that
+            // do not expose the native drop-down items.
+            element = await BringDataItemIntoViewAsync(
+                displayName, occurrence, timeoutSeconds, cancellationToken);
+            NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+            System.Windows.Rect directBounds =
+                element.Current.BoundingRectangle;
+            NativeMethods.ClickScreenPoint(
+                (int)Math.Round(directBounds.Left + directBounds.Width * 0.75),
+                (int)Math.Round(directBounds.Top + directBounds.Height / 2.0));
+            await Task.Delay(100, cancellationToken);
+            NativeMethods.PressKey((byte)NativeMethods.VkF4);
+            if (await TrySelectVisibleStandardValueAsync(
+                value, timeoutSeconds, cancellationToken))
+            {
+                string selected = await GetPropertyValueAsync(
+                    displayName,
+                    occurrence,
+                    timeoutSeconds,
+                    cancellationToken);
+                if (string.Equals(selected, value, StringComparison.Ordinal))
+                {
+                    LastPropertySelectionMode = "option-text";
+                    return;
+                }
+            }
+            NativeMethods.PressKey((byte)NativeMethods.VkEscape);
+
             DateTime selectionDeadline =
                 DateTime.UtcNow.AddSeconds(timeoutSeconds);
             for (int choiceIndex = 0;
@@ -469,10 +501,86 @@ namespace AniloxRoll.DvtRunner
                 if (!string.Equals(
                     current, value, StringComparison.Ordinal))
                     continue;
+                LastPropertySelectionMode = "keyboard-fallback";
                 return;
             }
             throw new TimeoutException(
                 $"Property value did not settle: {displayName} expected={value}");
+        }
+
+        public string LastPropertySelectionMode { get; private set; }
+
+        private async Task<bool> TrySelectVisibleStandardValueAsync(
+            string value,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(
+                Math.Min(1.5, Math.Max(0.5, timeoutSeconds)));
+            var condition = new AndCondition(
+                new PropertyCondition(
+                    AutomationElement.ProcessIdProperty,
+                    _process.Id),
+                new PropertyCondition(
+                    AutomationElement.ControlTypeProperty,
+                    ControlType.ListItem),
+                new PropertyCondition(
+                    AutomationElement.NameProperty,
+                    value));
+
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                AutomationElementCollection options =
+                    AutomationElement.RootElement.FindAll(
+                        TreeScope.Descendants,
+                        condition);
+                for (int i = 0; i < options.Count; i++)
+                {
+                    AutomationElement option = options[i];
+                    try
+                    {
+                        System.Windows.Rect bounds =
+                            option.Current.BoundingRectangle;
+                        if (option.Current.IsOffscreen ||
+                            !option.Current.IsEnabled ||
+                            bounds.Width <= 0 ||
+                            bounds.Height <= 0)
+                            continue;
+
+                        object selectionPattern;
+                        if (option.TryGetCurrentPattern(
+                            SelectionItemPattern.Pattern,
+                            out selectionPattern))
+                        {
+                            ((SelectionItemPattern)selectionPattern).Select();
+                            NativeMethods.PressKey(
+                                (byte)NativeMethods.VkReturn);
+                        }
+                        else
+                        {
+                            NativeMethods.ClickScreenPoint(
+                                (int)Math.Round(bounds.Left + bounds.Width / 2.0),
+                                (int)Math.Round(bounds.Top + bounds.Height / 2.0));
+                        }
+                        await Task.Delay(250, cancellationToken);
+                        return true;
+                    }
+                    catch (ElementNotAvailableException)
+                    {
+                        // The drop-down was rebuilt while UI Automation read it.
+                    }
+                    catch (InvalidOperationException)
+                    {
+                        // This accessibility provider exposes the item but
+                        // rejects SelectionItemPattern. Let the caller use
+                        // the verified keyboard fallback for this property.
+                        return false;
+                    }
+                }
+                await Task.Delay(50, cancellationToken);
+            }
+            return false;
         }
 
         public async Task ClickAsync(

@@ -2073,6 +2073,11 @@ T1: setting route {屬性名} owner={owner|None} effects={effect+effect|None}
 
 **PropertyGrid 全參數矩陣（自動 DVT）**：
 
+- Runner 必須先依 PropertyGrid 顯示名稱與 occurrence 直接定位屬性列；可寫入的編輯器
+  優先以 `ValuePattern` 直接設定。唯讀標準值下拉改依完整選項文字直接選取；只有 UI
+  Automation 未暴露可見 `ListItem` 時，才允許以 `Home + Down` 逐項選取作為相容備援。
+  每條路都必須讀回實際顯示值後才算成功，矩陣報告並須留下各路徑的使用次數。
+
 - `tools/dvt/AniloxRoll.DvtRunner/PropertyGridCoverage.json` 是可編輯欄位的測試目錄；
 - `AppRole` 變更必須出現「重新開啟程式後生效」提示；Runner 按下「確定」後，主程式必須能正常關閉，且測試結束還原原本 `app-mode.json`。
   Runner 用 reflection 對照 `InspectionSettings` 的 browsable、非唯讀屬性。新增、刪除、

@@ -247,7 +247,8 @@ namespace AniloxRoll.DvtRunner
                         cancellationToken,
                         step.TargetOccurrence);
                     return PropertyLabel(step.Target, step.TargetOccurrence) +
-                        "=" + step.Value;
+                        "=" + step.Value +
+                        " selection=" + _ui.LastPropertySelectionMode;
 
                 case "click":
                     await _ui.ClickAsync(
@@ -1550,6 +1551,8 @@ namespace AniloxRoll.DvtRunner
             IReadOnlyList<PropertyGridCatalogEntry> entries =
                 PropertyGridCatalog.Load().GetGroup(group);
             int changed = 0;
+            var selectionModes = new Dictionary<string, int>(
+                StringComparer.Ordinal);
             foreach (PropertyGridCatalogEntry entry in entries)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -1581,6 +1584,15 @@ namespace AniloxRoll.DvtRunner
                         timeoutSeconds,
                         cancellationToken,
                         entry.Occurrence);
+                    string selectionMode = _ui.LastPropertySelectionMode;
+                    int selectionCount;
+                    selectionModes.TryGetValue(
+                        selectionMode, out selectionCount);
+                    selectionModes[selectionMode] = selectionCount + 1;
+                    Output?.Invoke(
+                        "[PropertyGrid] selected " + entry.Name +
+                        " value=" + value +
+                        " via=" + selectionMode);
                     await _log.WaitForAsync(
                         @"setting route " + Regex.Escape(entry.Name) + @"\b",
                         timeoutSeconds,
@@ -1615,7 +1627,12 @@ namespace AniloxRoll.DvtRunner
                 }
             }
             return "group=" + group + " properties=" + entries.Count +
-                " changes=" + changed;
+                " changes=" + changed +
+                " selection=" + string.Join(
+                    ",",
+                    selectionModes
+                        .OrderBy(pair => pair.Key)
+                        .Select(pair => pair.Key + ":" + pair.Value));
         }
 
         private async Task RememberOriginalPropertyAsync(

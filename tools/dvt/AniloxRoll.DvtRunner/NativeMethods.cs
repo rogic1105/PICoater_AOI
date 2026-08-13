@@ -21,6 +21,7 @@ namespace AniloxRoll.DvtRunner
         private const int MainTabItemWidth = 104;
         private const int MainTabItemHeight = 34;
         internal const int VkReturn = 0x0D;
+        internal const int VkEscape = 0x1B;
         internal const int VkHome = 0x24;
         internal const int VkEnd = 0x23;
         internal const int VkUp = 0x26;

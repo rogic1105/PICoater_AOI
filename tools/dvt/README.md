@@ -32,6 +32,9 @@ Curve、正規值、閾值、欄列曲線判定模式、檢出方向與 O/X 公�
 門檻及 O/X；每輪會以實際影像與 Curve peak、主畫面先於 Curve、座標方向和判定公式
 做數值驗證。這才是「設定改了以後畫面與 Curve 真的正確」的功能 DVT；
 `PropertyGrid 全參數矩陣` 仍只負責輸入、保存和 owner route。
+Runner 會先依屬性顯示名稱直接定位列；可寫入欄位以 UI Automation 直接設定，下拉唯讀
+欄位再依選項文字選取。若舊版 WinForms accessibility 未暴露下拉選項，才退回
+`Home + Down` 鍵盤逐項選取；矩陣報告會列出每種選取方式的實際次數。
 
 `監控 IO 基本一循環` 是上述矩陣的最小前置測試。外部 Runner 啟動
 `IoBridge.IoSimulator.exe` 自動模式，只送一次 LOW → HIGH 10 秒 → LOW，將光源設為
