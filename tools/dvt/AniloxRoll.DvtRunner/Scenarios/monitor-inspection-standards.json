@@ -245,6 +245,15 @@
       "TimeoutSeconds": 30
     },
     {
+      "Id": "light-low-sentinel",
+      "Contract": "S1.LightSurrogate",
+      "Title": "建立亮度 100 的變更基準",
+      "Action": "set-property",
+      "Target": "亮度",
+      "Value": "101",
+      "TimeoutSeconds": 10
+    },
+    {
       "Id": "light-low",
       "Contract": "S1.LightSurrogate",
       "Title": "光源降到 100 產生第一組替代刺激",

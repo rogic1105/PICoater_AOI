@@ -41,6 +41,7 @@ namespace AniloxRoll.DvtRunner
                 "select-combo",
                 "wait-log",
                 "wait-log-current-combo",
+                "wait-log-current-period",
                 "verify-log-min-count",
                 "verify-log-absent",
                 "verify-range-scroll",
@@ -135,19 +136,33 @@ namespace AniloxRoll.DvtRunner
                         prefix + " requires a PropertyGrid catalog group in Target.");
                 if (step.Action == "wait-log" ||
                     step.Action == "wait-log-current-combo" ||
+                    step.Action == "wait-log-current-period" ||
                     step.Action == "verify-log-absent")
                 {
                     if (string.IsNullOrWhiteSpace(step.Pattern))
                         throw new InvalidDataException(prefix + " requires a regex pattern.");
-                    string pattern = step.Action == "wait-log-current-combo"
-                        ? step.Pattern.Replace("{value}", "DVT_VALUE")
-                        : step.Pattern;
+                    string pattern = step.Pattern;
+                    if (step.Action == "wait-log-current-combo")
+                        pattern = pattern.Replace("{value}", "DVT_VALUE");
+                    if (step.Action == "wait-log-current-period")
+                    {
+                        pattern = pattern
+                            .Replace("{date}", "DVT_DATE")
+                            .Replace("{time}", "DVT_TIME");
+                    }
                     _ = new Regex(pattern, RegexOptions.CultureInvariant);
                     if (step.Action == "wait-log-current-combo" &&
                         (string.IsNullOrWhiteSpace(step.Target) ||
                          !step.Pattern.Contains("{value}")))
                         throw new InvalidDataException(
                             prefix + " requires Target and a {value} token.");
+                    if (step.Action == "wait-log-current-period" &&
+                        (string.IsNullOrWhiteSpace(step.Target) ||
+                         string.IsNullOrWhiteSpace(step.Value) ||
+                         !step.Pattern.Contains("{date}") ||
+                         !step.Pattern.Contains("{time}")))
+                        throw new InvalidDataException(
+                            prefix + " requires date Target, time Value, and {date}/{time} tokens.");
                 }
                 if (step.Action == "verify-log-min-count")
                 {

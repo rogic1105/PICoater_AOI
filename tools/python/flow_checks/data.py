@@ -134,7 +134,13 @@ class DataFlowValidator:
             line.message for line in session.lines
             if line.message.startswith("DT verdict ")
             and not line.message.startswith(
-                ("DT verdict index ", "DT verdict click ", "DT verdict cache ")
+                (
+                    "DT verdict index ",
+                    "DT verdict click ",
+                    "DT verdict audit ",
+                    "DT verdict cache ",
+                    "DT verdict refresh ",
+                )
             )
         ]
         if not candidates:
@@ -278,7 +284,8 @@ class DataFlowValidator:
             line.message for line in session.lines
             if line.message.startswith("DT row verdict ")
             and not line.message.startswith(
-                ("DT row verdict index ", "DT row verdict click "))
+                ("DT row verdict index ", "DT row verdict click ",
+                 "DT row verdict audit "))
         ]
         if not candidates:
             report.add(
@@ -392,7 +399,8 @@ class DataFlowValidator:
         self, session: FlowSession, report: CheckReport
     ) -> None:
         row_pattern = re.compile(
-            r"^DT verdict click (?P<grab>\d{6}-\d{6}) cam=(?P<cam>\d+) "
+            r"^DT verdict (?P<kind>click|audit) (?P<grab>\d{6}-\d{6}) "
+            r"(?:trigger=(?P<trigger>settings|index) )?cam=(?P<cam>\d+) "
             r"mode=(?P<mode>mean|max|both) "
             r"mean=(?P<mean>nan|\d+(?:\.\d+)?)/(?P<mean_threshold>\d+(?:\.\d+)?) "
             r"enabled=(?P<mean_enabled>[01]) "
@@ -404,11 +412,12 @@ class DataFlowValidator:
             r"source=(?P<source>visible-curve-index|curve-index|missing)$"
         )
         done_pattern = re.compile(
-            r"^DT verdict click done (?P<grab>\d{6}-\d{6}) cams=(?P<cams>\d+)$"
+            r"^DT verdict (?P<kind>click|audit) done (?P<grab>\d{6}-\d{6}) "
+            r"(?:trigger=(?P<trigger>settings|index) )?cams=(?P<cams>\d+)$"
         )
         candidates = [
             line.message for line in session.lines
-            if line.message.startswith("DT verdict click ")
+            if line.message.startswith(("DT verdict click ", "DT verdict audit "))
         ]
         if not candidates:
             report.add(
@@ -511,33 +520,44 @@ class DataFlowValidator:
             r"mean=(?P<mean>\d+(?:\.\d+)?)/\d+(?:\.\d+)? enabled=[01] "
             r"max=(?P<max>\d+(?:\.\d+)?)/\d+(?:\.\d+)? enabled=[01] "
         )
-        displays = {}
-        verdicts = {}
-        for line in session.lines:
-            display = display_pattern.match(line.message)
-            if display:
-                displays[display.group("grab")] = display
-            verdict = verdict_pattern.match(line.message)
-            if verdict:
-                verdicts[verdict.group("grab")] = verdict
-        compared = sorted(set(displays) & set(verdicts))
+        messages = [line.message for line in session.lines]
+        display_indices = [
+            index for index, message in enumerate(messages)
+            if message.startswith("DT row curve display ")
+        ]
         invalid = []
-        for grab in compared:
-            display = displays[grab]
-            verdict = verdicts[grab]
+        compared = 0
+        for position, start in enumerate(display_indices):
+            end = (display_indices[position + 1]
+                   if position + 1 < len(display_indices) else len(messages))
+            display = display_pattern.match(messages[start])
+            if not display:
+                invalid.append(messages[start])
+                continue
+            verdict = None
+            for message in messages[start + 1:end]:
+                candidate = verdict_pattern.match(message)
+                if (candidate and
+                        candidate.group("grab") == display.group("grab")):
+                    verdict = candidate
+                    break
+            if verdict is None:
+                continue
+
+            compared += 1
             if (display.group("mode") != verdict.group("mode") or
                     abs(float(display.group("mean")) -
                         float(verdict.group("mean"))) > 0.0002 or
                     abs(float(display.group("max")) -
                         float(verdict.group("max"))) > 0.0002):
-                invalid.append(grab)
-        status = CheckStatus.PASS if compared and not invalid else (
-            CheckStatus.NOT_COVERED if not compared and not invalid
+                invalid.append(display.group("grab"))
+        status = CheckStatus.PASS if compared > 0 and not invalid else (
+            CheckStatus.NOT_COVERED if compared == 0 and not invalid
             else CheckStatus.FAIL
         )
         report.add(
             self.domain, "D1.row-chart-verdict", status,
-            f"compared={len(compared)} invalid={len(invalid)}"
+            f"compared={compared} invalid={len(invalid)}"
             + (f" first={invalid[0]}" if invalid else ""),
         )
 
@@ -545,7 +565,8 @@ class DataFlowValidator:
         self, session: FlowSession, report: CheckReport
     ) -> None:
         pattern = re.compile(
-            r"^DT row verdict click (?P<grab>\d{6}-\d{6}) "
+            r"^DT row verdict (?P<kind>click|audit) (?P<grab>\d{6}-\d{6}) "
+            r"(?:trigger=(?P<trigger>settings|index) )?"
             r"mode=(?P<mode>mean|max|both) "
             r"mean=(?P<mean>nan|\d+(?:\.\d+)?)/(?P<mean_threshold>\d+(?:\.\d+)?) "
             r"enabled=(?P<mean_enabled>[01]) "
@@ -558,7 +579,9 @@ class DataFlowValidator:
         )
         candidates = [
             line.message for line in session.lines
-            if line.message.startswith("DT row verdict click ")
+            if line.message.startswith(
+                ("DT row verdict click ", "DT row verdict audit ")
+            )
         ]
         if not candidates:
             report.add(
@@ -1359,6 +1382,13 @@ class DataFlowValidator:
         for line in session.lines:
             message = line.message
             if message.startswith("ui:"):
+                last_intent = message
+                last_intent_time = line.elapsed
+            elif message.startswith("DT verdict refresh source=peak-index"):
+                # A threshold/mode change legitimately reprojects the complete
+                # in-memory verdict index and then redraws the List.  It can
+                # finish after a newer single-selection intent, so this
+                # explicit cause supersedes that intent for list ownership.
                 last_intent = message
                 last_intent_time = line.elapsed
             elif message.startswith("DT list reload"):

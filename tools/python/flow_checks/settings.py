@@ -1039,15 +1039,25 @@ class SettingsFlowValidator:
         failures = []
         for index, line, match in changes:
             expected = (match.group("value") or match.group("arrow")).strip()
-            state_index = index + 2  # intent 後固定為 setting route，再來必須是顯示狀態行
-            if state_index >= len(session.lines):
+            state_line = None
+            # The route is synchronous, but a DVT view-state snapshot may be
+            # emitted re-entrantly while the canvases refresh.  Skip only
+            # those instruments; any other behavior still breaks the setting
+            # transaction and remains a contract failure.
+            for candidate in session.lines[index + 2 :]:
+                if pattern.match(candidate.message):
+                    state_line = candidate
+                    break
+                if candidate.message.startswith(
+                    ("IC state ", "RV state ", "WF state ", "IC viewEdges ", "WF viewEdges ")
+                ):
+                    continue
+                break
+            if state_line is None:
                 failures.append(f"{line.timestamp} 缺熱力圖狀態行")
                 continue
-            state_line = session.lines[state_index]
             state_match = pattern.match(state_line.message)
-            if state_match is None:
-                failures.append(f"{state_line.timestamp} 熱力圖狀態行缺失或格式錯誤")
-                continue
+            assert state_match is not None
             mode = state_match.group(1)
             if mode.lower() != expected.lower():
                 failures.append(

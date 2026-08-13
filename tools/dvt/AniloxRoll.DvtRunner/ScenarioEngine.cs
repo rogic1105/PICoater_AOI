@@ -324,6 +324,17 @@ namespace AniloxRoll.DvtRunner
                     return await _log.WaitForAsync(
                         currentPattern, step.TimeoutSeconds, cancellationToken);
 
+                case "wait-log-current-period":
+                    string dateValue = await _ui.ReadComboValueAsync(
+                        step.Target, step.TimeoutSeconds, cancellationToken);
+                    string timeValue = await _ui.ReadComboValueAsync(
+                        step.Value, step.TimeoutSeconds, cancellationToken);
+                    string periodPattern = step.Pattern
+                        .Replace("{date}", Regex.Escape(dateValue))
+                        .Replace("{time}", Regex.Escape(timeValue));
+                    return await _log.WaitForAsync(
+                        periodPattern, step.TimeoutSeconds, cancellationToken);
+
                 case "verify-log-min-count":
                     int minimumCount = int.Parse(
                         step.Value,

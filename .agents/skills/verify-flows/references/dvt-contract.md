@@ -1285,6 +1285,8 @@ controller generation 在阻斷狀態下重新連線；安裝器與 Runner 都�
 controller 在裝置停用狀態下探測失敗；恢復 COM17 後才驗證自動重連。
 每輪必須嚴格完成 `⚠ {IO|光源} 斷線 → OutputHealth raise →
 {IO|光源} 恢復連線 → OutputHealth resolve`，最後 IO 回待機且正常關閉。
+自動情境的初始與最終連線判定必須使用上述 Flow／OutputHealth 證據；不得等待畫面上的
+`待機` 文字，因為該文字是操作狀態，不是 TCP、安全交握或健康狀態的真實來源。
 第一次由 `tests/InstallDvtAdminActions.bat` 經 UAC 安裝六個固定白名單排程動作；
 後續 Runner 本身仍以一般權限執行，只能要求封鎖／解除固定 IO、儲存端點及停用／啟用
 固定 COM17，不得建立可執行任意 repo script 的永久提升入口。
@@ -2255,10 +2257,16 @@ Report 單序號設定重畫
 live inspection stimulus brightness=B direction={col|row} mean=M max=X
 threshold=TM/TX mode={Mean|Max|Both} verdict={O|X} source=light-surrogate-not-mura
 ```
+自動情境在切到第一個目標亮度前，必須先設定一個不同的哨兵值再切回目標；不得假設
+啟動時保存的亮度一定不同，否則同值設定不會觸發 SettingsHub 變更與測試樣本。
 checker 必須驗證兩個亮度都有欄／列資料、數值在 log 記錄精度（0.0001）內確實改變，
 且 verdict 符合公式；不得另設沒有物理依據的最小變化幅度。
 這只證明「檢測標準接線與計算會對穩定輸入變化作出反應」，**不是正式 Mura 模擬，
 不得拿來宣稱真實瑕疵檢出率或光學準確度**。
+
+自動 IO 擷取情境必須先驗證當前 endpoint/controller，再清除擷取證據，最後才允許第一個
+START High。不得在清除證據後把相同 endpoint 寫回並等待 controller restart；同值設定
+依法不重啟 controller，會造成測試假紅。
 
 禁止：其他任何設定（IO／光源／儲存／一般顯示）不得觸發 Data 曲線 reload+重綁。
 光源亮度只允許 arm S1 測試樣本，不得改寫檢測標準。
@@ -2449,6 +2457,14 @@ LoadDataFolder|SyncFromReviewFolderAsync@DataStatisticsPresenter.cs
     └ 一次產生 AvailableTimes／GrabIdsDescending／DetailsByGrabId
  → PopulateAllGrabIdCombos|PopulateAllGrabIdCombosAsync／RefreshStats／YieldPeriodChartPresenter
     └ ComputeGroupedByMonthOfYear|DayOfMonth|HourOfDay（索引 overload，不再掃 CSV）
+ → StartColumnCurvePeakIndexBuild@DataStatisticsPresenter.cs
+    → Start@ReportCurveVerdictIndexCoordinator.cs
+       ├ BuildSummaries@ColumnCurvePeakIndex.cs → partial Project＋UI refresh
+       └ BuildBinFallback@ColumnCurvePeakIndex.cs → final Project＋UI refresh
+           （generation/cancel/root 驗證只在 coordinator；峰值與判定 identity 只在 ReportCurveVerdictIndex）
+ → ApplyCurrentIfNeeded|ApplyVisibleCurves@ReportCurveVerdictPresenter.cs
+    ├ Project@ReportCurveVerdictIndex.cs → Apply@CurvePeakVerdictProjector.cs
+    └ Audit|AuditSelected → DT verdict／DT row verdict 實際 List O/X 證據
 ```
 - **初始載入 SSoT**：同一資料夾＋同一門檻下，序號 List、色卡、年月日圖表必須共用同一份
   `InspectionStatisticsSnapshot`。初始【讀取資料】不得分別呼叫 `LoadAvailableTimes`、
@@ -2458,6 +2474,9 @@ LoadDataFolder|SyncFromReviewFolderAsync@DataStatisticsPresenter.cs
   報表目前畫出的 O/X。初次讀取在背景優先掃 `.mcsf`，缺少時才讀 bin 建立欄／列峰值 index；之後改
   正規值、Mean／Max 門檻或檢出方向，只用記憶體峰值 index 雙向重判 List／色卡／年月日圖表，
   不改寫歷史 CSV。Curve 與判定分歧＝DVT FAIL。
+- **判定索引身分**：`ReportCurveVerdictIndex.ReplaceDetails` 切換資料根目錄時必須清空欄／列峰值；
+  同一根目錄重新掃描時只保留仍存在 GrabId 的峰值。不得因兩個資料根目錄含相同 GrabId 而跳過
+  新資料的峰值重建，也不得讓已刪除序號的峰值留在記憶體。
 
 ### D2 明細列表點選
 ```
@@ -2465,15 +2484,22 @@ T1: ui:【明細列表】→ {grabId}
 T1: DT verdict click {grabId} cam=N mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail|unknown cause=none|mean|max|both list=pass|fail|unknown source=visible-curve-index|curve-index|missing
 T1: DT row verdict click {grabId} mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail|unknown cause=none|mean|max|both list=pass|fail|unknown source=visible-curve-index|missing
 T1: DT verdict click done {grabId} cams=N
+T1: DT verdict audit {grabId} trigger=settings|index cam=N mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail|unknown cause=none|mean|max|both list=pass|fail|unknown source=visible-curve-index|missing
+T1: DT row verdict audit {grabId} trigger=settings|index mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail|unknown cause=none|mean|max|both list=pass|fail|unknown source=visible-curve-index|missing
+T1: DT verdict audit done {grabId} trigger=settings|index cams=N
 T1: DT curve display {grabId} mode=mean|max|both mean=M/T max=X/T scale=S points=N
 T1: DT row curve display {grabId} mode=mean|max|both mean=M/T max=X/T scale=S points=N
     ← 每次點列逐相機列出實際峰值、當下門檻、啟用狀態、公式結果及 List 畫出的 O/X；
       `DATA/D1.verdict-click` 用同一公式重算，並要求 result=list、相機編號 1..N 完整。
+      DVT 模式下峰值索引完成或設定重判後，`DT verdict audit` 會對目前報表序號執行同一份
+      List 模型稽核；因此自動情境不必依賴滑鼠點擊，也能證明 Mean／Max／Both 切換後 O/X 已同步。
       新資料必須是 `visible-curve-index`：先依 OPS／Start／重疊中線合成最終可見 Curve，
       再依合併器回傳的 owner 相機取峰值；`curve-index` 僅供舊版 Log 相容判讀。
       索引峰值來源為 raw `.bin/.mcsf`，code-flow 必須是
-      `ColumnCurvePeakIndex.BuildSummaries → UI partial apply → BuildBinFallback → UI final apply`；峰值走
-      `ColumnCurvePeakIndex.RawMeanPeak/RawMaxPeak → ThresholdContext.EvaluateRawColumnCurve`
+       `ReportCurveVerdictIndexCoordinator.Start → ColumnCurvePeakIndex.BuildSummaries → UI partial apply
+       → BuildBinFallback → UI final apply`；generation/cancel 與目前資料根目錄驗證只在 coordinator；結果寫入
+       `ReportCurveVerdictIndex`，再由 `ReportCurveVerdictPresenter → CurvePeakVerdictProjector
+       → ThresholdContext.EvaluateRawColumnCurve`
       （`captureHm * currentHm`）；不可誤走 CSV／`#CURVE-C` 的 `EvaluateColumn`
       （`currentHm / captureHm`）。
       `DT curve display` 是 chart 真正畫出的縮點峰值；Mean/Max 縮點都必須保留桶內峰值，
@@ -2529,6 +2555,9 @@ T1: DT verdict index apply=ok gen=G summaries=S bins=B missing=M/R cams=C verdic
      ← 第二階段只處理 `pending`：背景批次掃一次 CSV 並合併原始 bin；`S+B+M=R`、`C=V`，
         小批進度刷新 List，完成後再統一刷新卡片與期間統計。摘要階段與 bin 階段共用 generation，
         過期結果不得上畫。
+（失敗）DT verdict index apply=failed gen=G stage=summaries|bins error=ExceptionType
+     ← 背景索引工作不可靜默失敗；出現即為 `DATA/D1.verdict-index` FAIL。切換資料根目錄、開始新一代
+       索引或關閉程式後，舊 generation 即使稍後完成也不得套用、刷新 List 或改寫目前 O/X。
 T1: DT row verdict {grabId} merged=1 mode=mean|max|both mean=M/T enabled=0|1 max=X/T enabled=0|1 result=pass|fail cause=none|mean|max|both source=visible-merged-curve
 T1: DT row verdict index apply=ok gen=G rows=R verdicts=V enabled=0|1
      ← 列 O/X 量測實際上畫的合併 RowMean／RowMax Curve；正規值調低或調高都必須以同一 raw peak
@@ -2552,8 +2581,11 @@ Tn: DT curve summary {grabId} write=queued|ok|failed|dropped|evicted|skip-incomp
 T1: DT selected {grabId} stats=cache|scan list=keep ms=N
      ← 單片快路：更新七台色卡＋列 O/X 色卡＋欄/列 Curve＋List 反白；`cache`＝從既有明細／全序號索引推導統計，`scan`＝索引找不到該序號時 fallback
 T1: DT stats index rows=N ms=N
-     ← 門檻設定變更使 snapshot 簽章失效時，重建一次全序號 Pass/Fail 索引；
-       初始讀取已由 D1 snapshot 建立，同資料夾＋同閾值後續不得重掃 CSV
+     ← 只有資料根目錄改變或初始 snapshot 不存在時，才允許重建全序號資料索引；
+       正規值、Mean／Max 門檻、顯示模式或檢出方向變更不得使資料索引失效或重掃 CSV
+T1: DT verdict refresh source=peak-index columns=C rows=R
+     ← 設定變更只把目前 ThresholdContext 套到記憶體中的欄／列 raw peak index，雙向重判 O/X；
+       之後刷新 List／色卡／年月日圖表，UI 執行緒不得呼叫 ComputeDetailedByGrabIdRange
 T1: ui:【序號範圍-起始|結束】變更       ← 手動拖範圍 → 期間高亮全滅（Custom）
 T1: DT range policy listMs=33 curveMs=80 settleMs=150 curveMode=monotonic curveSamples=50 curveCacheEntries=2048 curveCacheMB=256
      ← DataRangePreviewCoordinator 初始化一次；目前上機驗綠的排程基準，改值必須同步本契約＋checker並重驗
@@ -2567,6 +2599,9 @@ T1: DT list reload range={start}~{end} rows=N ms=N source=index
 - **單片呈現節流**：ComboBox 選項逐格跟手；統計卡、List 高亮與 Curve 排程以 33ms 固定週期只套最新序號，
   中間序號記 `DT selected coalesced` 後省略，最後停住的序號不得省略。這避免每個滾輪事件都在 UI thread
   重繪七張統計卡與同步寫高密度 Trace。
+  code-flow 固定為 `DataDateGrabIdNavigator → ReportSingleGrabSelectionCoordinator.Schedule
+  → 33ms Tick/ApplyPendingNow → DataStatisticsPresenter.RefreshSelectedGrab`；timer、pending count 與取消只准
+  coordinator 擁有，Presenter 不得再保存第二份節流狀態。
 - **List ownership**：明細 List 屬於範圍結果，不屬於單片序號；`ui:【報表序號】` 後只准 `list=keep`，
   不得出現 `DT list reload`／`GrabDetailListBinder.SetItems`／重設 `VirtualListSize`／欄寬。只有資料夾、範圍、期間、閾值改變才重算 List。
 - **列判定索引**：明細第 8 判定欄固定為「列」；O/X 以欄列圖表真正畫出的合併

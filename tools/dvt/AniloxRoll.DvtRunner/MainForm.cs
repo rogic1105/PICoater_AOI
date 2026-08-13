@@ -21,6 +21,8 @@ namespace AniloxRoll.DvtRunner
         private readonly ListView _steps = new ListView();
         private readonly RichTextBox _output = new RichTextBox();
         private readonly Label _status = new Label();
+        private readonly object _runOutputGate = new object();
+        private readonly StringBuilder _runOutput = new StringBuilder();
         private readonly string _autoScenarioId;
         private readonly string _resultPath;
         private readonly string _processIdPath;
@@ -305,6 +307,8 @@ namespace AniloxRoll.DvtRunner
 
             PopulateSteps();
             _output.Clear();
+            lock (_runOutputGate)
+                _runOutput.Clear();
             SetRunning(true);
             _runCancellation = new CancellationTokenSource();
             _engine = new ScenarioEngine(new RunnerOptions
@@ -316,7 +320,7 @@ namespace AniloxRoll.DvtRunner
                 CloseAppOnCleanup = !string.IsNullOrWhiteSpace(_autoScenarioId)
             });
             _engine.StepChanged += update => Ui(() => ApplyStepUpdate(update));
-            _engine.Output += text => Ui(() => AppendOutput(text));
+            _engine.Output += HandleOutput;
             try
             {
                 _status.Text = "執行中：" + selected.Name;
@@ -336,7 +340,7 @@ namespace AniloxRoll.DvtRunner
             {
                 _status.Text = "FAIL：" + ex.Message;
                 _status.ForeColor = Color.DarkRed;
-                AppendOutput(ex.ToString());
+                HandleOutput(ex.ToString());
                 return false;
             }
             finally
@@ -360,7 +364,7 @@ namespace AniloxRoll.DvtRunner
                 Environment.NewLine +
                 "Status: " + _status.Text +
                 Environment.NewLine + Environment.NewLine +
-                _output.Text,
+                GetRunOutput(),
                 new UTF8Encoding(false));
         }
 
@@ -398,7 +402,7 @@ namespace AniloxRoll.DvtRunner
                     "StepStatus: " + update.Status + Environment.NewLine +
                     "Detail: " + (update.Detail ?? string.Empty) +
                     Environment.NewLine + Environment.NewLine +
-                    _output.Text,
+                    GetRunOutput(),
                     new UTF8Encoding(false));
             }
             catch (IOException)
@@ -425,6 +429,25 @@ namespace AniloxRoll.DvtRunner
             _output.AppendText(text.TrimEnd() + Environment.NewLine);
             _output.SelectionStart = _output.TextLength;
             _output.ScrollToCaret();
+        }
+
+        private void HandleOutput(string text)
+        {
+            if (string.IsNullOrEmpty(text)) return;
+            lock (_runOutputGate)
+                _runOutput.AppendLine(text.TrimEnd());
+
+            // Automated runs persist the complete trace in the result file.
+            // Rendering every high-density Flow line in a RichTextBox floods
+            // the UI queue during large-data scenarios and stalls the runner.
+            if (string.IsNullOrWhiteSpace(_autoScenarioId))
+                Ui(() => AppendOutput(text));
+        }
+
+        private string GetRunOutput()
+        {
+            lock (_runOutputGate)
+                return _runOutput.ToString();
         }
 
         private void TogglePause()

@@ -98,13 +98,6 @@
       "TimeoutSeconds": 10
     },
     {
-      "Id": "reset-time-evidence",
-      "Contract": "F2.Time",
-      "Title": "清除時間模式舊證據",
-      "Action": "reset-evidence",
-      "TimeoutSeconds": 5
-    },
-    {
       "Id": "io-ip",
       "Contract": "H1",
       "Title": "切換到本機 IO 模擬器",
@@ -155,6 +148,13 @@
       "Action": "wait-log",
       "Pattern": "\\[OutputHealth\\] resolve code=IoConnection",
       "TimeoutSeconds": 20
+    },
+    {
+      "Id": "reset-time-evidence",
+      "Contract": "F2.Time",
+      "Title": "清除時間模式舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
     },
     {
       "Id": "time-request",

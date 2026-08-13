@@ -886,26 +886,6 @@ namespace AniloxRoll.DvtRunner
                 AutomationElement item = FindDataItem(name, occurrence);
                 AutomationElement table = GetPropertyGridTable();
 
-                string itemKey = name + "\u001f" + occurrence;
-                if (!string.Equals(
-                    _selectedPropertyGridKey,
-                    itemKey,
-                    StringComparison.Ordinal))
-                {
-                    int ordinal = _propertyGridItemOrder.IndexOf(item);
-                    if (ordinal < 0)
-                        throw new InvalidOperationException(
-                            "PropertyGrid navigation index not found: " + name);
-
-                    NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
-                    table.SetFocus();
-                    System.Windows.Forms.SendKeys.SendWait("{HOME}");
-                    for (int i = 0; i < ordinal; i++)
-                        System.Windows.Forms.SendKeys.SendWait("{DOWN}");
-                    await Task.Delay(150, cancellationToken);
-                    _selectedPropertyGridKey = itemKey;
-                }
-
                 AutomationElement selected = FindFocusedDataItem(name);
                 if (selected != null)
                     item = selected;
@@ -917,7 +897,11 @@ namespace AniloxRoll.DvtRunner
                     itemBounds.Height > 0 &&
                     itemCenterY >= tableBounds.Top &&
                     itemCenterY <= tableBounds.Bottom;
-                if (visible) return item;
+                if (visible)
+                {
+                    _selectedPropertyGridKey = name + "\u001f" + occurrence;
+                    return item;
+                }
 
                 object scrollItemPattern;
                 if (item.TryGetCurrentPattern(
@@ -926,28 +910,26 @@ namespace AniloxRoll.DvtRunner
                 {
                     ((ScrollItemPattern)scrollItemPattern).ScrollIntoView();
                     await Task.Delay(150, cancellationToken);
-                    continue;
+
+                    // WinForms sometimes reports ScrollItemPattern as
+                    // supported but treats ScrollIntoView as a no-op. Only
+                    // accept it after the row actually enters the viewport;
+                    // otherwise continue to the native scrollbar fallback.
+                    item = FindDataItem(name, occurrence);
+                    itemBounds = item.Current.BoundingRectangle;
+                    itemCenterY = itemBounds.Top + itemBounds.Height / 2.0;
+                    visible = itemBounds.Height > 0 &&
+                        itemCenterY >= tableBounds.Top &&
+                        itemCenterY <= tableBounds.Bottom;
+                    if (visible)
+                    {
+                        _selectedPropertyGridKey =
+                            name + "\u001f" + occurrence;
+                        return item;
+                    }
                 }
 
                 bool down = itemBounds.Top > tableBounds.Bottom;
-
-                // WinForms PropertyGrid rows do not expose ScrollItemPattern on
-                // every Windows version. The table does handle PageUp/PageDown,
-                // including rows below the current viewport that UIA incorrectly
-                // reports as IsOffscreen=false.
-                try
-                {
-                    NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
-                    table.SetFocus();
-                    System.Windows.Forms.SendKeys.SendWait(
-                        down ? "{PGDN}" : "{PGUP}");
-                    await Task.Delay(150, cancellationToken);
-                    continue;
-                }
-                catch (InvalidOperationException)
-                {
-                    // Fall through to the native scrollbar for older UIA hosts.
-                }
 
                 AutomationElement scrollOwner = table;
                 IntPtr scrollHandle = IntPtr.Zero;
@@ -958,8 +940,15 @@ namespace AniloxRoll.DvtRunner
                     scrollOwner = TreeWalker.RawViewWalker.GetParent(scrollOwner);
                 }
                 if (!NativeMethods.ScrollVerticalPage(scrollHandle, down))
-                    throw new InvalidOperationException(
-                        "Cannot safely scroll PropertyGrid for " + name);
+                {
+                    // Some accessibility hosts expose the table without its
+                    // native scrollbar handle. Keyboard paging is the final
+                    // fallback and is verified again at the top of the loop.
+                    NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+                    table.SetFocus();
+                    System.Windows.Forms.SendKeys.SendWait(
+                        down ? "{PGDN}" : "{PGUP}");
+                }
                 await Task.Delay(150, cancellationToken);
             }
             throw new TimeoutException(

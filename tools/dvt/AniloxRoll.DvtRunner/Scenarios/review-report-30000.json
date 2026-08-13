@@ -188,8 +188,10 @@
       "Id": "period-complete",
       "Contract": "R3",
       "Title": "確認時序圖片與 Curve 完成",
-      "Action": "wait-log",
-      "Pattern": "RV period done [0-9]{4}-[0-9]{2}-[0-9]{2}",
+      "Action": "wait-log-current-period",
+      "Target": "回顧日期",
+      "Value": "回顧時間",
+      "Pattern": "RV period done {date} {time}",
       "TimeoutSeconds": 300
     },
     {
@@ -238,6 +240,50 @@
       "Title": "確認強化圖片更新且 Curve 保留",
       "Action": "wait-log",
       "Pattern": "RV loadGrab done [0-9]{6}-[0-9]{6}",
+      "TimeoutSeconds": 300
+    },
+    {
+      "Id": "review-column-normalization-sentinel",
+      "Contract": "S1",
+      "Title": "Force a column normalization transition",
+      "Action": "set-property",
+      "Target": "欄正規值",
+      "Value": "0.32",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-row-normalization-sentinel",
+      "Contract": "S1",
+      "Title": "Force a row normalization transition",
+      "Action": "set-property",
+      "Target": "列正規值",
+      "Value": "0.38",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-column-normalization-baseline",
+      "Contract": "S1",
+      "Title": "建立回顧欄正規值測試基準",
+      "Action": "set-property",
+      "Target": "欄正規值",
+      "Value": "0.31",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-row-normalization-baseline",
+      "Contract": "S1",
+      "Title": "建立回顧列正規值測試基準",
+      "Action": "set-property",
+      "Target": "列正規值",
+      "Value": "0.37",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "review-normalization-baseline-proof",
+      "Contract": "S1",
+      "Title": "確認回顧正規值基準已套用",
+      "Action": "wait-log",
+      "Pattern": "RV normalization settle generation=\\d+ setting=dd_HessianMaxFactorH hm=0\\.3100/0\\.3700",
       "TimeoutSeconds": 300
     },
     {
@@ -385,6 +431,95 @@
       "TimeoutSeconds": 15
     },
     {
+      "Id": "report-verdict-index-ready",
+      "Contract": "D1",
+      "Title": "等待報表峰值索引完成",
+      "Action": "wait-log",
+      "Pattern": "DT verdict index apply=ok",
+      "TimeoutSeconds": 900
+    },
+    {
+      "Id": "report-verdict-mode-sentinel",
+      "Contract": "D1.verdict-audit",
+      "Title": "建立欄列判定模式切換基準",
+      "Action": "set-property",
+      "Target": "欄列曲線判定",
+      "Value": "顯示平均",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "report-verdict-mode-boundary",
+      "Contract": "D1.verdict-audit",
+      "Title": "清除切換模式前的舊稽核證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "report-verdict-mode-max",
+      "Contract": "D1.verdict-audit",
+      "Title": "切換為最大值判定",
+      "Action": "set-property",
+      "Target": "欄列曲線判定",
+      "Value": "顯示最大",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "report-verdict-mode-max-proof",
+      "Contract": "D1.verdict-audit",
+      "Title": "確認最大值模式的實際清單 OX",
+      "Action": "wait-log",
+      "Pattern": "DT verdict audit [0-9]{6}-[0-9]{6} trigger=settings cam=1 mode=max .* list=(pass|fail|unknown)",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "report-verdict-mode-mean-boundary",
+      "Contract": "D1.verdict-audit",
+      "Title": "清空最大模式的舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "report-verdict-mode-mean",
+      "Contract": "D1.verdict-audit",
+      "Title": "切換為平均值判定",
+      "Action": "set-property",
+      "Target": "欄列曲線判定",
+      "Value": "顯示平均",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "report-verdict-mode-mean-proof",
+      "Contract": "D1.verdict-audit",
+      "Title": "確認平均值模式的實際清單 OX",
+      "Action": "wait-log",
+      "Pattern": "DT verdict audit [0-9]{6}-[0-9]{6} trigger=settings cam=1 mode=mean .* list=(pass|fail|unknown)",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "report-verdict-mode-both-boundary",
+      "Contract": "D1.verdict-audit",
+      "Title": "清空平均模式的舊證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "report-verdict-mode-both",
+      "Contract": "D1.verdict-audit",
+      "Title": "切換為平均與最大共同判定",
+      "Action": "set-property",
+      "Target": "欄列曲線判定",
+      "Value": "顯示兩者",
+      "TimeoutSeconds": 30
+    },
+    {
+      "Id": "report-verdict-mode-both-proof",
+      "Contract": "D1.verdict-audit",
+      "Title": "確認共同模式的實際清單 OX",
+      "Action": "wait-log",
+      "Pattern": "DT verdict audit [0-9]{6}-[0-9]{6} trigger=settings cam=1 mode=both .* list=(pass|fail|unknown)",
+      "TimeoutSeconds": 120
+    },
+    {
       "Id": "report-single-boundary",
       "Contract": "D3",
       "Title": "切開報表單序號證據",
@@ -512,10 +647,65 @@
       "Optional": true
     },
     {
+      "Id": "period-list-boundary",
+      "Contract": "D4.period-list",
+      "Title": "清除期間 List 驗證證據",
+      "Action": "reset-evidence",
+      "TimeoutSeconds": 5
+    },
+    {
+      "Id": "period-list-year",
+      "Contract": "D4.period-list",
+      "Title": "點擊年標籤篩選 List",
+      "Action": "click-control",
+      "Target": "lblChartNavYear",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "period-list-year-proof",
+      "Contract": "D4.period-list",
+      "Title": "確認年度 List 筆數",
+      "Action": "wait-log",
+      "Pattern": "DT period list source=Year range=(\\d{6}-\\d{6})~(\\d{6}-\\d{6}) expected=(\\d+) indexed=\\3 visible=\\3 ms=\\d+",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "period-list-month",
+      "Contract": "D4.period-list",
+      "Title": "點擊月標籤篩選 List",
+      "Action": "click-control",
+      "Target": "lblChartNavMonth",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "period-list-month-proof",
+      "Contract": "D4.period-list",
+      "Title": "確認月份 List 筆數",
+      "Action": "wait-log",
+      "Pattern": "DT period list source=Month range=(\\d{6}-\\d{6})~(\\d{6}-\\d{6}) expected=(\\d+) indexed=\\3 visible=\\3 ms=\\d+",
+      "TimeoutSeconds": 120
+    },
+    {
+      "Id": "period-list-day",
+      "Contract": "D4.period-list",
+      "Title": "點擊日標籤篩選 List",
+      "Action": "click-control",
+      "Target": "lblChartNavDay",
+      "TimeoutSeconds": 20
+    },
+    {
+      "Id": "period-list-day-proof",
+      "Contract": "D4.period-list",
+      "Title": "確認日期 List 筆數",
+      "Action": "wait-log",
+      "Pattern": "DT period list source=Day range=(\\d{6}-\\d{6})~(\\d{6}-\\d{6}) expected=(\\d+) indexed=\\3 visible=\\3 ms=\\d+",
+      "TimeoutSeconds": 120
+    },
+    {
       "Id": "yield-scale-toggle",
       "Contract": "D5.y-scale",
       "Title": "切換年度良率圖 Y 軸",
-      "Action": "click",
+      "Action": "click-control",
       "Target": "chartDataYieldYearly",
       "TimeoutSeconds": 30
     },

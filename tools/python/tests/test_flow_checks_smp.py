@@ -510,6 +510,20 @@ class SettingsFlowValidatorTests(unittest.TestCase):
             CheckStatus.FAIL, result(report, "S5.enhance-heatmap").status
         )
 
+    def test_enhance_heatmap_accepts_reentrant_view_state_instrument(self):
+        report = SettingsFlowValidator().validate(
+            session(
+                "ui:設定[hda_EnhanceHeatmap]=Cold",
+                "setting route hda_EnhanceHeatmap owner=Enhance effects=None",
+                "RV state viewX -65~2535 viewY -3767~4267",
+                "enhance heatmap mode=Cold live=gray review=gray "
+                "scope=main-only data=unchanged",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "S5.enhance-heatmap").status
+        )
+
     def test_display_crop_is_display_only_and_reflects_setting(self):
         report = SettingsFlowValidator().validate(
             session(
@@ -914,6 +928,28 @@ class ReviewFlowValidatorTests(unittest.TestCase):
 
 
 class DataFlowValidatorTests(unittest.TestCase):
+    def test_single_selection_does_not_own_setting_verdict_list_reload(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260804-135344",
+                "DT selected 260804-135344 stats=cache list=keep ms=0",
+                "DT verdict refresh source=peak-index columns=210000 rows=30000",
+                "DT list reload range=240115-080000~260615-081639 "
+                "rows=30000 ms=4 source=index",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D3.list-keep").status)
+
+    def test_single_selection_direct_list_reload_remains_failure(self):
+        report = DataFlowValidator().validate(
+            session(
+                "ui:【報表序號】→ 260804-135344",
+                "DT list reload range=240115-080000~260615-081639 "
+                "rows=30000 ms=4 source=index",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "D3.list-keep").status)
+
     def test_column_chart_peak_matches_single_record_verdict(self):
         report = DataFlowValidator().validate(
             session(
@@ -953,6 +989,16 @@ class DataFlowValidatorTests(unittest.TestCase):
                 "max=0.3366/0.3000 result=fail cause=max source=merged-curve",
                 "DT verdict 260804-135533 cam=1 mean=0.3341/0.3000 "
                 "max=0.3366/0.3000 result=fail cause=both source=merged-curve",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "D1.verdict").status)
+
+    def test_column_verdict_ignores_peak_index_refresh_instrument(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict refresh source=peak-index columns=1983 rows=1983",
+                "DT verdict 260804-135533 cam=1 mean=0.1000/0.2000 "
+                "max=0.4000/0.6000 result=pass cause=none source=merged-curve",
             )
         )
         self.assertEqual(CheckStatus.PASS, result(report, "D1.verdict").status)
@@ -1003,6 +1049,42 @@ class DataFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(
             CheckStatus.FAIL, result(report, "D1.verdict-click").status
+        )
+
+    def test_column_verdict_settings_audit_accepts_projected_list_result(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict audit 260804-135344 trigger=settings cam=1 mode=max "
+                "mean=1.5000/1.2000 enabled=0 max=1.8000/2.0000 enabled=1 "
+                "result=pass cause=none list=pass source=visible-curve-index",
+                "DT row verdict audit 260804-135344 trigger=settings mode=max "
+                "mean=1.5000/1.2000 enabled=0 max=1.8000/2.0000 enabled=1 "
+                "result=pass cause=none list=pass source=visible-curve-index",
+                "DT verdict audit done 260804-135344 trigger=settings cams=1",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.verdict-click").status
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.row-verdict-click").status
+        )
+
+    def test_row_chart_alignment_uses_same_display_transaction(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT row curve display 260804-135344 mode=both "
+                "mean=0.3000/0.4000 max=0.4500/0.5000 scale=0.5000 points=3000",
+                "DT row verdict 260804-135344 merged=1 mode=both "
+                "mean=0.3000/0.4000 enabled=1 max=0.4500/0.5000 enabled=1 "
+                "result=pass cause=none source=visible-merged-curve",
+                "DT row verdict 260804-135344 merged=1 mode=max "
+                "mean=0.3000/0.4000 enabled=0 max=0.4500/0.5000 enabled=1 "
+                "result=pass cause=none source=visible-merged-curve",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS, result(report, "D1.row-chart-verdict").status
         )
 
     def test_column_verdict_index_accounts_for_summary_bins_and_missing(self):
@@ -1060,6 +1142,17 @@ class DataFlowValidatorTests(unittest.TestCase):
         self.assertEqual(
             CheckStatus.FAIL, result(report, "D1.verdict-index").status
         )
+
+    def test_column_verdict_index_rejects_background_failure(self):
+        report = DataFlowValidator().validate(
+            session(
+                "DT verdict index apply=failed gen=2 "
+                "stage=summaries error=InvalidOperationException"
+            )
+        )
+        verdict = result(report, "D1.verdict-index")
+        self.assertEqual(CheckStatus.FAIL, verdict.status)
+        self.assertIn("apply=failed", verdict.detail)
 
     def test_row_verdict_normalization_crosses_threshold_both_directions(self):
         report = DataFlowValidator().validate(

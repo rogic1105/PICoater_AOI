@@ -85,8 +85,8 @@
       "Id": "io-ready",
       "Contract": "H1",
       "Title": "等待 IO 進入待機",
-      "Action": "wait-element",
-      "Target": "待機",
+      "Action": "wait-log",
+      "Pattern": "IO 恢復連線|\\[OutputHealth\\] resolve code=IoConnection",
       "TimeoutSeconds": 60
     },
     {
@@ -511,8 +511,8 @@
       "Id": "io-final",
       "Contract": "H1",
       "Title": "確認 IO 最終回到待機",
-      "Action": "wait-element",
-      "Target": "待機",
+      "Action": "wait-log",
+      "Pattern": "IO 恢復連線",
       "TimeoutSeconds": 20
     },
     {
