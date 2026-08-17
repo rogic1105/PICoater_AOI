@@ -2,6 +2,8 @@
   "Id": "physical-storage-stability",
   "Name": "儲存電腦五分鐘穩定測試（不 Grab）",
   "Description": "確認 SMB 可寫、Storage app heartbeat、UI 綠燈、五分鐘穩定性與關閉收尾；不啟動相機 Grab。",
+  "Category": "bridge",
+  "ControlRefs": [ "lblStorageConn", "propertyGridSettings" ],
   "Steps": [
     {
       "Id": "launch",

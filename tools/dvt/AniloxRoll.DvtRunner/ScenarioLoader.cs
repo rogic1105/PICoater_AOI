@@ -74,14 +74,16 @@ namespace AniloxRoll.DvtRunner
 
             if (scenarios.Count == 0)
                 throw new InvalidOperationException("No DVT scenarios were found in " + directory);
-            ValidatePropertyGridGroupCoverage(scenarios);
+            PropertyGridCatalog catalog = PropertyGridCatalog.Load();
+            ValidatePropertyGridGroupCoverage(scenarios, catalog);
+            PopulatePropertyReferences(scenarios, catalog);
             return scenarios;
         }
 
         private static void ValidatePropertyGridGroupCoverage(
-            IReadOnlyList<DvtScenario> scenarios)
+            IReadOnlyList<DvtScenario> scenarios,
+            PropertyGridCatalog catalog)
         {
-            PropertyGridCatalog catalog = PropertyGridCatalog.Load();
             var exercised = new HashSet<string>(
                 scenarios.SelectMany(scenario => scenario.Steps)
                     .Where(step => string.Equals(
@@ -104,11 +106,74 @@ namespace AniloxRoll.DvtRunner
             }
         }
 
+        private static void PopulatePropertyReferences(
+            IReadOnlyList<DvtScenario> scenarios,
+            PropertyGridCatalog catalog)
+        {
+            foreach (DvtScenario scenario in scenarios)
+            {
+                var references = new HashSet<string>(StringComparer.Ordinal);
+                foreach (DvtStep step in scenario.Steps)
+                {
+                    if (string.Equals(
+                        step.Action,
+                        "set-property",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!string.IsNullOrWhiteSpace(step.Target))
+                            references.Add(step.Target);
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        step.Action,
+                        "exercise-property-group",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        foreach (PropertyGridCatalogEntry item in
+                            catalog.GetGroup(step.Target))
+                            references.Add(item.DisplayName);
+                        continue;
+                    }
+
+                    if (string.Equals(
+                        step.Action,
+                        "audit-property-catalog",
+                        StringComparison.OrdinalIgnoreCase))
+                    {
+                        foreach (PropertyGridCatalogEntry item in catalog.Properties)
+                            references.Add(item.DisplayName);
+                    }
+                }
+                scenario.PropertyRefs = references.OrderBy(value => value).ToList();
+            }
+        }
+
         private static void Validate(DvtScenario scenario, string path)
         {
             if (scenario == null || string.IsNullOrWhiteSpace(scenario.Id) ||
                 string.IsNullOrWhiteSpace(scenario.Name))
                 throw new InvalidDataException(path + ": scenario id/name is required.");
+            if (!DvtCategories.IsKnown(scenario.Category))
+                throw new InvalidDataException(
+                    path + ": category must be monitor, review, report, or bridge.");
+            if (scenario.ControlRefs == null || scenario.ControlRefs.Count == 0)
+                throw new InvalidDataException(
+                    path + ": at least one Monitor controlRefs entry is required.");
+            var controlIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string controlId in scenario.ControlRefs)
+            {
+                if (string.IsNullOrWhiteSpace(controlId) ||
+                    !Regex.IsMatch(
+                        controlId,
+                        @"^[A-Za-z_][A-Za-z0-9_]*$",
+                        RegexOptions.CultureInvariant))
+                    throw new InvalidDataException(
+                        path + ": invalid Monitor control reference " + controlId);
+                if (!controlIds.Add(controlId))
+                    throw new InvalidDataException(
+                        path + ": duplicate Monitor control reference " + controlId);
+            }
             if (scenario.Steps == null || scenario.Steps.Count == 0)
                 throw new InvalidDataException(path + ": at least one step is required.");
 

@@ -2,6 +2,8 @@
   "Id": "property-grid-core-matrix",
   "Name": "PropertyGrid 全參數矩陣（一般功能）",
   "Description": "逐組修改角色、佈局、檢出、停止策略、顯示報表、儲存與 LOG 設定，核對 S0 路由並還原；群組內後續設定會與前項已套用值形成累積交叉測試。",
+  "Category": "monitor",
+  "ControlRefs": [ "propertyGridSettings", "tabPageLiveView", "camLiveMain", "chartLiveColumn", "chartLiveRow" ],
   "Steps": [
     { "Id": "audit-catalog", "Contract": "S0.PropertyGridMatrix", "Title": "比對產品 PropertyGrid 與 58 項測試目錄", "Action": "audit-property-catalog", "TimeoutSeconds": 15 },
 

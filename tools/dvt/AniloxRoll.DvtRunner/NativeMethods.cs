@@ -18,8 +18,6 @@ namespace AniloxRoll.DvtRunner
         internal const uint WmLButtonUp = 0x0202;
         private const uint TcmGetItemCount = 0x1304;
         private const uint TcmGetCurSel = 0x130B;
-        private const int MainTabItemWidth = 104;
-        private const int MainTabItemHeight = 34;
         internal const int VkReturn = 0x0D;
         internal const int VkEscape = 0x1B;
         internal const int VkHome = 0x24;
@@ -36,6 +34,8 @@ namespace AniloxRoll.DvtRunner
         private const uint MouseeventfWheel = 0x0800;
         private const uint KeyeventfKeyup = 0x0002;
         private const uint ObjidClient = 0xFFFFFFFC;
+        private const int SelflagTakeFocus = 0x1;
+        private const int SelflagTakeSelection = 0x2;
 
         private static readonly Guid IAccessibleGuid =
             new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
@@ -278,25 +278,9 @@ namespace AniloxRoll.DvtRunner
             IntPtr tab = FindMainTabControl(parent);
             if (tab == IntPtr.Zero)
                 return false;
-            if (SendMessage(
-                tab,
-                TcmGetCurSel,
-                IntPtr.Zero,
-                IntPtr.Zero).ToInt32() == index)
+            if (IsMainTabSelected(parent, index))
                 return true;
-
-            NativeRect windowRect;
-            if (!GetWindowRect(tab, out windowRect))
-                return false;
-
-            SetForegroundWindow(parent);
-            ClickScreenPoint(
-                windowRect.Left +
-                    index * MainTabItemWidth +
-                    MainTabItemWidth / 2,
-                windowRect.Top +
-                    MainTabItemHeight / 2);
-            return true;
+            return TryInvokeTabDefaultAction(tab, index);
         }
 
         internal static bool IsMainTabSelected(IntPtr parent, int index)
@@ -308,6 +292,44 @@ namespace AniloxRoll.DvtRunner
                     TcmGetCurSel,
                     IntPtr.Zero,
                     IntPtr.Zero).ToInt32() == index;
+        }
+
+        private static bool TryInvokeTabDefaultAction(IntPtr tab, int index)
+        {
+            object accessibleObject = null;
+            try
+            {
+                Guid interfaceId = IAccessibleGuid;
+                if (AccessibleObjectFromWindow(
+                        tab,
+                        ObjidClient,
+                        ref interfaceId,
+                        out accessibleObject) != 0)
+                    return false;
+
+                var accessible = accessibleObject as IAccessible;
+                int childId = index + 1;
+                if (accessible == null ||
+                    childId > accessible.accChildCount)
+                    return false;
+                accessible.accSelect(
+                    SelflagTakeFocus | SelflagTakeSelection,
+                    childId);
+                accessible.accDoDefaultAction(childId);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (accessibleObject != null &&
+                    Marshal.IsComObject(accessibleObject))
+                {
+                    Marshal.ReleaseComObject(accessibleObject);
+                }
+            }
         }
 
         internal static IntPtr FindDescendantWindowByText(
@@ -480,7 +502,11 @@ namespace AniloxRoll.DvtRunner
         private static IntPtr FindMainTabControl(IntPtr parent)
         {
             IntPtr selected = IntPtr.Zero;
-            int selectedWidth = 0;
+            int selectedLeft = int.MaxValue;
+            int selectedTop = int.MaxValue;
+            NativeRect parentRect;
+            if (!GetWindowRect(parent, out parentRect))
+                return IntPtr.Zero;
             EnumChildWindows(
                 parent,
                 delegate(IntPtr handle, IntPtr parameter)
@@ -502,14 +528,19 @@ namespace AniloxRoll.DvtRunner
                         IntPtr.Zero).ToInt32();
                     NativeRect rect;
                     if (count != 3 ||
-                        !GetClientRect(handle, out rect))
+                        !GetWindowRect(handle, out rect) ||
+                        rect.Top > parentRect.Top + 160)
                         return true;
 
-                    int width = rect.Right - rect.Left;
-                    if (width <= selectedWidth)
+                    bool isHigherRow = rect.Top < selectedTop - 4;
+                    bool isSameRow = Math.Abs(rect.Top - selectedTop) <= 4;
+                    bool isPreferredSide = rect.Left < selectedLeft;
+                    if (!isHigherRow &&
+                        (!isSameRow || !isPreferredSide))
                         return true;
                     selected = handle;
-                    selectedWidth = width;
+                    selectedLeft = rect.Left;
+                    selectedTop = rect.Top;
                     return true;
                 },
                 IntPtr.Zero);

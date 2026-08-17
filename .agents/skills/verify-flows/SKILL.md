@@ -46,10 +46,23 @@ Automation and Win32 control messages. Its scenario steps reference contract IDs
 the smallest required Flow evidence; cross-step order, forbidden lines, counts, and completeness
 remain owned by `tools/python/check_all_flows.py`.
 
+The Runner catalog has one primary owner per scenario: monitor, review, report, or bridge.
+Cross-page behavior is owned by the UI action that initiates it. `ControlRefs` point to real
+Monitor AutomationIds. The Runner does not clone the Monitor UI: its live
+inspector selects controls directly on the running Monitor, highlights the real element, and filters
+the catalog through the existing references. A renamed or removed Monitor control is a stale
+reference and must fail the catalog audit rather than silently creating an independent mapping.
+
 - Use the runner to automate repeatable smoke/DVT actions while an operator observes the screen.
 - A scenario must not duplicate the full contract or invent a second PASS standard.
 - Every UI action or setting change step must identify its owning contract.
 - The runner restores changed PropertyGrid values and attempts to stop an active Grab on abort.
+- The Runner live inspector reads the real Monitor UIA tree. Control references come from Scenario
+  `ControlRefs`; exact PropertyGrid-row references are derived from existing `set-property` steps
+  and `PropertyGridCoverage.json`. One-shot selection consumes the click that chooses an element,
+  so it must never invoke the product control or change a setting. Focus-follow mode does not
+  intercept input; the operator uses the real tabs and PropertyGrid normally while the Runner only
+  updates its DVT filter.
 - Automated cleanup gives the product up to 60 seconds to close normally. If failure recovery or
   disconnected hardware prevents shutdown, the runner force-terminates its test process so a
   failed campaign cannot leave an orphaned product instance; that run does not satisfy the normal

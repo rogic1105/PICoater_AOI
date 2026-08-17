@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Windows.Automation;
 using System.Windows.Forms;
 
 namespace AniloxRoll.DvtRunner
@@ -14,13 +15,20 @@ namespace AniloxRoll.DvtRunner
     {
         private readonly TextBox _appPath = new TextBox();
         private readonly TextBox _logDirectory = new TextBox();
-        private readonly ComboBox _scenario = new ComboBox();
+        private readonly TreeView _scenarioTree = new TreeView();
         private readonly Button _start = new Button();
         private readonly Button _pause = new Button();
         private readonly Button _abort = new Button();
         private readonly ListView _steps = new ListView();
         private readonly RichTextBox _output = new RichTextBox();
         private readonly Label _status = new Label();
+        private readonly Button _attachMonitor = new Button();
+        private readonly Button _pickMonitorElement = new Button();
+        private readonly CheckBox _followMonitorFocus = new CheckBox();
+        private readonly Button _clearControlFilter = new Button();
+        private readonly Label _inspectorStatus = new Label();
+        private readonly System.Windows.Forms.Timer _focusInspectorTimer =
+            new System.Windows.Forms.Timer();
         private readonly object _runOutputGate = new object();
         private readonly StringBuilder _runOutput = new StringBuilder();
         private readonly string _autoScenarioId;
@@ -34,6 +42,12 @@ namespace AniloxRoll.DvtRunner
         private ScenarioEngine _engine;
         private CancellationTokenSource _runCancellation;
         private string _repositoryRoot;
+        private UiAutomationDriver _inspectorDriver;
+        private MonitorElementPicker _elementPicker;
+        private string _uiReferenceFilter;
+        private string[] _inspectorControlIds = new string[0];
+        private string[] _inspectorPropertyNames = new string[0];
+        private string _lastFocusedReferenceKey;
 
         public MainForm(
             string autoScenarioId = null,
@@ -53,10 +67,13 @@ namespace AniloxRoll.DvtRunner
             _logDirectoryOverride = logDirectory;
             Text = "PICoater DVT Runner";
             StartPosition = FormStartPosition.CenterScreen;
-            MinimumSize = new Size(960, 640);
-            Size = new Size(1180, 760);
+            MinimumSize = new Size(1100, 680);
+            Size = new Size(1500, 860);
+            WindowState = FormWindowState.Maximized;
             Font = new Font("Microsoft JhengHei UI", 9F);
             BuildUi();
+            _focusInspectorTimer.Interval = 250;
+            _focusInspectorTimer.Tick += OnFocusInspectorTick;
             Load += OnLoaded;
             FormClosing += OnFormClosing;
         }
@@ -79,7 +96,7 @@ namespace AniloxRoll.DvtRunner
                 Dock = DockStyle.Top,
                 AutoSize = true,
                 ColumnCount = 4,
-                RowCount = 4
+                RowCount = 3
             };
             inputs.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
             inputs.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
@@ -88,18 +105,6 @@ namespace AniloxRoll.DvtRunner
 
             AddInput(inputs, 0, "監控程式", _appPath, BrowseExe);
             AddInput(inputs, 1, "Trace 目錄", _logDirectory, BrowseLogs);
-
-            inputs.Controls.Add(new Label
-            {
-                Text = "測試情境",
-                Anchor = AnchorStyles.Left,
-                AutoSize = true
-            }, 0, 2);
-            _scenario.DropDownStyle = ComboBoxStyle.DropDownList;
-            _scenario.Dock = DockStyle.Fill;
-            _scenario.SelectedIndexChanged += (s, e) => PopulateSteps();
-            inputs.Controls.Add(_scenario, 1, 2);
-            inputs.SetColumnSpan(_scenario, 3);
 
             var commands = new FlowLayoutPanel
             {
@@ -119,14 +124,81 @@ namespace AniloxRoll.DvtRunner
             _abort.Enabled = false;
             _abort.Click += (s, e) => _runCancellation?.Cancel();
             commands.Controls.AddRange(new Control[] { _start, _pause, _abort });
-            inputs.Controls.Add(commands, 1, 3);
+            inputs.Controls.Add(commands, 1, 2);
             inputs.SetColumnSpan(commands, 3);
+
+            var runnerArea = new SplitContainer
+            {
+                Dock = DockStyle.Fill,
+                Orientation = Orientation.Horizontal,
+                SplitterDistance = 210
+            };
+            var scenarioArea = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3
+            };
+            scenarioArea.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            scenarioArea.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            scenarioArea.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+            var inspectorCommands = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                AutoSize = true,
+                Padding = new Padding(0, 0, 0, 4)
+            };
+            _attachMonitor.Text = "連接 Monitor";
+            _attachMonitor.AutoSize = true;
+            _attachMonitor.Click += async (s, e) =>
+                await AttachInspectorAsync(bringMonitorForward: false);
+            _pickMonitorElement.Text = "選取真實元件";
+            _pickMonitorElement.AutoSize = true;
+            _pickMonitorElement.Click += async (s, e) =>
+                await ToggleElementPickerAsync();
+            _followMonitorFocus.Text = "跟隨 Monitor 焦點";
+            _followMonitorFocus.AutoSize = true;
+            _followMonitorFocus.CheckedChanged += (s, e) =>
+            {
+                _lastFocusedReferenceKey = null;
+                if (_followMonitorFocus.Checked)
+                    _focusInspectorTimer.Start();
+                else
+                    _focusInspectorTimer.Stop();
+            };
+            _clearControlFilter.Text = "顯示全部 DVT";
+            _clearControlFilter.AutoSize = true;
+            _clearControlFilter.Enabled = false;
+            _clearControlFilter.Click += (s, e) => ApplyUiReferenceFilter(null);
+            inspectorCommands.Controls.AddRange(new Control[]
+            {
+                _attachMonitor,
+                _pickMonitorElement,
+                _followMonitorFocus,
+                _clearControlFilter
+            });
+            scenarioArea.Controls.Add(inspectorCommands, 0, 0);
+
+            _scenarioTree.Dock = DockStyle.Fill;
+            _scenarioTree.HideSelection = false;
+            _scenarioTree.FullRowSelect = true;
+            _scenarioTree.ShowNodeToolTips = true;
+            _scenarioTree.AfterSelect += (s, e) => PopulateSteps();
+            scenarioArea.Controls.Add(_scenarioTree, 0, 1);
+            _inspectorStatus.Dock = DockStyle.Fill;
+            _inspectorStatus.AutoSize = true;
+            _inspectorStatus.Padding = new Padding(0, 4, 0, 2);
+            _inspectorStatus.Text =
+                "直接操作真實 Monitor；需要查關聯測試時按「選取真實元件」。";
+            scenarioArea.Controls.Add(_inspectorStatus, 0, 2);
+            runnerArea.Panel1.Controls.Add(scenarioArea);
 
             var split = new SplitContainer
             {
                 Dock = DockStyle.Fill,
                 Orientation = Orientation.Horizontal,
-                SplitterDistance = 330
+                SplitterDistance = 300
             };
             _steps.Dock = DockStyle.Fill;
             _steps.View = View.Details;
@@ -144,6 +216,7 @@ namespace AniloxRoll.DvtRunner
             _output.BackColor = SystemColors.Window;
             _output.Font = new Font("Consolas", 9F);
             split.Panel2.Controls.Add(_output);
+            runnerArea.Panel2.Controls.Add(split);
 
             _status.Dock = DockStyle.Fill;
             _status.AutoSize = true;
@@ -151,7 +224,7 @@ namespace AniloxRoll.DvtRunner
             _status.Text = "尚未開始";
 
             root.Controls.Add(inputs, 0, 0);
-            root.Controls.Add(split, 0, 1);
+            root.Controls.Add(runnerArea, 0, 1);
             root.Controls.Add(_status, 0, 2);
             Controls.Add(root);
         }
@@ -198,8 +271,8 @@ namespace AniloxRoll.DvtRunner
                 string scenarioDirectory = Path.Combine(
                     AppDomain.CurrentDomain.BaseDirectory, "Scenarios");
                 _scenarios = ScenarioLoader.LoadDirectory(scenarioDirectory);
-                foreach (DvtScenario item in _scenarios) _scenario.Items.Add(item);
-                if (_scenario.Items.Count == 0)
+                PopulateScenarioTree();
+                if (_scenarioTree.Nodes.Count == 0)
                 {
                     _status.Text = "沒有找到 DVT 情境。";
                     return;
@@ -207,7 +280,7 @@ namespace AniloxRoll.DvtRunner
 
                 if (string.IsNullOrWhiteSpace(_autoScenarioId))
                 {
-                    _scenario.SelectedIndex = 0;
+                    SelectFirstScenario();
                 }
                 else
                 {
@@ -220,7 +293,7 @@ namespace AniloxRoll.DvtRunner
                         throw new InvalidDataException(
                             "找不到指定情境：" + _autoScenarioId);
                     ApplyDurationOverride(selected);
-                    _scenario.SelectedItem = selected;
+                    SelectScenario(selected);
                     BeginInvoke(new Action(async () =>
                     {
                         Hide();
@@ -278,7 +351,7 @@ namespace AniloxRoll.DvtRunner
         private void PopulateSteps()
         {
             _steps.Items.Clear();
-            var selected = _scenario.SelectedItem as DvtScenario;
+            DvtScenario selected = SelectedScenario;
             if (selected == null) return;
             foreach (DvtStep step in selected.Steps)
             {
@@ -295,7 +368,7 @@ namespace AniloxRoll.DvtRunner
 
         private async Task<bool> StartScenarioAsync()
         {
-            var selected = _scenario.SelectedItem as DvtScenario;
+            DvtScenario selected = SelectedScenario;
             if (selected == null) return false;
             if (!File.Exists(_appPath.Text))
             {
@@ -461,9 +534,23 @@ namespace AniloxRoll.DvtRunner
         private void SetRunning(bool running)
         {
             _start.Enabled = !running;
-            _scenario.Enabled = !running;
+            _scenarioTree.Enabled = !running;
             _appPath.Enabled = !running;
             _logDirectory.Enabled = !running;
+            _attachMonitor.Enabled = !running;
+            _pickMonitorElement.Enabled = !running;
+            _followMonitorFocus.Enabled = !running;
+            if (running)
+            {
+                _elementPicker?.Cancel();
+                _focusInspectorTimer.Stop();
+            }
+            else if (_followMonitorFocus.Checked)
+            {
+                _focusInspectorTimer.Start();
+            }
+            _clearControlFilter.Enabled = !running &&
+                !string.IsNullOrEmpty(_uiReferenceFilter);
             _pause.Enabled = running;
             _abort.Enabled = running;
             _pause.Text = "暫停";
@@ -495,6 +582,251 @@ namespace AniloxRoll.DvtRunner
             }
         }
 
+        private DvtScenario SelectedScenario =>
+            _scenarioTree.SelectedNode?.Tag as DvtScenario;
+
+        private void PopulateScenarioTree()
+        {
+            DvtScenario selected = SelectedScenario;
+            _scenarioTree.BeginUpdate();
+            try
+            {
+                _scenarioTree.Nodes.Clear();
+                foreach (string category in DvtCategories.Ordered)
+                {
+                    DvtScenario[] items = _scenarios
+                        .Where(item => string.Equals(
+                            item.Category,
+                            category,
+                            StringComparison.OrdinalIgnoreCase))
+                        .Where(item => ScenarioReferenceMatcher.Matches(
+                            item,
+                            _uiReferenceFilter))
+                        .OrderBy(item => item.Name)
+                        .ToArray();
+                    if (items.Length == 0) continue;
+                    var categoryNode = new TreeNode(
+                        DvtCategories.DisplayName(category) +
+                        "（" + items.Length + "）");
+                    foreach (DvtScenario item in items)
+                    {
+                        categoryNode.Nodes.Add(new TreeNode(item.Name)
+                        {
+                            Tag = item,
+                            ToolTipText = item.Description
+                        });
+                    }
+                    categoryNode.Expand();
+                    _scenarioTree.Nodes.Add(categoryNode);
+                }
+            }
+            finally
+            {
+                _scenarioTree.EndUpdate();
+            }
+
+            if (selected != null && SelectScenario(selected)) return;
+            SelectFirstScenario();
+        }
+
+        private void SelectFirstScenario()
+        {
+            foreach (TreeNode category in _scenarioTree.Nodes)
+            {
+                if (category.Nodes.Count == 0) continue;
+                _scenarioTree.SelectedNode = category.Nodes[0];
+                return;
+            }
+        }
+
+        private bool SelectScenario(DvtScenario scenario)
+        {
+            if (scenario == null) return false;
+            foreach (TreeNode category in _scenarioTree.Nodes)
+            {
+                foreach (TreeNode node in category.Nodes)
+                {
+                    if (!ReferenceEquals(node.Tag, scenario)) continue;
+                    _scenarioTree.SelectedNode = node;
+                    node.EnsureVisible();
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        private void ApplyUiReferenceFilter(string referenceKey)
+        {
+            _uiReferenceFilter = string.IsNullOrWhiteSpace(referenceKey)
+                ? null
+                : referenceKey;
+            _clearControlFilter.Enabled =
+                _runCancellation == null &&
+                !string.IsNullOrEmpty(_uiReferenceFilter);
+            PopulateScenarioTree();
+            if (string.IsNullOrEmpty(_uiReferenceFilter))
+            {
+                _inspectorStatus.ForeColor = SystemColors.ControlText;
+                _inspectorStatus.Text =
+                    "顯示全部 DVT；可直接操作 Monitor，或選取真實元件篩選。";
+                return;
+            }
+
+            string label = _uiReferenceFilter;
+            string value;
+            if (MonitorUiReference.TryGetControl(_uiReferenceFilter, out value))
+                label = "控制項 " + value;
+            else if (MonitorUiReference.TryGetProperty(
+                _uiReferenceFilter,
+                out value))
+                label = "PropertyGrid 參數「" + value + "」";
+            _inspectorStatus.ForeColor = SystemColors.ControlText;
+            _inspectorStatus.Text = label + "：共 " +
+                _scenarios.Count(item => ScenarioReferenceMatcher.Matches(
+                    item,
+                    _uiReferenceFilter)) +
+                " 個關聯 DVT。";
+        }
+
+        private async Task<bool> AttachInspectorAsync(bool bringMonitorForward)
+        {
+            if (!File.Exists(_appPath.Text))
+            {
+                MessageBox.Show("找不到監控程式：" + _appPath.Text);
+                return false;
+            }
+
+            _attachMonitor.Enabled = false;
+            _inspectorStatus.ForeColor = SystemColors.ControlText;
+            _inspectorStatus.Text = "正在連接真實 Monitor...";
+            try
+            {
+                if (_inspectorDriver == null)
+                    _inspectorDriver = new UiAutomationDriver();
+                using (var cancellation = new CancellationTokenSource(
+                    TimeSpan.FromSeconds(45)))
+                {
+                    await _inspectorDriver.AttachOrLaunchAsync(
+                        _appPath.Text,
+                        40,
+                        cancellation.Token);
+                }
+                _inspectorControlIds = _scenarios
+                    .SelectMany(item => item.ControlRefs)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+                _inspectorPropertyNames = _scenarios
+                    .SelectMany(item => item.PropertyRefs)
+                    .Distinct(StringComparer.Ordinal)
+                    .ToArray();
+                _inspectorStatus.Text =
+                    "已連接 Monitor。直接操作真實頁籤與 PropertyGrid；選取器只攔截一次點擊。";
+                if (bringMonitorForward)
+                    _inspectorDriver.BringMonitorToForeground();
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _inspectorStatus.Text = "連接失敗：" + ex.Message;
+                _inspectorStatus.ForeColor = Color.DarkRed;
+                return false;
+            }
+            finally
+            {
+                _attachMonitor.Enabled = _runCancellation == null;
+            }
+        }
+
+        private async Task ToggleElementPickerAsync()
+        {
+            if (_runCancellation != null) return;
+            if (_elementPicker != null && _elementPicker.IsActive)
+            {
+                _elementPicker.Cancel();
+                return;
+            }
+
+            if (_inspectorDriver == null || !_inspectorDriver.IsAttached)
+            {
+                if (!await AttachInspectorAsync(bringMonitorForward: false))
+                    return;
+            }
+
+            if (_elementPicker == null)
+            {
+                _elementPicker = new MonitorElementPicker(
+                    this,
+                    point => _inspectorDriver.InspectAtScreenPoint(
+                        point,
+                        _inspectorControlIds,
+                        _inspectorPropertyNames));
+                _elementPicker.SelectionCompleted += OnElementSelected;
+                _elementPicker.Canceled += OnElementPickerCanceled;
+            }
+            _elementPicker.Start();
+            _pickMonitorElement.Text = "取消選取";
+            _inspectorStatus.ForeColor = Color.DarkOrange;
+            _inspectorStatus.Text =
+                "選取模式：移到真實 Monitor；橘框出現後點一下。這一下不會觸發產品功能。";
+            _inspectorDriver.BringMonitorToForeground();
+        }
+
+        private void OnElementSelected(MonitorLiveSelection selection)
+        {
+            _pickMonitorElement.Text = "選取真實元件";
+            if (selection == null) return;
+            ApplyUiReferenceFilter(selection.ReferenceKey);
+            _inspectorStatus.Text = selection.DisplayName + "：共 " +
+                _scenarios.Count(item => ScenarioReferenceMatcher.Matches(
+                    item,
+                    selection.ReferenceKey)) +
+                " 個關聯 DVT。";
+            Activate();
+        }
+
+        private void OnElementPickerCanceled()
+        {
+            _pickMonitorElement.Text = "選取真實元件";
+            _inspectorStatus.ForeColor = SystemColors.ControlText;
+            _inspectorStatus.Text =
+                "已取消選取；Monitor 維持正常操作。";
+        }
+
+        private void OnFocusInspectorTick(object sender, EventArgs e)
+        {
+            if (_runCancellation != null ||
+                !_followMonitorFocus.Checked ||
+                _elementPicker != null && _elementPicker.IsActive)
+                return;
+            try
+            {
+                if (_inspectorDriver == null || !_inspectorDriver.IsAttached)
+                    return;
+                MonitorLiveSelection selection =
+                    _inspectorDriver.InspectFocusedElement(
+                        _inspectorControlIds,
+                        _inspectorPropertyNames);
+                if (selection == null ||
+                    string.Equals(
+                        selection.ReferenceKey,
+                        _lastFocusedReferenceKey,
+                        StringComparison.OrdinalIgnoreCase))
+                    return;
+                _lastFocusedReferenceKey = selection.ReferenceKey;
+                ApplyUiReferenceFilter(selection.ReferenceKey);
+                _inspectorStatus.Text =
+                    "跟隨焦點：" + selection.DisplayName + "。";
+            }
+            catch (ElementNotAvailableException)
+            {
+                _lastFocusedReferenceKey = null;
+            }
+            catch (InvalidOperationException)
+            {
+                _lastFocusedReferenceKey = null;
+            }
+        }
+
         private void Ui(Action action)
         {
             if (IsDisposed) return;
@@ -504,7 +836,12 @@ namespace AniloxRoll.DvtRunner
 
         private void OnFormClosing(object sender, FormClosingEventArgs e)
         {
-            if (_runCancellation == null) return;
+            if (_runCancellation == null)
+            {
+                _focusInspectorTimer.Stop();
+                _elementPicker?.Dispose();
+                return;
+            }
             e.Cancel = true;
             _runCancellation.Cancel();
             _status.Text = "正在中止並還原設定，完成後再關閉。";

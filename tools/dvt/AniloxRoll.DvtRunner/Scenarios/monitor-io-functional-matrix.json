@@ -2,6 +2,8 @@
   "Id": "monitor-io-functional-matrix",
   "Name": "監控 IO／布局／檢測功能矩陣",
   "Description": "由 IoBridge.IoSimulator 觸發三輪真實 Grab，交叉驗證主畫面、欄列 Curve、方向、布局及檢測 O/X 公式。光源亮暗僅作檢測標準替代刺激，不代表真實 Mura。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "btnLiveGrab", "camLiveMain", "chartLiveColumn", "chartLiveRow", "propertyGridSettings", "lblIoState" ],
   "Steps": [
     { "Id": "launch", "Contract": "F1", "Title": "啟動監控程式", "Action": "launch", "TimeoutSeconds": 30 },
     { "Id": "log-mode", "Contract": "DVT.LogMode", "Title": "開啟流程驗證記錄", "Action": "set-property", "Target": "記錄範圍", "Value": "流程驗證", "TimeoutSeconds": 15 },

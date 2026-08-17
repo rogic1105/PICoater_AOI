@@ -2,6 +2,8 @@
   "Id": "physical-retention-cleanup",
   "Name": "低磁碟刪檔與狀態恢復",
   "Description": "在固定的 TEMP 隔離根目錄建立兩天測試產出，動態製造低磁碟條件，驗證只刪最舊完整一天、保留較新一天、狀態 raise/resolve/ack，最後還原設定並清除 fixture。",
+  "Category": "bridge",
+  "ControlRefs": [ "lblStorageConn", "propertyGridSettings" ],
   "Steps": [
     {
       "Id": "launch",

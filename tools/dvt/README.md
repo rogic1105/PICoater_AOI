@@ -7,6 +7,28 @@
 它不是單元測試，也不取代壓力或長時間測試。用途是把重複的 smoke/DVT 操作自動化，
 讓操作員在旁觀察畫面，並把未覆蓋的流程明確列出。
 
+## 測試目錄與真實 Monitor Inspector
+
+Runner 的情境目錄固定分為四個主要責任：`監控`、`回顧`、`報表`、`Bridge`。
+跨頁行為以**發出操作的入口**歸類：回顧按鈕影響報表屬回顧；報表按鈕影響回顧屬報表。
+一個情境只保留一個主要分類，避免同一段測試在兩處各維護一份。
+
+每個 Scenario JSON 的 `ControlRefs` 只保存 Monitor 的 WinForms 控制項名稱，例如
+`btnLiveGrab` 或 `cbReviewId`。Runner 不複製 Monitor Designer，也不再重畫第二套 Monitor
+線框。按「選取真實元件」後，Runner 直接從正在執行的 `AniloxRoll.Monitor.exe` 讀取
+UI Automation element；滑鼠移到已被 DVT 引用的控制項時會在真實畫面顯示橘框，點一下
+只完成篩選並攔截該次點擊，不會觸發 Grab、切換選項或改變產線參數。
+
+PropertyGrid 參數不另外維護平行清單。Runner 從 Scenario 既有的 `set-property` 步驟及
+`PropertyGridCoverage.json` 群組推導關聯，再由 UI Automation 辨識真實 PropertyGrid
+`DataItem`。平常直接在 Monitor 切換頁籤、捲動 PropertyGrid 或操作畫面；需要查「欄正規值」
+等單一參數涵蓋哪些 DVT 時，再開啟一次性選取模式。勾選「跟隨 Monitor 焦點」後，Runner
+也會隨真實頁籤、按鈕與參數列焦點自動切換篩選，不攔截正常操作。
+
+因此 Monitor 的排版、縮放或按鈕文字改動不需要同步另一份畫面。控制項若刪除或改名，
+Runner 會顯示失效引用，`test_dvt_scenario_catalog.py` 也會失敗，要求 Scenario 明確遷移；
+這是 UI Inspector + Object Repository + Test Coverage Map，不是平行開發的第二份 Designer。
+
 ## 執行
 
 1. 以 `Release|x64` 建置 `AniloxRoll.DvtRunner`。
@@ -60,6 +82,8 @@ Runner 還原測試前備份的 `app-mode.json`，不在已失效的 Accessibili
 ## 情境規則
 
 - 情境在 `AniloxRoll.DvtRunner/Scenarios/*.json`。
+- `Category` 必須為 `monitor`、`review`、`report`、`bridge` 之一。
+- `ControlRefs` 必須引用 Monitor Designer 的真實控制項名稱；它同時是真實 UI 選取與反向查詢索引。
 - 每個操作步驟必須填 `Contract`，指向 `dvt-contract.md` 的 flow。
 - `wait-log` 只寫該步需要的最小證據，不重複完整判定規格。
 - `verify-log-absent` 用於證明情境明確禁止的 Flow 行完全未出現，例如純待機 IO 測試不得產生 START／Grab。

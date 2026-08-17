@@ -2,6 +2,8 @@
   "Id": "monitor-background-v1",
   "Name": "監控與背景 V1",
   "Description": "依 F1/F2/F3/F8 自動取得背景、預覽、瀑布 Grab/Stop，逐輪驗證第一列相機集合完整，最後執行完整 Flow checker。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "btnLiveGetBackground", "btnLiveViewBackground", "btnLiveGrab", "camLiveMain", "chartLiveColumn", "chartLiveRow" ],
   "Steps": [
     {
       "Id": "launch",

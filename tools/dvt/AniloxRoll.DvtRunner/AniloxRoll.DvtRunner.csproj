@@ -55,6 +55,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="PropertyGridCatalog.cs" />
     <Compile Include="MonitorFunctionalEvidenceVerifier.cs" />
+    <Compile Include="MonitorLiveInspector.cs" />
     <Compile Include="RangeScrollEvidenceVerifier.cs" />
     <Compile Include="VerdictCachePerformanceVerifier.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

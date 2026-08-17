@@ -2,6 +2,8 @@
   "Id": "review-packed-performance",
   "Name": "回顧封裝資料換序號效能",
   "Description": "以正式 Captures 封裝資料量測索引、預覽縮圖與停穩後完整圖片，不操作相機 Grab。",
+  "Category": "review",
+  "ControlRefs": [ "tabPageReview", "btnReviewSelectFolder", "cbReviewId", "camReviewMain", "chartReviewColumn", "chartReviewRow" ],
   "Steps": [
     {
       "Id": "stage-review-root",

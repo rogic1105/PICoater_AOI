@@ -2,6 +2,8 @@
   "Id": "physical-bridge-recovery",
   "Name": "IO／光源軟體斷線恢復",
   "Description": "以暫時黑洞路由阻斷實體 IO 192.168.255.1，並以 PnP 暫停實體光源 COM17；各重複三輪，驗證斷線、告警、自動重連及清理。",
+  "Category": "bridge",
+  "ControlRefs": [ "lblIoState", "lblIoConn", "lblLightConn", "propertyGridSettings" ],
   "Steps": [
     {
       "Id": "launch",

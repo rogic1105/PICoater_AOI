@@ -2,6 +2,8 @@
   "Id": "physical-fixed-stop-capture",
   "Name": "時間與高度實際取相",
   "Description": "用本機 IO 模擬器提早送出 START Low，驗證時間與高度停止條件、瀑布第一列相機集合，並完成 Curve、封裝與遠端待傳鏈。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "btnLiveGrab", "camLiveMain", "chartLiveColumn", "chartLiveRow", "propertyGridSettings" ],
   "Steps": [
     {
       "Id": "launch",

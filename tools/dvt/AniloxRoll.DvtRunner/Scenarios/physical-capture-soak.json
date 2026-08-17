@@ -2,6 +2,8 @@
   "Id": "physical-capture-soak",
   "Name": "反覆 Grab 耐久測試",
   "Description": "本機 IO 模擬器持續送出 High 10 秒／Low 4 秒；每輪都必須完成取相、完整瀑布第一列、Curve、尾幀排水、封裝與遠端待傳，並持續量測 UI 與資源。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "btnLiveGrab", "camLiveMain", "chartLiveColumn", "chartLiveRow" ],
   "Steps": [
     {
       "Id": "launch",

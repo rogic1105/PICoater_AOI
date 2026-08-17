@@ -2,6 +2,8 @@
   "Id": "physical-io-storage-soak",
   "Name": "IO＋儲存電腦待機耐久測試（不 Grab）",
   "Description": "持續確認實體 IO 待機、SMB 可寫、Storage app heartbeat 與儲存綠燈；不啟動相機 Grab。",
+  "Category": "bridge",
+  "ControlRefs": [ "lblIoState", "lblIoConn", "lblStorageConn" ],
   "Steps": [
     {
       "Id": "launch",

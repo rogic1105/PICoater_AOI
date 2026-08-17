@@ -2,6 +2,8 @@
   "Id": "property-grid-bridge-matrix",
   "Name": "PropertyGrid 全參數矩陣（Bridge）",
   "Description": "專門修改光源與 IO endpoint、啟用狀態、亮度及暫停檢出。會刻意造成短暫斷線與重連，因此獨立於一般功能矩陣。",
+  "Category": "bridge",
+  "ControlRefs": [ "propertyGridSettings", "lblIoState", "lblIoConn", "lblLightConn" ],
   "Steps": [
     {
       "Id": "audit-catalog",

@@ -2,6 +2,8 @@
   "Id": "physical-io-capture",
   "Name": "IO 實際取相三循環",
   "Description": "用本機 IO 模擬器送出三次 10 秒 START High，驗證實體相機、瀑布第一列相機集合、光源、Curve、尾幀排水、封裝與遠端待傳鏈。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "btnLiveGrab", "camLiveMain", "chartLiveColumn", "chartLiveRow", "lblIoState" ],
   "Steps": [
     {
       "Id": "launch",

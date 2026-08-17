@@ -2,6 +2,8 @@
   "Id": "report-period-list-navigation",
   "Name": "Report year/month/day list navigation",
   "Description": "Click the actual year, month and day labels and verify that the report virtual list matches each selected period.",
+  "Category": "report",
+  "ControlRefs": [ "tabPageData", "btnDataSelectFolder", "listViewGrabDetail", "chartDataYieldYearly", "chartDataYieldMonthly", "chartDataYieldDaily", "lblChartNavYear", "lblChartNavMonth", "lblChartNavDay" ],
   "Steps": [
     {
       "Id": "stage-empty-root",

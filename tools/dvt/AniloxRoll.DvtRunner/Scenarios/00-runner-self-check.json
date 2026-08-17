@@ -2,6 +2,8 @@
   "Id": "runner-self-check",
   "Name": "Runner 自我檢查（不 Grab）",
   "Description": "只驗證 UI 連接、PropertyGrid 提交、Flow tail 與設定還原，不操作相機 Grab。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "propertyGridSettings" ],
   "Steps": [
     {
       "Id": "launch",

@@ -2,6 +2,8 @@
   "Id": "physical-io-stability",
   "Name": "實體 IO 五分鐘穩定測試（不 Grab）",
   "Description": "確認 ET-7044 連線、待機輪詢、controller 生命週期與關閉收尾；不啟動相機 Grab。",
+  "Category": "bridge",
+  "ControlRefs": [ "lblIoState", "lblIoConn", "lblIoDiAlive", "lblIoDiStart", "lblIoDoPcAlive", "lblIoDoMura", "lblIoDoPcBusy" ],
   "Steps": [
     {
       "Id": "launch",

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -24,6 +25,12 @@ namespace AniloxRoll.DvtRunner
         public int ProcessId =>
             _process != null && !_process.HasExited ? _process.Id : 0;
 
+        public void BringMonitorToForeground()
+        {
+            EnsureAttached();
+            NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+        }
+
         public void RefreshPropertyGridIndex()
         {
             EnsureAttached();
@@ -45,6 +52,121 @@ namespace AniloxRoll.DvtRunner
             _propertyGridItems = null;
             _propertyGridItemOrder = null;
             _selectedPropertyGridKey = null;
+        }
+
+        public MonitorLiveSelection InspectAtScreenPoint(
+            Point screenPoint,
+            IEnumerable<string> referencedControlIds,
+            IEnumerable<string> referencedPropertyNames)
+        {
+            EnsureAttached();
+            AutomationElement element = AutomationElement.FromPoint(
+                new System.Windows.Point(screenPoint.X, screenPoint.Y));
+            return ResolveLiveSelection(
+                element,
+                referencedControlIds,
+                referencedPropertyNames);
+        }
+
+        public MonitorLiveSelection InspectFocusedElement(
+            IEnumerable<string> referencedControlIds,
+            IEnumerable<string> referencedPropertyNames)
+        {
+            EnsureAttached();
+            return ResolveLiveSelection(
+                AutomationElement.FocusedElement,
+                referencedControlIds,
+                referencedPropertyNames);
+        }
+
+        private MonitorLiveSelection ResolveLiveSelection(
+            AutomationElement element,
+            IEnumerable<string> referencedControlIds,
+            IEnumerable<string> referencedPropertyNames)
+        {
+            if (element == null) return null;
+            var controlIds = new HashSet<string>(
+                referencedControlIds ?? Enumerable.Empty<string>(),
+                StringComparer.OrdinalIgnoreCase);
+            var propertyNames = new HashSet<string>(
+                referencedPropertyNames ?? Enumerable.Empty<string>(),
+                StringComparer.Ordinal);
+
+            AutomationElement current = element;
+            TreeWalker walker = TreeWalker.RawViewWalker;
+            for (int depth = 0; current != null && depth < 24; depth++)
+            {
+                int processId;
+                string automationId;
+                string name;
+                System.Windows.Rect bounds;
+                try
+                {
+                    processId = current.Current.ProcessId;
+                    automationId = current.Current.AutomationId;
+                    name = current.Current.Name;
+                    bounds = current.Current.BoundingRectangle;
+                }
+                catch (ElementNotAvailableException)
+                {
+                    return null;
+                }
+
+                if (processId != ProcessId) return null;
+                Rectangle rectangle = ToScreenRectangle(bounds);
+                if (!string.IsNullOrWhiteSpace(name) &&
+                    propertyNames.Contains(name) &&
+                    rectangle.Width > 1 &&
+                    rectangle.Height > 1)
+                {
+                    return new MonitorLiveSelection
+                    {
+                        ReferenceKey = MonitorUiReference.ForProperty(name),
+                        DisplayName = "PropertyGrid 參數「" + name + "」",
+                        ScreenBounds = rectangle
+                    };
+                }
+                if (!string.IsNullOrWhiteSpace(automationId) &&
+                    controlIds.Contains(automationId) &&
+                    rectangle.Width > 1 &&
+                    rectangle.Height > 1)
+                {
+                    return new MonitorLiveSelection
+                    {
+                        ReferenceKey = MonitorUiReference.ForControl(
+                            automationId),
+                        DisplayName = string.IsNullOrWhiteSpace(name)
+                            ? "控制項 " + automationId
+                            : name + "（" + automationId + "）",
+                        ScreenBounds = rectangle
+                    };
+                }
+
+                try
+                {
+                    current = walker.GetParent(current);
+                }
+                catch (ElementNotAvailableException)
+                {
+                    return null;
+                }
+            }
+            return null;
+        }
+
+        private static Rectangle ToScreenRectangle(System.Windows.Rect bounds)
+        {
+            if (bounds.IsEmpty ||
+                double.IsNaN(bounds.X) ||
+                double.IsNaN(bounds.Y) ||
+                double.IsInfinity(bounds.X) ||
+                double.IsInfinity(bounds.Y))
+                return Rectangle.Empty;
+            return new Rectangle(
+                (int)Math.Floor(bounds.Left),
+                (int)Math.Floor(bounds.Top),
+                Math.Max(1, (int)Math.Ceiling(bounds.Width)),
+                Math.Max(1, (int)Math.Ceiling(bounds.Height)));
         }
 
         public async Task AttachOrLaunchAsync(
@@ -764,6 +886,34 @@ namespace AniloxRoll.DvtRunner
             }
             throw new TimeoutException(
                 "Timed out selecting tab: " + name);
+        }
+
+        public async Task<string> ScrollPropertyGridAsync(
+            int delta,
+            CancellationToken cancellationToken)
+        {
+            EnsureAttached();
+            if (delta == 0) return "propertyGridSettings wheel=0";
+            AutomationElement owner = GetPropertyGridTable();
+            IntPtr handle = IntPtr.Zero;
+            while (owner != null && handle == IntPtr.Zero)
+            {
+                handle = new IntPtr(owner.Current.NativeWindowHandle);
+                owner = TreeWalker.RawViewWalker.GetParent(owner);
+            }
+            if (handle == IntPtr.Zero)
+                throw new InvalidOperationException(
+                    "PropertyGrid does not expose a scrollable window handle.");
+
+            NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+            if (!NativeMethods.WheelWindowCenter(handle, delta))
+                throw new InvalidOperationException(
+                    "Failed to scroll PropertyGrid from the UI map.");
+            _propertyGridItems = null;
+            _propertyGridItemOrder = null;
+            _selectedPropertyGridKey = null;
+            await Task.Delay(200, cancellationToken);
+            return "propertyGridSettings wheel=" + delta;
         }
 
         public async Task<string> SelectComboAsync(

@@ -2,6 +2,8 @@
   "Id": "monitor-inspection-standards",
   "Name": "監控檢測標準（光源替代刺激）",
   "Description": "用光源 100/255 的穩定亮暗變化驗證監控正規值、閾值、欄曲線模式、檢出方向、欄列 Curve 與 O/X 公式。光源只提供替代刺激，不代表真實 Mura 光學檢出率。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "btnLiveGrab", "camLiveMain", "chartLiveColumn", "chartLiveRow", "propertyGridSettings" ],
   "Steps": [
     {
       "Id": "launch",

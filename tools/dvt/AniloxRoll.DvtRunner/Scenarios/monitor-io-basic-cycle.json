@@ -2,6 +2,8 @@
   "Id": "monitor-io-basic-cycle",
   "Name": "監控 IO 基本一循環",
   "Description": "外部 Runner 啟動本機 IoSimulator，單獨驗證一次 LOW → HIGH 開 Grab → LOW 排水並停止，不混入版面或檢出參數矩陣。",
+  "Category": "monitor",
+  "ControlRefs": [ "tabPageLiveView", "btnLiveGrab", "camLiveMain", "chartLiveColumn", "chartLiveRow", "lblIoState" ],
   "Steps": [
     { "Id": "launch", "Contract": "F1", "Title": "開啟監控程式", "Action": "launch", "TimeoutSeconds": 30 },
     { "Id": "log-mode", "Contract": "DVT.LogMode", "Title": "開啟流程驗證記錄", "Action": "set-property", "Target": "記錄範圍", "Value": "流程驗證", "TimeoutSeconds": 15 },

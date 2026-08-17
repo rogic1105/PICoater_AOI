@@ -2,6 +2,8 @@
   "Id": "physical-smb-backlog-recovery",
   "Name": "SMB 中斷與待傳恢復",
   "Description": "以固定 /32 Loopback 黑洞路由只隔離儲存電腦，期間完成兩輪實際取相，恢復後驗證遠端待傳清空與 heartbeat 回復。",
+  "Category": "bridge",
+  "ControlRefs": [ "lblStorageConn", "lblIoState", "btnLiveGrab", "propertyGridSettings" ],
   "Steps": [
     {
       "Id": "launch",

@@ -2,6 +2,8 @@
   "Id": "report-range-scroll-performance",
   "Name": "報表序號範圍高速滾動",
   "Description": "持續操作序號範圍，驗證 List 節流、Curve monotonic 跳讀、停止後追上與 UI 響應。",
+  "Category": "report",
+  "ControlRefs": [ "tabPageData", "btnDataSelectFolder", "cbDataIdStart", "cbDataIdEnd", "listViewGrabDetail", "chartDataColumn", "chartDataRow" ],
   "Steps": [
     {
       "Id": "stage-data-root",

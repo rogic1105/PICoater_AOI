@@ -2,6 +2,8 @@
   "Id": "review-load-performance",
   "Name": "回顧讀取與換序號效能",
   "Description": "量測 30,000 筆資料的首次索引、首筆顯示與快速換序號；不混入畫布拖曳或其他功能驗收。",
+  "Category": "review",
+  "ControlRefs": [ "tabPageReview", "btnReviewSelectFolder", "cbReviewId", "camReviewMain", "chartReviewColumn", "chartReviewRow" ],
   "Steps": [
     {
       "Id": "stage-review-root",

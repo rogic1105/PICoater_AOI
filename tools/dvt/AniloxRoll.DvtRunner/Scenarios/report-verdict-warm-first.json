@@ -2,6 +2,8 @@
   "Id": "report-verdict-warm-first",
   "Name": "Report first-load list and verdict performance",
   "Description": "Open the report once without clearing its rebuildable index and measure list plus column/row verdict presentation.",
+  "Category": "report",
+  "ControlRefs": [ "tabPageData", "btnDataSelectFolder", "cbDataId", "listViewGrabDetail", "chartDataColumn", "chartDataRow" ],
   "Steps": [
     {
       "Id": "stage-empty-root",

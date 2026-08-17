@@ -2,6 +2,8 @@
   "Id": "review-report-30000",
   "Name": "回顧與報表 30,000 筆",
   "Description": "以 D:\\Anilox\\StressCaptures_30000 驗證大型資料集掃描、重新讀取最新、回顧快滾／時序／強化、方向／熱力圖／顯示裁切、報表單筆／範圍／Y軸／異常篩選與跨頁 Curve 重用。",
+  "Category": "review",
+  "ControlRefs": [ "tabPageReview", "btnReviewSelectFolder", "cbReviewId", "cbReviewDate", "cbReviewTime", "camReviewMain", "chartReviewColumn", "chartReviewRow", "tabPageData", "cbDataId", "cbDataIdStart", "cbDataIdEnd", "listViewGrabDetail", "chartDataColumn", "chartDataRow", "chartDataYieldYearly", "lblChartNavYear", "lblChartNavMonth", "lblChartNavDay" ],
   "Steps": [
     {
       "Id": "stage-review-root",
