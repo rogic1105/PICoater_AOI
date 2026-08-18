@@ -109,7 +109,12 @@ namespace AniloxRoll.Monitor.UI.Coordinators
                 $"csvRecords={result.CsvRecordCount} " +
                 $"csvArchives={result.CsvBackedArchiveCount} " +
                 $"archiveFallback={result.ArchiveFallbackCount} " +
-                $"legacy={result.LegacyFileCount} ms={result.ElapsedMilliseconds}");
+                $"legacy={result.LegacyFileCount} " +
+                $"enumMs={result.EnumerationMilliseconds} " +
+                $"archiveIndexMs={result.ArchiveIndexMilliseconds} " +
+                $"metadataMs={result.MetadataIndexMilliseconds} " +
+                $"periodMs={result.PeriodIndexMilliseconds} " +
+                $"ms={result.ElapsedMilliseconds}");
         }
 
         private static bool HasYearSubdir(string path)

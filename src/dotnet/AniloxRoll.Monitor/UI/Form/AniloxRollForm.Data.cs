@@ -261,7 +261,20 @@ namespace AniloxRoll.Monitor.Forms
             // Data → Review tab 切換：pending selection 才載圖；既有內容一律補一次可見重繪。
             tabMain.SelectedIndexChanged += async (s, e) =>
             {
-                if (tabMain.SelectedTab != tabPageReview || _suppressTabIntent) return;
+                if (_suppressTabIntent) return;
+                if (tabMain.SelectedTab == tabPageData)
+                {
+                    try
+                    {
+                        await _dataStatsPresenter.EnsureReportGrabIdCombosAsync();
+                    }
+                    catch (Exception ex)
+                    {
+                        Trace.WriteLine($"[tabMain -> Data] {ex}");
+                    }
+                    return;
+                }
+                if (tabMain.SelectedTab != tabPageReview) return;
 
                 if (_reviewDirty && _hasPendingDataReviewSelection)
                 {

@@ -87,6 +87,7 @@ namespace AniloxRoll.Monitor.Forms
         /// </summary>
         private async Task ResetAndLoadReviewAfterFolderChanged(bool dataPresenterAlreadySynced)
         {
+            string reviewPath = UserSessionState.LastDataPath;
             _stitchCoordinator.InvalidateImageLoad();
             _stitchCoordinator.LastReviewProcessedMode = false;
             _settingsHub.SetBatch(s =>
@@ -114,9 +115,12 @@ namespace AniloxRoll.Monitor.Forms
             {
                 if (!dataPresenterAlreadySynced)
                 {
-                    var reviewPath = UserSessionState.LastDataPath;
                     if (!string.IsNullOrWhiteSpace(reviewPath))
-                        await _dataStatsPresenter.SyncFromReviewFolderAsync(reviewPath);
+                    {
+                        _dataStatsPresenter.PrepareReviewFolderCatalog(
+                            reviewPath,
+                            _imageRepository.GetGrabIdInfosDescending());
+                    }
                 }
                 // 手按【讀取資料】＝刷新+跳最新（GrabIdInfos 降冪，index 0=最新）。
                 // 原本沿用當前選取＝使用者預期落空（2026-07-10 對數）。guard 抑制 combo 事件
@@ -154,6 +158,9 @@ namespace AniloxRoll.Monitor.Forms
                 await _presenter.LoadImagesWithPeriodLockAsync(false, LoadImagesWithReviewConfig);
                 ApplyPostLoadDisplay();
             }
+
+            if (!dataPresenterAlreadySynced && !string.IsNullOrWhiteSpace(reviewPath))
+                await _dataStatsPresenter.CompleteReviewFolderStatisticsAsync(reviewPath);
         }
 
         private async Task ApplyReviewEnhance(bool enableProcess)

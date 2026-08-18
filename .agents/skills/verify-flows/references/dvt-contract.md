@@ -1787,11 +1787,19 @@ python tools/python/check_review_flows.py [trace.log]    # 預設抓最新 log�
 T1: ui:【讀取資料】鈕（Review）
 T1: RV folder selected root=…
 T1: RV repo scan begin root=…
-Tn: RV repo scan root=… files=N csvRecords=C csvArchives=A archiveFallback=F legacy=L ms=M
+Tn: RV repo scan root=… files=N csvRecords=C csvArchives=A archiveFallback=F legacy=L enumMs=E archiveIndexMs=A metadataMs=I periodMs=P ms=M
+    ← `csvRecords` 是建立封裝影像索引時實際解析的 CSV record 數；純 legacy 目錄沒有 `.acap` 時必為 0，
+      報表的 CFG／判定索引仍由後續 `DT stats snapshot` 單次解析，不得在回顧索引重複解析。
+    ← `enumMs/archiveIndexMs/metadataMs/periodMs` 是四段可加總的索引成本，用來區分冷磁碟列舉、
+      封裝映射、影像 metadata 去重及時序索引；30,000 筆效能修改必須比較各段，不可只看總時間。
     ← 索引工作在背景執行，UI 不得出現同時窗 `UiStall`；有每日 CSV 的 `.acap` 直接以 CSV
       FileName 建時序索引，不逐包掃 payload。只有沒有 CSV 對應的封裝才計入 `archiveFallback`。
     ← `python tools/python/measure_display_performance.py --latest` 分別統計清單、縮圖換圖與完整圖載入，
       不得把清單掃描耗時誤判成圖片解碼耗時；`--strict` 用於完整效能驗收。
+T1: RV combo fill count=N mode=review-first
+T1: RV catalog ready grabs=N source=image-index
+    ← 大量資料的第一張圖不得等待完整報表 CSV 統計。影像索引完成後先用同一份 timestamp 索引建立
+      Review 序號清單並顯示最新資料；`DT stats snapshot` 必須晚於第一筆 `RV loadGrab done`。
 T1: （首次）RV EnsureImageDisplay create（thumbs=7）
 T1: RV loadGrab begin {grabId}（proc=…）
 Tn: RV loadGrab paths {grabId} root=… images=N cams=P cfg=yes|no align=tick|filename source=acap|legacy
@@ -1826,6 +1834,10 @@ T1: RV pushFrames P/7（merge=True, feedScale=…, chartView=publish）   ← P=
 Tn: RV image load worker {grabId} queueMs=Q loadMs=L storage={acap|legacy}
 T1: RV image load apply {grabId} queueMs=Q loadMs=L applyMs=A
 T1: RV loadGrab done {grabId}（…ms）
+Tn: DT stats snapshot csv=C records=R grabs=N ms=M
+T1: RV statistics ready grabs=N catalogMatch=True|False
+    ← CSV 仍須在同一次【讀取資料】完成；`catalogMatch=True` 時不得重填 Review ComboBox 或重載第一張圖。
+      False 代表影像與報表序號不一致，只能校正清單並保留既有選取，不可靜默隱藏資料。
 （若由 Data 頁隱藏預載：切到回顧後延後一個 UI message，出現 `RV tabVisible repaint view=True` →
  `RV visiblePaint ready=True lod=… size=WxH`；以可見尺寸補 LOD tile + paint，不重讀檔、不重設視野）
 （grab 中按：另會出現 DisableGlobalMerge 等監控行——歸本 intent 管，見孤兒判讀規則）
@@ -1835,7 +1847,7 @@ T1: RV loadGrab done {grabId}（…ms）
 log 留 `RV|DT data root upgraded from=… to=…`。其他外部封存資料夾仍保留使用者選擇。
 開機自動恢復上次位置不在此限。
 大量資料不變量：`ImageRepository.LoadDirectory` 與 `InspectionStatisticsService.LoadSnapshot` 必須在
-背景執行；四個 30,000 筆序號 ComboBox 仍以 `AddRange` 批次填入，但每個 ComboBox 完成後必須讓出
+背景執行並採「先回顧首圖、後完整報表統計」的串行磁碟策略，不得平行搶冷磁碟；四個 30,000 筆序號 ComboBox 仍以 `AddRange` 批次填入，但每個 ComboBox 完成後必須讓出
 一次 UI message（`DT combo fill count=N yieldMs=50`）。總載入時間可超過一秒，期間不得形成連續
 `UiStall >1000ms`。
 載入 busy 視覺唯一 owner＝`BusyUiBinder`；`AniloxRollPresenter.BusyStateChanged` 與
@@ -2961,3 +2973,17 @@ Tbg capture finalize grab=… archive=….acap atlas=3 atlasBytes=… remoteFile
 | 跨Tab | Review→Data 同步、Data→Review 同步 |
 
 驗證中發現 skill 與 code 不一致 → 同步更新對應 skill（契約跟 code 對齊是本 skill 的存在意義）。
+## R1 large-catalog presentation policy
+
+For Review `Read Data`, a large catalog must become useful in this order:
+
+1. `RV repo scan ... enumMs=... archiveIndexMs=... metadataMs=... periodMs=... ms=...`
+2. `DT stats snapshot ...`
+3. `RV combo fill count=N mode=review-first`
+4. latest `RV loadGrab ... done`
+
+The three report selectors are intentionally deferred until the Report tab is opened. Their
+completion is recorded as `DT combo fill ... mode=deferred` followed by
+`DT deferred controls ready count=N ms=M`. Review first-image presentation must not wait for these
+report-only controls. Direct Report `Read Data` still fills all selectors before presenting report
+statistics.

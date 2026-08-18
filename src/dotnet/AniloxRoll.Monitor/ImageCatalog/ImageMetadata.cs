@@ -16,5 +16,6 @@
         public string Second { get; set; }
         public string Millisecond { get; set; }
         public int CameraId { get; set; }
+        public System.DateTime Timestamp { get; set; }
     }
 }

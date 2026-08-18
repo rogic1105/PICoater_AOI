@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 using AniloxRoll.Monitor.Core.Services;
 using AniloxRoll.Monitor.UI.Navigators;
@@ -139,6 +140,47 @@ namespace AniloxRoll.Monitor.Tests
             visible = all;
             navigator.RefreshFilteredGrabIdCombos(preferred);
             Assert.That(context.CbDataGrabId.SelectedItem, Is.EqualTo("260721-080000"));
+        }
+
+        [Test]
+        public async Task Navigator_ReviewFirstPopulation_DefersReportOptionsUntilRequested()
+        {
+            var all = new List<GrabIdInfo>
+            {
+                new GrabIdInfo { GrabId = "260721-080003" },
+                new GrabIdInfo { GrabId = "260721-080002" },
+                new GrabIdInfo { GrabId = "260721-080001" },
+            };
+            var context = new DataStatisticsContext
+            {
+                CbGrabIdStart = new ComboBox(),
+                CbGrabIdEnd = new ComboBox(),
+                CbDataGrabId = new ComboBox(),
+                CbReviewGrabId = new ComboBox(),
+                GroupBoxGrabIdRange = new GroupBox(),
+                GrpDataSingleSheet = new GroupBox(),
+                GrpReviewGrabNav = new GroupBox(),
+            };
+            var navigator = new DataDateGrabIdNavigator(
+                context, () => all, () => all,
+                () => { }, () => { },
+                (id, earliest, latest, index) => { },
+                (id, earliest, latest, index) => { },
+                (box, active) => { }, (label, active) => { });
+
+            navigator.PopulateReviewGrabIdCombo();
+
+            Assert.That(context.CbReviewGrabId.Items.Count, Is.EqualTo(3));
+            Assert.That(context.CbDataGrabId.Items.Count, Is.Zero);
+            Assert.That(context.CbGrabIdStart.Items.Count, Is.Zero);
+            Assert.That(context.CbGrabIdEnd.Items.Count, Is.Zero);
+
+            await navigator.PopulateReportGrabIdCombosAsync();
+
+            Assert.That(context.CbReviewGrabId.Items.Count, Is.EqualTo(3));
+            Assert.That(context.CbDataGrabId.Items.Count, Is.EqualTo(3));
+            Assert.That(context.CbGrabIdStart.Items.Count, Is.EqualTo(3));
+            Assert.That(context.CbGrabIdEnd.Items.Count, Is.EqualTo(3));
         }
     }
 }

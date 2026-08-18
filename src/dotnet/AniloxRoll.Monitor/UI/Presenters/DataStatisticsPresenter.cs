@@ -100,6 +100,8 @@ namespace AniloxRoll.Monitor.UI.Presenters
         private Dictionary<string, CsvConfigSnapshot> _captureConfigByGrabId =
             new Dictionary<string, CsvConfigSnapshot>(StringComparer.Ordinal);
         private readonly ReportCurveVerdictIndexCoordinator _curveVerdictIndexCoordinator;
+        private bool _reportGrabIdCombosPopulated;
+        private Task _reportGrabIdComboLoadTask;
 
         // --- 圖表導航 ---
 
@@ -263,6 +265,7 @@ namespace AniloxRoll.Monitor.UI.Presenters
             LoadStatisticsSnapshot(path);
 
             PopulateAllGrabIdCombos(selectDataGrabId: false);
+            _reportGrabIdCombosPopulated = true;
 
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
@@ -276,24 +279,110 @@ namespace AniloxRoll.Monitor.UI.Presenters
         }
 
         /// <summary>從 Review tab 選擇資料夾後同步載入序號清單。</summary>
-        public async Task SyncFromReviewFolderAsync(string path)
+        public void PrepareReviewFolderCatalog(string path, IList<GrabIdInfo> catalogGrabIds)
         {
             CancelRangePreview();
             _muraChart?.ResetSingleGrabCache();
             ResetSingleGrabDetailIndex();
             _statsDataRootPath = path;
+            _grabIdInfos = catalogGrabIds == null
+                ? new List<GrabIdInfo>()
+                : catalogGrabIds.ToList();
+            // Period charts are report data. Building their 30,000-entry sorted
+            // set here delays Review first paint and duplicates the CSV snapshot.
+            _statAvailableTimes = new SortedSet<DateTime>();
+            _curveVerdictIndex.ReplaceDetails(
+                path,
+                new Dictionary<string, GrabDetail>(StringComparer.Ordinal),
+                CreateThresholdContext());
+            _captureHmVByGrabId = new Dictionary<string, float>(StringComparer.Ordinal);
+            _captureConfigByGrabId = new Dictionary<string, CsvConfigSnapshot>(StringComparer.Ordinal);
+            RefreshRangeGrabIdInfos();
+
+            _dateGrabIdNavigator.PopulateReviewGrabIdCombo();
+            _reportGrabIdCombosPopulated = false;
+            _reportGrabIdComboLoadTask = null;
+            FlowTrace.Log($"RV catalog ready grabs={_grabIdInfos.Count} source=image-index");
+        }
+
+        public async Task CompleteReviewFolderStatisticsAsync(string path)
+        {
+            string selectedGrabId = Convert.ToString(_ctx.CbReviewGrabId.SelectedItem);
             var watch = Stopwatch.StartNew();
             ThresholdContext threshold = CreateThresholdContext();
             InspectionStatisticsSnapshot snapshot = await Task.Run(
                 () => InspectionStatisticsService.LoadSnapshot(path, threshold));
             ApplyStatisticsSnapshot(path, threshold, snapshot, watch.ElapsedMilliseconds);
 
-            await PopulateAllGrabIdCombosAsync();
+            bool catalogMatches = ReviewComboMatchesStatistics();
+            if (!catalogMatches)
+            {
+                _dateGrabIdNavigator.PopulateReviewGrabIdCombo();
+                if (!string.IsNullOrEmpty(selectedGrabId))
+                {
+                    int selectedIndex = _ctx.CbReviewGrabId.Items.IndexOf(selectedGrabId);
+                    if (selectedIndex >= 0)
+                        _ctx.CbReviewGrabId.SelectedIndex = selectedIndex;
+                }
+            }
 
+            _reportGrabIdCombosPopulated = false;
+            _reportGrabIdComboLoadTask = null;
             PopulateChartNavigators(_statAvailableTimes.Count > 0
                 ? (DateTime?)_statAvailableTimes.Max : null);
+            FlowTrace.Log(
+                $"RV statistics ready grabs={_grabIdInfos.Count} catalogMatch={catalogMatches}");
+        }
+
+        private bool ReviewComboMatchesStatistics()
+        {
+            if (_ctx.CbReviewGrabId.Items.Count != _grabIdInfos.Count)
+                return false;
+
+            for (int i = 0; i < _grabIdInfos.Count; i++)
+            {
+                if (!string.Equals(
+                    Convert.ToString(_ctx.CbReviewGrabId.Items[i]),
+                    _grabIdInfos[i].GrabId,
+                    StringComparison.Ordinal))
+                    return false;
+            }
+
+            return true;
+        }
+
+        public async Task EnsureReportGrabIdCombosAsync()
+        {
+            if (_reportGrabIdCombosPopulated) return;
+
+            Task loadTask = _reportGrabIdComboLoadTask;
+            if (loadTask == null)
+            {
+                loadTask = PopulateReportGrabIdCombosCoreAsync();
+                _reportGrabIdComboLoadTask = loadTask;
+            }
+
+            try
+            {
+                await loadTask;
+            }
+            catch
+            {
+                if (ReferenceEquals(_reportGrabIdComboLoadTask, loadTask))
+                    _reportGrabIdComboLoadTask = null;
+                throw;
+            }
+        }
+
+        private async Task PopulateReportGrabIdCombosCoreAsync()
+        {
+            var watch = Stopwatch.StartNew();
+            await _dateGrabIdNavigator.PopulateReportGrabIdCombosAsync();
+            _dateGrabIdNavigator.SetActiveStatGroupBox(_ctx.GrpDataSingleSheet);
             SelectLatestInSingleSheetMode();
             RefreshStats();
+            _reportGrabIdCombosPopulated = true;
+            FlowTrace.Log($"DT deferred controls ready count={_rangeGrabIdInfos.Count} ms={watch.ElapsedMilliseconds}");
         }
 
         private void LoadStatisticsSnapshot(string path)

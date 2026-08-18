@@ -5,7 +5,6 @@ using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using AniloxRoll.Monitor.Core.Services;
 
@@ -18,6 +17,10 @@ namespace AniloxRoll.Monitor.Core.Data
         public int CsvBackedArchiveCount { get; internal set; }
         public int ArchiveFallbackCount { get; internal set; }
         public int LegacyFileCount { get; internal set; }
+        public long EnumerationMilliseconds { get; internal set; }
+        public long ArchiveIndexMilliseconds { get; internal set; }
+        public long MetadataIndexMilliseconds { get; internal set; }
+        public long PeriodIndexMilliseconds { get; internal set; }
         public long ElapsedMilliseconds { get; internal set; }
     }
 
@@ -31,9 +34,6 @@ namespace AniloxRoll.Monitor.Core.Data
     {
         private volatile ImageMetadata[] _metadataCache = new ImageMetadata[0];
         private volatile DateTime[] _availablePeriods = new DateTime[0];
-        // Regex: YYYYMMDD_HHMMSS.fff-CamID
-        private readonly Regex _fileNameRegex = new Regex(@"(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})\.(\d{3})-(\d)");
-
         public int FileCount => _metadataCache.Length;
 
         public Task<ImageRepositoryLoadResult> LoadDirectoryAsync(string rootPath)
@@ -63,8 +63,14 @@ namespace AniloxRoll.Monitor.Core.Data
             Task.WhenAll(legacyFilesTask, archiveFilesTask, csvFilesTask)
                 .GetAwaiter()
                 .GetResult();
+            long phaseStartedAt = watch.ElapsedMilliseconds;
+            result.EnumerationMilliseconds = phaseStartedAt;
 
-            string[] legacyFiles = legacyFilesTask.Result;
+            string[] legacyFiles = legacyFilesTask.Result
+                .Where(path => !path.EndsWith(
+                    CaptureFileNaming.ThumbRawJpg,
+                    StringComparison.OrdinalIgnoreCase))
+                .ToArray();
             string[] archiveFiles = archiveFilesTask.Result;
             string[] csvFiles = csvFilesTask.Result;
             var archiveFileSet = new HashSet<string>(
@@ -72,7 +78,14 @@ namespace AniloxRoll.Monitor.Core.Data
                 StringComparer.OrdinalIgnoreCase);
             var csvBackedPaths = new List<string>();
             var csvBackedArchives = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            foreach (string csvPath in csvFiles)
+            // Daily CSV records are needed here only to map archive members. Legacy
+            // folders already have real raw-image paths, while the report presenter
+            // independently reads the CSV once for CFG and verdict indexes. Avoiding
+            // this redundant parse removes 210,000 record allocations from the
+            // 30,000-grab review catalog load.
+            foreach (string csvPath in archiveFiles.Length == 0
+                ? Array.Empty<string>()
+                : csvFiles)
             {
                 string dateName = Path.GetFileNameWithoutExtension(csvPath);
                 if (dateName.Length != 8 || !dateName.All(char.IsDigit)) continue;
@@ -110,6 +123,9 @@ namespace AniloxRoll.Monitor.Core.Data
                         $"{ex.GetType().Name}: {ex.Message}");
                 }
             }
+            long phaseFinishedAt = watch.ElapsedMilliseconds;
+            result.ArchiveIndexMilliseconds = phaseFinishedAt - phaseStartedAt;
+            phaseStartedAt = phaseFinishedAt;
 
             string[] fallbackArchives = archiveFiles
                 .Where(path => !csvBackedArchives.Contains(Path.GetFullPath(path)))
@@ -118,35 +134,49 @@ namespace AniloxRoll.Monitor.Core.Data
                 .AsParallel()
                 .SelectMany(CaptureArchiveStore.ListAllVirtualRawPaths)
                 .ToArray();
-            var files = legacyFiles.Concat(csvBackedPaths).Concat(archivePaths);
-
-            ImageMetadata[] metadata = files.AsParallel()
-                .Select(f =>
+            int capacity = legacyFiles.Length + csvBackedPaths.Count +
+                archivePaths.Length;
+            var metadataByKey = new Dictionary<CaptureKey, ImageMetadata>(capacity);
+            foreach (string path in legacyFiles
+                .Concat(csvBackedPaths)
+                .Concat(archivePaths))
+            {
+                ImageMetadata item;
+                try
                 {
-                    try { return ParsePath(f); }
-                    catch (Exception ex)
-                    {
-                        Trace.WriteLine($"[ImageRepository] ParsePath({f}) failed: {ex.GetType().Name}: {ex.Message}");
-                        return null;
-                    }
-                })
-                .Where(x => x != null)
-                .GroupBy(MetadataKey)
-                .Select(group => group
-                    .OrderByDescending(item =>
-                        CaptureArchiveStore.IsVirtualPath(item.FullPath))
-                    .First())
-                .ToArray();
+                    item = ParsePath(path);
+                }
+                catch (Exception ex)
+                {
+                    Trace.WriteLine(
+                        $"[ImageRepository] ParsePath({path}) failed: " +
+                        $"{ex.GetType().Name}: {ex.Message}");
+                    continue;
+                }
+                if (item == null) continue;
+
+                var key = new CaptureKey(item.Timestamp, item.CameraId);
+                if (!metadataByKey.TryGetValue(key, out ImageMetadata existing) ||
+                    (!CaptureArchiveStore.IsVirtualPath(existing.FullPath) &&
+                     CaptureArchiveStore.IsVirtualPath(item.FullPath)))
+                {
+                    metadataByKey[key] = item;
+                }
+            }
+            ImageMetadata[] metadata = metadataByKey.Values.ToArray();
+            phaseFinishedAt = watch.ElapsedMilliseconds;
+            result.MetadataIndexMilliseconds = phaseFinishedAt - phaseStartedAt;
+            phaseStartedAt = phaseFinishedAt;
 
             // Period navigation reads this on every selection change. Build the sorted index once
             // with the file catalog instead of reparsing and sorting every image on the UI thread.
             DateTime[] availablePeriods = metadata
-                .Select(x => BuildDateTime(x.Year, x.Month, x.Day, x.Hour, x.Minute, x.Second + "." + x.Millisecond))
-                .Where(x => x.HasValue)
-                .Select(x => x.Value)
+                .Select(x => x.Timestamp)
                 .Distinct()
                 .OrderBy(x => x)
                 .ToArray();
+            result.PeriodIndexMilliseconds =
+                watch.ElapsedMilliseconds - phaseStartedAt;
 
             // Publish a complete immutable snapshot in one step. While a background refresh runs,
             // readers continue using the previous catalog rather than observing a half-built list.
@@ -162,30 +192,89 @@ namespace AniloxRoll.Monitor.Core.Data
             return result;
         }
 
-        private static string MetadataKey(ImageMetadata item)
+        private readonly struct CaptureKey : IEquatable<CaptureKey>
         {
-            return item.Year + item.Month + item.Day + item.Hour + item.Minute +
-                item.Second + item.Millisecond + "-" + item.CameraId;
+            private readonly DateTime _timestamp;
+            private readonly int _cameraId;
+
+            public CaptureKey(DateTime timestamp, int cameraId)
+            {
+                _timestamp = timestamp;
+                _cameraId = cameraId;
+            }
+
+            public bool Equals(CaptureKey other) =>
+                _timestamp == other._timestamp && _cameraId == other._cameraId;
+
+            public override bool Equals(object obj) =>
+                obj is CaptureKey other && Equals(other);
+
+            public override int GetHashCode()
+            {
+                unchecked
+                {
+                    return (_timestamp.GetHashCode() * 397) ^ _cameraId;
+                }
+            }
         }
 
-        private ImageMetadata ParsePath(string path)
+        private static ImageMetadata ParsePath(string path)
         {
-            var fileName = Path.GetFileName(path);
-            var match = _fileNameRegex.Match(fileName);
-            if (!match.Success) return null;
+            string fileName = CaptureArchiveStore.IsVirtualPath(path)
+                ? CaptureArchiveStore.GetVirtualBaseName(path)
+                : Path.GetFileName(path);
+            if (string.IsNullOrEmpty(fileName) || fileName.Length < 21 ||
+                fileName[8] != '_' || fileName[15] != '.' || fileName[19] != '-')
+                return null;
+            if (!TryReadNumber(fileName, 0, 4, out int year) ||
+                !TryReadNumber(fileName, 4, 2, out int month) ||
+                !TryReadNumber(fileName, 6, 2, out int day) ||
+                !TryReadNumber(fileName, 9, 2, out int hour) ||
+                !TryReadNumber(fileName, 11, 2, out int minute) ||
+                !TryReadNumber(fileName, 13, 2, out int second) ||
+                !TryReadNumber(fileName, 16, 3, out int millisecond) ||
+                !TryReadNumber(fileName, 20, 1, out int cameraId))
+                return null;
+
+            DateTime timestamp;
+            try
+            {
+                timestamp = new DateTime(
+                    year, month, day, hour, minute, second, millisecond);
+            }
+            catch (ArgumentOutOfRangeException)
+            {
+                return null;
+            }
 
             return new ImageMetadata
             {
                 FullPath = path,
-                Year = match.Groups[1].Value,
-                Month = match.Groups[2].Value,
-                Day = match.Groups[3].Value,
-                Hour = match.Groups[4].Value,
-                Minute = match.Groups[5].Value,
-                Second = match.Groups[6].Value,
-                Millisecond = match.Groups[7].Value,
-                CameraId = int.Parse(match.Groups[8].Value)
+                Year = fileName.Substring(0, 4),
+                Month = fileName.Substring(4, 2),
+                Day = fileName.Substring(6, 2),
+                Hour = fileName.Substring(9, 2),
+                Minute = fileName.Substring(11, 2),
+                Second = fileName.Substring(13, 2),
+                Millisecond = fileName.Substring(16, 3),
+                CameraId = cameraId,
+                Timestamp = timestamp
             };
+        }
+
+        private static bool TryReadNumber(
+            string value, int offset, int count, out int number)
+        {
+            number = 0;
+            if (offset < 0 || count <= 0 || offset + count > value.Length)
+                return false;
+            for (int i = offset; i < offset + count; i++)
+            {
+                int digit = value[i] - '0';
+                if (digit < 0 || digit > 9) return false;
+                number = number * 10 + digit;
+            }
+            return true;
         }
 
         // ── 簡化 ComboBox 介面（cbReviewDate + cbReviewTime）──────────────────────────
@@ -208,6 +297,36 @@ namespace AniloxRoll.Monitor.Core.Data
                 .ToList();
 
         public IReadOnlyList<DateTime> GetAvailablePeriods() => _availablePeriods;
+
+        /// <summary>
+        /// Builds the lightweight Review navigation catalog from the image index.
+        /// Full CSV statistics are intentionally not required for first paint.
+        /// </summary>
+        public List<GrabIdInfo> GetGrabIdInfosDescending()
+        {
+            var byGrabId = new Dictionary<string, GrabIdInfo>(StringComparer.Ordinal);
+            foreach (DateTime timestamp in _availablePeriods)
+            {
+                string grabId = InspectionLogService.FormatGrabId(timestamp);
+                if (!byGrabId.TryGetValue(grabId, out GrabIdInfo info))
+                {
+                    byGrabId[grabId] = new GrabIdInfo
+                    {
+                        GrabId = grabId,
+                        Earliest = timestamp,
+                        Latest = timestamp
+                    };
+                    continue;
+                }
+
+                if (timestamp < info.Earliest) info.Earliest = timestamp;
+                if (timestamp > info.Latest) info.Latest = timestamp;
+            }
+
+            return byGrabId.Values
+                .OrderByDescending(info => info.GrabId, StringComparer.Ordinal)
+                .ToList();
+        }
 
         /// <summary>
         /// 從 "ss.fff" 格式解析秒與毫秒，建構 DateTime。

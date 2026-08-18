@@ -130,6 +130,45 @@ namespace AniloxRoll.Monitor.UI.Navigators
             }
         }
 
+        public void PopulateReviewGrabIdCombo()
+        {
+            using (StatComboGuard.Enter())
+            {
+                object[] ids = BuildGrabIdItems(_getGrabIdInfos());
+                FlowTrace.Log($"RV combo fill count={ids.Length} mode=review-first");
+                ReplaceItems(_ctx.CbReviewGrabId, ids);
+                ReplaceItems(_ctx.CbDataGrabId, Array.Empty<object>());
+                ReplaceItems(_ctx.CbGrabIdStart, Array.Empty<object>());
+                ReplaceItems(_ctx.CbGrabIdEnd, Array.Empty<object>());
+                UpdateGrabIdNavState();
+            }
+        }
+
+        public async Task PopulateReportGrabIdCombosAsync(bool selectDataGrabId = false)
+        {
+            using (StatComboGuard.Enter())
+            {
+                object[] ids = BuildGrabIdItems(_getRangeGrabIdInfos());
+                FlowTrace.Log(
+                    $"DT combo fill count={ids.Length} yieldMs={ComboFillYieldDelayMs} mode=deferred");
+
+                ReplaceItems(_ctx.CbDataGrabId, ids);
+                if (ids.Length > 0)
+                    _ctx.CbDataGrabId.SelectedIndex = selectDataGrabId ? ids.Length - 1 : 0;
+                await Task.Delay(ComboFillYieldDelayMs);
+
+                ReplaceItems(_ctx.CbGrabIdStart, ids);
+                await Task.Delay(ComboFillYieldDelayMs);
+                ReplaceItems(_ctx.CbGrabIdEnd, ids);
+                if (ids.Length > 0)
+                {
+                    _ctx.CbGrabIdStart.SelectedIndex = ids.Length - 1;
+                    _ctx.CbGrabIdEnd.SelectedIndex = 0;
+                }
+                UpdateGrabIdNavState();
+            }
+        }
+
         /// <summary>依目前篩選來源重建報表單片與範圍序號；回顧序號維持全量。</summary>
         public int RefreshFilteredGrabIdCombos(string preferredDataGrabId = null)
         {
