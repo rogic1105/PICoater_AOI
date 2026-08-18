@@ -714,6 +714,7 @@ namespace AniloxRoll.Monitor.Forms
         // （overview 立即跟隨 + 500ms 重畫沿用同範圍 → 不閃回原點）。NaN=非 ImageCanvas 即時狀態。
         private double _liveViewLeftMm = double.NaN, _liveViewRightMm = double.NaN;
         private double _liveViewTopMm = double.NaN, _liveViewBotMm = double.NaN;
+        private string _liveLastMainRangeState;
 
         private bool ShouldFlipDisplayVertical()
             => GetVerticalDisplayDirection() == VerticalDisplayDirection.BottomToTop;
@@ -731,6 +732,7 @@ namespace AniloxRoll.Monitor.Forms
             bool wasReady = !double.IsNaN(_liveViewLeftMm) && _liveViewLeftMm < _liveViewRightMm;
             _liveViewLeftMm = leftMm; _liveViewRightMm = rightMm;     // 供 overview provider 沿用（不閃）
             _liveViewTopMm = topMm; _liveViewBotMm = botMm;
+            LogLiveMainRange(leftMm, rightMm, topMm, botMm);
             _liveRowSync?.SetViewRange(topMm, botMm);
 
             bool nowReady = !double.IsNaN(leftMm) && leftMm < rightMm;
@@ -745,8 +747,33 @@ namespace AniloxRoll.Monitor.Forms
             {
                 _liveOverviewHelper?.UpdateViewRange(leftMm, rightMm); // 已有資料 → 即時跟隨（500ms 重畫用同值不閃）
             }
+            if (nowReady)
+                LogLiveColumnRange("view");
             if (swVr.ElapsedMilliseconds > 50)
                 FlowTrace.Log($"[UiSlow] LiveViewRangeSync {swVr.ElapsedMilliseconds}ms");
+        }
+
+        private void LogLiveMainRange(double leftMm, double rightMm, double topMm, double botMm)
+        {
+            string state = $"viewX={leftMm:F2}~{rightMm:F2} viewY={topMm:F2}~{botMm:F2}";
+            if (string.Equals(_liveLastMainRangeState, state, StringComparison.Ordinal)) return;
+            _liveLastMainRangeState = state;
+            FlowTrace.Dvt($"LC mainRange {state}");
+        }
+
+        private void LogLiveColumnRange(string source)
+        {
+            if (chartLiveColumn == null || chartLiveColumn.IsDisposed ||
+                chartLiveColumn.ChartAreas.Count == 0) return;
+            var area = chartLiveColumn.ChartAreas[0];
+            var axis = area.AxisX;
+            FlowTrace.Dvt(
+                $"LC colRange source={source} " +
+                $"target={_liveViewLeftMm:F2}~{_liveViewRightMm:F2} " +
+                $"axis={axis.Minimum:F2}~{axis.Maximum:F2}/" +
+                $"view={axis.ScaleView.ViewMinimum:F2}~{axis.ScaleView.ViewMaximum:F2} " +
+                $"plot={area.InnerPlotPosition.X:F2}~" +
+                $"{area.InnerPlotPosition.Right:F2}");
         }
 
         private bool TryApplyLiveImageCanvasRowViewRange()

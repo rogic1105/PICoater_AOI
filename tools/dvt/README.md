@@ -25,6 +25,16 @@ PropertyGrid 參數不另外維護平行清單。Runner 從 Scenario 既有的 `
 等單一參數涵蓋哪些 DVT 時，再開啟一次性選取模式。勾選「跟隨 Monitor 焦點」後，Runner
 也會隨真實頁籤、按鈕與參數列焦點自動切換篩選，不攔截正常操作。
 
+互動模式啟動後會自動尋找相同路徑的既有 Monitor；找不到才啟動一份，並將 Runner 與
+Monitor 排在同一螢幕左右兩側。「並排顯示」可在人工移動視窗後重新排列。情境搜尋支援
+名稱、分類、控制項、PropertyGrid 參數、步驟與契約，多個空白分隔詞必須全部符合。
+目錄右側顯示「目前結果數／總情境數」；搜尋期間保留原本選取的情境，清除後回到原處。
+`Ctrl+F` 直接進入搜尋，`Esc` 取消元件選取或清除目前篩選。查無結果時目錄會明示原因，
+不以空白畫面代表載入失敗。連接成功後按鈕改為「重新整理連線」，供 Monitor 重建 UI 後
+重新取得 UI Automation 樹。
+選取尚未被 Scenario 引用的真實控制項時，Runner 會以橘色標示「未覆蓋」並顯示空目錄，
+讓缺少 DVT 的操作入口可被直接盤點，而不是因為沒有映射就無法選取。
+
 因此 Monitor 的排版、縮放或按鈕文字改動不需要同步另一份畫面。控制項若刪除或改名，
 Runner 會顯示失效引用，`test_dvt_scenario_catalog.py` 也會失敗，要求 Scenario 明確遷移；
 這是 UI Inspector + Object Repository + Test Coverage Map，不是平行開發的第二份 Designer。
@@ -33,7 +43,7 @@ Runner 會顯示失效引用，`test_dvt_scenario_catalog.py` 也會失敗，要
 
 1. 以 `Release|x64` 建置 `AniloxRoll.DvtRunner`。
 2. 開啟 `bin/x64/Release/AniloxRoll.DvtRunner.exe`。
-3. 確認監控程式與 `D:\Anilox\Logs` 路徑。
+3. Runner 會自動連接或開啟 Monitor 並排列視窗；確認監控程式與 `D:\Anilox\Logs` 路徑。
 4. 選擇情境後按「開始」。Runner 會開啟或接上已開啟的監控程式。
 5. 需要停下觀察時按「暫停」；「中止」會嘗試停止 Grab 並還原被修改的 PropertyGrid 設定。
    失敗清理會先等待主程式正常關閉最多 60 秒；仍無法退出才強制結束測試程序，並把正常關閉判為未通過。
@@ -63,6 +73,12 @@ Runner 會先依屬性顯示名稱直接定位列；可寫入欄位以 UI Automa
 255 並開啟存檔，驗證 Grab 開門、首組影像、瀑布首組、Curve、尾幀排水、關門與
 `.acap` 封裝；光源底層 `TurnOn` 回傳失敗時直接判 FAIL，不混入布局和檢出參數變化。
 
+`監控欄圖表座標範圍穩定性` 專門重現「監控欄圖表座標一直跳」：Runner 以
+`IoBridge.IoSimulator.exe` 觸發一輪真實 Grab，在主畫面幾何不變時交替修改欄正規值及
+欄列曲線顯示模式。產品同時記錄主畫面 X 視野、欄圖表收到的 target，以及 MSChart
+實際 `axis/view/plot`；首次 Paint 的一次性布局完成後，任何 X 範圍漂移都會由專用
+`verify-live-column-range` 與完整 Flow checker 判為 FAIL。
+
 `PropertyGrid 全參數矩陣` 由 `PropertyGridCoverage.json` 管理目前 58 個可編輯參數。
 Runner 啟動前會用 reflection 對照產品 `InspectionSettings`；產品新增、刪除、改名或調整
 同名欄位順序卻未更新目錄時，情境直接 FAIL。一般功能與 Bridge 分開執行：
@@ -89,6 +105,8 @@ Runner 還原測試前備份的 `app-mode.json`，不在已失效的 Accessibili
 - `verify-log-absent` 用於證明情境明確禁止的 Flow 行完全未出現，例如純待機 IO 測試不得產生 START／Grab。
 - `click-control` 以 WinForms AutomationId 點擊沒有文字的 Chart；目前用來切換監控欄／列強化。
 - `verify-monitor-functional-cycle` 對單輪 IO Grab 的主畫面、欄列 Curve、方向及 O/X 做數值驗證。
+- `verify-live-column-range` 比較主畫面與監控欄圖表實際 X 範圍；情境會在 Grab 中對主畫面
+  執行真實滑鼠滾輪，並要求後續每次 Curve 資料重畫都維持最新主畫面視野。
 - 跨步驟、禁止行、數量與完整性仍由 `check_all_flows.py` 判定。
 - 若 checker 顯示 `NOT COVERED`，代表這次情境沒有操作到該功能，不代表 PASS。
 - `PropertyGridCoverage.json` 的每個群組必須至少被一個情境的

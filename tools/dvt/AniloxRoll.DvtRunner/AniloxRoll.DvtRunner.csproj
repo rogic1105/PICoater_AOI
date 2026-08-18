@@ -55,6 +55,7 @@
     <Compile Include="Program.cs" />
     <Compile Include="PropertyGridCatalog.cs" />
     <Compile Include="MonitorFunctionalEvidenceVerifier.cs" />
+    <Compile Include="LiveColumnRangeEvidenceVerifier.cs" />
     <Compile Include="MonitorLiveInspector.cs" />
     <Compile Include="RangeScrollEvidenceVerifier.cs" />
     <Compile Include="VerdictCachePerformanceVerifier.cs" />
@@ -80,6 +81,9 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="Scenarios\monitor-io-functional-matrix.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Scenarios\monitor-column-range-stability.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
     <None Include="Scenarios\monitor-io-basic-cycle.json">

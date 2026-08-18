@@ -21,6 +21,7 @@ class LiveFlowValidator:
         self._check_capture_chart_reset(session, report)
         self._check_capture_view_refire(session, report)
         self._check_row_presentation(session, report)
+        self._check_column_range_stability(session, report)
         self._check_wheel_zoom_floor(session, report)
         self._check_background_subtraction(session, report)
         self._check_background_capture_output(session, report)
@@ -34,6 +35,133 @@ class LiveFlowValidator:
 
         self._check_drag_first_publish(session, report)
         return report
+
+    def _check_column_range_stability(
+        self, session: FlowSession, report: CheckReport
+    ) -> None:
+        main_pattern = re.compile(
+            r"^LC mainRange viewX=(?P<left>-?\d+(?:\.\d+)?)~"
+            r"(?P<right>-?\d+(?:\.\d+)?)"
+        )
+        column_pattern = re.compile(
+            r"^LC colRange source=(?P<source>view|data) "
+            r"target=(?P<left>-?\d+(?:\.\d+)?)~(?P<right>-?\d+(?:\.\d+)?) "
+            r"axis=(?P<axis_left>-?\d+(?:\.\d+)?)~(?P<axis_right>-?\d+(?:\.\d+)?)/"
+            r"view=(?P<view_left>-?\d+(?:\.\d+)?)~(?P<view_right>-?\d+(?:\.\d+)?) "
+            r"plot=(?P<plot_left>-?\d+(?:\.\d+)?)~(?P<plot_right>-?\d+(?:\.\d+)?)$"
+        )
+        current_main = None
+        groups = {}
+        latest_view_by_target = {}
+        target_mismatches = []
+        view_data_mismatches = []
+        sample_count = 0
+        paired_data_count = 0
+
+        for line in session.lines:
+            main_match = main_pattern.match(line.message)
+            if main_match:
+                current_main = (
+                    float(main_match.group("left")),
+                    float(main_match.group("right")),
+                )
+                continue
+            match = column_pattern.match(line.message)
+            if not match:
+                continue
+            target = (float(match.group("left")), float(match.group("right")))
+            values = (
+                float(match.group("view_left")),
+                float(match.group("view_right")),
+                float(match.group("plot_left")),
+                float(match.group("plot_right")),
+            )
+            if current_main is not None and (
+                abs(target[0] - current_main[0]) > 0.05
+                or abs(target[1] - current_main[1]) > 0.05
+            ):
+                target_mismatches.append(
+                    f"{line.timestamp} target={target[0]:.2f}~{target[1]:.2f} "
+                    f"main={current_main[0]:.2f}~{current_main[1]:.2f}"
+                )
+            if match.group("source") == "view":
+                latest_view_by_target[target] = values
+                continue
+
+            sample_count += 1
+            groups.setdefault(target, []).append(values)
+            expected = latest_view_by_target.get(target)
+            if expected is not None:
+                paired_data_count += 1
+                differences = [abs(values[index] - expected[index]) for index in range(4)]
+                if (
+                    max(differences[0:2]) > 0.50
+                    or max(differences[2:4]) > 0.05
+                ):
+                    view_data_mismatches.append(
+                        f"{line.timestamp} target={target[0]:.2f}~{target[1]:.2f} "
+                        f"dataView={values[0]:.2f}~{values[1]:.2f} "
+                        f"expected={expected[0]:.2f}~{expected[1]:.2f}"
+                    )
+
+        if sample_count == 0:
+            report.add(
+                self.domain,
+                "F2.column-range-stability",
+                CheckStatus.NOT_COVERED,
+                "no LC colRange evidence",
+            )
+            return
+
+        failures = list(target_mismatches) + list(view_data_mismatches)
+        tested_groups = 0
+        worst_view_drift = 0.0
+        worst_plot_drift = 0.0
+        for target, values in groups.items():
+            if len(values) < 3:
+                continue
+            tested_groups += 1
+            # The first paint may freeze MSChart's InnerPlotPosition once. The
+            # contract concerns repeated redraws after that one-time bootstrap.
+            steady = values[1:]
+            view_drift = max(
+                max(item[index] for item in steady)
+                - min(item[index] for item in steady)
+                for index in (0, 1)
+            )
+            plot_drift = max(
+                max(item[index] for item in steady)
+                - min(item[index] for item in steady)
+                for index in (2, 3)
+            )
+            worst_view_drift = max(worst_view_drift, view_drift)
+            worst_plot_drift = max(worst_plot_drift, plot_drift)
+            if view_drift > 0.50 or plot_drift > 0.05:
+                failures.append(
+                    f"target={target[0]:.2f}~{target[1]:.2f} "
+                    f"viewDrift={view_drift:.2f}mm plotDrift={plot_drift:.2f}%"
+                )
+
+        if tested_groups == 0 and not failures:
+            report.add(
+                self.domain,
+                "F2.column-range-stability",
+                CheckStatus.NOT_COVERED,
+                f"samples={sample_count}; no target has three redraw samples",
+            )
+            return
+
+        status = CheckStatus.FAIL if failures else CheckStatus.PASS
+        detail = (
+            f"samples={sample_count} stableTargets={tested_groups} "
+            f"pairedData={paired_data_count} "
+            f"viewDriftMax={worst_view_drift:.2f}mm "
+            f"plotDriftMax={worst_plot_drift:.2f}% "
+            f"failures={len(failures)}"
+        )
+        if failures:
+            detail += "; first=" + failures[0]
+        report.add(self.domain, "F2.column-range-stability", status, detail)
 
     def _check_background_subtraction(
         self, session: FlowSession, report: CheckReport

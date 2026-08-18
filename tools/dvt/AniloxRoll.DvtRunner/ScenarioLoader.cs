@@ -49,6 +49,7 @@ namespace AniloxRoll.DvtRunner
                 "verify-verdict-cache-performance",
                 "verify-verdict-cache-warm-first",
                 "verify-monitor-functional-cycle",
+                "verify-live-column-range",
                 "reset-evidence",
                 "delay",
                 "soak",

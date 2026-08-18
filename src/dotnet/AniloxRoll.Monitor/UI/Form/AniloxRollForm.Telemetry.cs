@@ -245,6 +245,10 @@ namespace AniloxRoll.Monitor.Forms
                 _liveOverviewHelper, CameraCount, _settings.StitchMode, LiveViewRangeProvider,
                 trimHeadMm: _settings.TrimHeadMm,
                 trimTailMm: _settings.TrimTailMm);
+            // Curve data refresh is not a viewport owner. Reapply the image viewport in the
+            // same UI turn so MSChart cannot paint its data-fit range between live frames.
+            _liveOverviewHelper.UpdateViewRange(_liveViewLeftMm, _liveViewRightMm);
+            LogLiveColumnRange("data");
             if (swOv.ElapsedMilliseconds > 50)
                 FlowTrace.Log($"[UiSlow] OverviewChart {swOv.ElapsedMilliseconds}ms");
         }

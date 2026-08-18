@@ -2571,3 +2571,91 @@ class LiveStandbyFlowValidatorTests(unittest.TestCase):
             )
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "F2.standby").status)
+
+    def test_live_column_range_stays_fixed_across_data_redraws(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "LC mainRange viewX=-10.00~2510.00 viewY=5000.00~0.00",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.00~2400.00/view=20.00~2400.00 plot=1.20~95.60",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.10~2400.10/view=20.10~2400.10 plot=1.20~95.60",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.10~2400.10/view=20.10~2400.10 plot=1.20~95.60",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.10~2400.10/view=20.10~2400.10 plot=1.20~95.60",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F2.column-range-stability").status,
+        )
+
+    def test_live_column_range_jump_after_bootstrap_fails(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "LC mainRange viewX=-10.00~2510.00 viewY=5000.00~0.00",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.00~2400.00/view=20.00~2400.00 plot=1.20~95.60",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.10~2400.10/view=20.10~2400.10 plot=1.20~95.60",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=80.00~2460.00/view=80.00~2460.00 plot=3.50~97.90",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.10~2400.10/view=20.10~2400.10 plot=1.20~95.60",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F2.column-range-stability").status,
+        )
+
+    def test_live_column_data_redraw_must_match_latest_view_sample(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "LC mainRange viewX=-800.00~1550.00 viewY=5000.00~0.00",
+                "LC colRange source=view target=-800.00~1550.00 "
+                "axis=-750.00~1400.00/view=-750.00~1400.00 plot=1.50~93.50",
+                "LC colRange source=data target=-800.00~1550.00 "
+                "axis=30.00~1450.00/view=30.00~1450.00 plot=1.50~93.50",
+                "LC colRange source=data target=-800.00~1550.00 "
+                "axis=30.00~1450.00/view=30.00~1450.00 plot=1.50~93.50",
+                "LC colRange source=data target=-800.00~1550.00 "
+                "axis=30.00~1450.00/view=30.00~1450.00 plot=1.50~93.50",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.FAIL,
+            result(report, "F2.column-range-stability").status,
+        )
+
+    def test_live_column_range_can_change_by_wheel_without_data_reset(self):
+        report = LiveFlowValidator().validate(
+            session(
+                "LC mainRange viewX=-10.00~2510.00 viewY=5000.00~0.00",
+                "LC colRange source=view target=-10.00~2510.00 "
+                "axis=20.00~2400.00/view=20.00~2400.00 plot=1.50~93.50",
+                "LC colRange source=data target=-10.00~2510.00 "
+                "axis=20.00~2400.00/view=20.00~2400.00 plot=1.50~93.50",
+                "LC mainRange viewX=200.00~1200.00 viewY=3500.00~500.00",
+                "LC colRange source=view target=200.00~1200.00 "
+                "axis=215.00~1135.00/view=215.00~1135.00 plot=1.50~93.50",
+                "LC colRange source=data target=200.00~1200.00 "
+                "axis=215.00~1135.00/view=215.00~1135.00 plot=1.50~93.50",
+                "LC colRange source=data target=200.00~1200.00 "
+                "axis=215.00~1135.00/view=215.00~1135.00 plot=1.50~93.50",
+                "LC colRange source=data target=200.00~1200.00 "
+                "axis=215.00~1135.00/view=215.00~1135.00 plot=1.50~93.50",
+            )
+        )
+        self.assertEqual(
+            CheckStatus.PASS,
+            result(report, "F2.column-range-stability").status,
+        )
+
+    def test_live_column_range_old_trace_is_not_covered(self):
+        report = LiveFlowValidator().validate(session("LC row rowView dir=TopToBottom"))
+        self.assertEqual(
+            CheckStatus.NOT_COVERED,
+            result(report, "F2.column-range-stability").status,
+        )

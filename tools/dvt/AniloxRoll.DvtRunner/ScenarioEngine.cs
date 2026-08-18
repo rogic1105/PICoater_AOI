@@ -378,6 +378,10 @@ namespace AniloxRoll.DvtRunner
                     return MonitorFunctionalEvidenceVerifier.Verify(
                         _log.GetEvidenceLines(), step.Value);
 
+                case "verify-live-column-range":
+                    return LiveColumnRangeEvidenceVerifier.Verify(
+                        _log.GetEvidenceLines());
+
                 case "reset-evidence":
                     _log.ResetEvidence();
                     return "後續只接受本階段新產生的 Flow 證據";

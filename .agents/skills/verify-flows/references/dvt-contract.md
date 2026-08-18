@@ -2332,6 +2332,23 @@ T1: capture layout applied grab=… timing=stop ops=… start=… speed=N head=H
   與 Curve 資料內容必須完全不變。
 - 允許頭尾合計超過內容時保留最少一個顯示像素，不得產生零寬畫布或例外。
 
+### F2.ColumnRange 監控欄圖表座標穩定性
+```
+Tn: LC mainRange viewX=L~R viewY=T~B
+Tn: LC colRange source=view|data target=L~R axis=A~B/view=V1~V2 plot=P1~P2
+```
+- `mainRange` 是主畫面發布的物理視野；`colRange target` 是欄圖表收到的同一份意圖；
+  `axis/view/plot` 則量 MSChart 實際套用後的狀態，禁止只記 managed 預期值造成假綠。
+- 主畫面是 X 視野唯一 owner。Curve 新資料、欄正規值、欄平均／最大閾值及欄列曲線判定模式
+  可以更新資料與 Y 軸，但不得改變欄圖表 X 軸。每筆 `source=data` 必須與相同 target
+  最近一筆 `source=view` 的實際 `view` 端點相差不超過 `0.5 mm`、`plot` 端點相差不超過
+  `0.05%`；資料重畫即使穩定落在另一個範圍也算 FAIL，不能只檢查同組資料是否漂移。
+- `target` 與當下 `mainRange viewX` 的兩端差各不得超過 `0.05 mm`。拖曳、縮放、
+  OPS／Start／Crop 等真的改變主畫面幾何時會形成新的 target 群組，不得跨群組誤判。
+- Runner 情境 `monitor-column-range-stability` 使用 IoSimulator 進行一輪 Grab，在主畫面
+  執行真實滑鼠滾輪、等待至少一輪 Curve 資料刷新，再交替修改正規值與曲線顯示模式；`verify-live-column-range` 與
+  `check_all_flows.py` 的 `LIVE/F2.column-range-stability` 共同判定。
+
 ### S7 即時機台布局（OPS／Start）
 ```
 T1: ui:設定[ab_OpsCam1..ah_OpsCam7|bb_StartCam1..bh_StartCam7]=N
