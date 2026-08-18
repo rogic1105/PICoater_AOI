@@ -36,6 +36,7 @@ namespace AniloxRoll.DvtRunner
         private const uint ObjidClient = 0xFFFFFFFC;
         private const int SelflagTakeFocus = 0x1;
         private const int SelflagTakeSelection = 0x2;
+        private const int SwRestore = 9;
 
         private static readonly Guid IAccessibleGuid =
             new Guid("618736E0-3C3D-11CF-810C-00AA00389B71");
@@ -81,11 +82,36 @@ namespace AniloxRoll.DvtRunner
         internal static extern bool SetForegroundWindow(IntPtr hWnd);
 
         [DllImport("user32.dll")]
+        private static extern bool ShowWindow(IntPtr hWnd, int command);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool MoveWindow(
+            IntPtr hWnd,
+            int x,
+            int y,
+            int width,
+            int height,
+            bool repaint);
+
+        [DllImport("user32.dll")]
         internal static extern bool SetCursorPos(int x, int y);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool PostMessage(
             IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        internal static bool RestoreAndMoveWindow(
+            IntPtr handle,
+            int x,
+            int y,
+            int width,
+            int height)
+        {
+            if (handle == IntPtr.Zero || width <= 0 || height <= 0)
+                return false;
+            ShowWindow(handle, SwRestore);
+            return MoveWindow(handle, x, y, width, height, true);
+        }
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool GetClientRect(

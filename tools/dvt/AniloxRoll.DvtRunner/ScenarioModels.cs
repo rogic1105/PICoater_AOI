@@ -93,6 +93,64 @@ namespace AniloxRoll.DvtRunner
             }
             return false;
         }
+
+        public static bool MatchesSearch(
+            DvtScenario scenario,
+            string searchText)
+        {
+            if (scenario == null) return false;
+            if (string.IsNullOrWhiteSpace(searchText)) return true;
+
+            string[] terms = searchText.Split(
+                new[] { ' ', '\t' },
+                System.StringSplitOptions.RemoveEmptyEntries);
+            foreach (string term in terms)
+            {
+                if (!ContainsTerm(scenario, term))
+                    return false;
+            }
+            return true;
+        }
+
+        private static bool ContainsTerm(
+            DvtScenario scenario,
+            string term)
+        {
+            if (Contains(scenario.Id, term) ||
+                Contains(scenario.Name, term) ||
+                Contains(scenario.Description, term) ||
+                Contains(scenario.Category, term) ||
+                Contains(DvtCategories.DisplayName(scenario.Category), term))
+                return true;
+
+            foreach (string value in scenario.ControlRefs)
+            {
+                if (Contains(value, term)) return true;
+            }
+            foreach (string value in scenario.PropertyRefs)
+            {
+                if (Contains(value, term)) return true;
+            }
+            foreach (DvtStep step in scenario.Steps)
+            {
+                if (Contains(step.Id, term) ||
+                    Contains(step.Contract, term) ||
+                    Contains(step.Title, term) ||
+                    Contains(step.Action, term) ||
+                    Contains(step.Target, term) ||
+                    Contains(step.Value, term))
+                    return true;
+            }
+            return false;
+        }
+
+        private static bool Contains(string value, string term)
+        {
+            return !string.IsNullOrEmpty(value) &&
+                value.IndexOf(
+                    term,
+                    System.StringComparison.OrdinalIgnoreCase) >= 0;
+        }
     }
 
     internal sealed class DvtStep

@@ -12,6 +12,7 @@ namespace AniloxRoll.DvtRunner
         public string ReferenceKey { get; set; }
         public string DisplayName { get; set; }
         public Rectangle ScreenBounds { get; set; }
+        public bool IsCovered { get; set; }
     }
 
     internal sealed class MonitorElementPicker : IDisposable

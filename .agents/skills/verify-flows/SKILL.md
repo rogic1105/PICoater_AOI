@@ -63,6 +63,16 @@ reference and must fail the catalog audit rather than silently creating an indep
   so it must never invoke the product control or change a setting. Focus-follow mode does not
   intercept input; the operator uses the real tabs and PropertyGrid normally while the Runner only
   updates its DVT filter.
+- Interactive startup attaches to the already-running Monitor with the exact selected executable
+  path, or launches it when absent, then arranges Runner and Monitor side by side. Scenario search
+  is an AND filter over scenario metadata, UI references, steps, and contracts. A real control with
+  no Scenario reference remains selectable and must be shown as uncovered; it must not disappear
+  merely because the catalog has no match.
+- The catalog follows Test Explorer navigation conventions: it shows visible/total scenario counts,
+  preserves the selected scenario across filters, names empty search and uncovered states explicitly,
+  uses `Ctrl+F` for search and `Esc` to cancel selection or clear filters, and exposes accessible names
+  and tooltips. Reconnecting refreshes the real Monitor UI Automation tree rather than creating a
+  parallel UI model.
 - Automated cleanup gives the product up to 60 seconds to close normally. If failure recovery or
   disconnected hardware prevents shutdown, the runner force-terminates its test process so a
   failed campaign cannot leave an orphaned product instance; that run does not satisfy the normal

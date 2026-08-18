@@ -85,6 +85,7 @@
     { "Id": "c3-row-norm", "Contract": "S1", "Title": "第三輪列正規值", "Action": "set-property", "Target": "列正規值", "Value": "0.4", "TimeoutSeconds": 15 },
     { "Id": "c3-row-mean", "Contract": "S1", "Title": "第三輪列平均門檻", "Action": "set-property", "Target": "列平均閾值", "Value": "0.29", "TimeoutSeconds": 15 },
     { "Id": "c3-row-max", "Contract": "S1", "Title": "第三輪列最大門檻", "Action": "set-property", "Target": "列最大閾值", "Value": "0.69", "TimeoutSeconds": 15 },
+    { "Id": "c3-curve-mode", "Contract": "S1", "Title": "第三輪欄列曲線顯示兩者", "Action": "set-property", "Target": "欄列曲線判定", "Value": "顯示兩者", "TimeoutSeconds": 15 },
     { "Id": "c3-row-layer", "Contract": "S1.Enhance", "Title": "第三輪切換列強化主畫面", "Action": "click-control", "Target": "chartLiveRow", "TimeoutSeconds": 20 },
     { "Id": "c3-layer-proof", "Contract": "S1.Enhance", "Title": "確認第三輪列強化套到所有相機", "Action": "wait-log", "Pattern": "live enhance enabled=True direction=row cams=\\d+ scope=all-cameras waterfallHistory=preserved", "TimeoutSeconds": 20 },
     { "Id": "c3-request", "Contract": "F2.IO", "Title": "第三輪 IO High", "Action": "wait-log", "Pattern": "IO grab request stopCondition=IoSignal stopOnLow=True", "TimeoutSeconds": 75 },

@@ -25,10 +25,31 @@ namespace AniloxRoll.DvtRunner
         public int ProcessId =>
             _process != null && !_process.HasExited ? _process.Id : 0;
 
+        public Rectangle MonitorWorkingArea
+        {
+            get
+            {
+                EnsureAttached();
+                return System.Windows.Forms.Screen.FromHandle(
+                    _process.MainWindowHandle).WorkingArea;
+            }
+        }
+
         public void BringMonitorToForeground()
         {
             EnsureAttached();
             NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+        }
+
+        public bool MoveMonitorWindow(Rectangle bounds)
+        {
+            EnsureAttached();
+            return NativeMethods.RestoreAndMoveWindow(
+                _process.MainWindowHandle,
+                bounds.X,
+                bounds.Y,
+                bounds.Width,
+                bounds.Height);
         }
 
         public void RefreshPropertyGridIndex()
@@ -93,18 +114,21 @@ namespace AniloxRoll.DvtRunner
                 StringComparer.Ordinal);
 
             AutomationElement current = element;
+            MonitorLiveSelection fallback = null;
             TreeWalker walker = TreeWalker.RawViewWalker;
             for (int depth = 0; current != null && depth < 24; depth++)
             {
                 int processId;
                 string automationId;
                 string name;
+                ControlType controlType;
                 System.Windows.Rect bounds;
                 try
                 {
                     processId = current.Current.ProcessId;
                     automationId = current.Current.AutomationId;
                     name = current.Current.Name;
+                    controlType = current.Current.ControlType;
                     bounds = current.Current.BoundingRectangle;
                 }
                 catch (ElementNotAvailableException)
@@ -123,7 +147,8 @@ namespace AniloxRoll.DvtRunner
                     {
                         ReferenceKey = MonitorUiReference.ForProperty(name),
                         DisplayName = "PropertyGrid 參數「" + name + "」",
-                        ScreenBounds = rectangle
+                        ScreenBounds = rectangle,
+                        IsCovered = true
                     };
                 }
                 if (!string.IsNullOrWhiteSpace(automationId) &&
@@ -138,8 +163,39 @@ namespace AniloxRoll.DvtRunner
                         DisplayName = string.IsNullOrWhiteSpace(name)
                             ? "控制項 " + automationId
                             : name + "（" + automationId + "）",
-                        ScreenBounds = rectangle
+                        ScreenBounds = rectangle,
+                        IsCovered = true
                     };
+                }
+
+                if (fallback == null &&
+                    rectangle.Width > 1 &&
+                    rectangle.Height > 1)
+                {
+                    if (controlType == ControlType.DataItem &&
+                        !string.IsNullOrWhiteSpace(name))
+                    {
+                        fallback = new MonitorLiveSelection
+                        {
+                            ReferenceKey = MonitorUiReference.ForProperty(name),
+                            DisplayName = "PropertyGrid 參數「" + name + "」",
+                            ScreenBounds = rectangle,
+                            IsCovered = false
+                        };
+                    }
+                    else if (!string.IsNullOrWhiteSpace(automationId))
+                    {
+                        fallback = new MonitorLiveSelection
+                        {
+                            ReferenceKey = MonitorUiReference.ForControl(
+                                automationId),
+                            DisplayName = string.IsNullOrWhiteSpace(name)
+                                ? "控制項 " + automationId
+                                : name + "（" + automationId + "）",
+                            ScreenBounds = rectangle,
+                            IsCovered = false
+                        };
+                    }
                 }
 
                 try
@@ -151,7 +207,7 @@ namespace AniloxRoll.DvtRunner
                     return null;
                 }
             }
-            return null;
+            return fallback;
         }
 
         private static Rectangle ToScreenRectangle(System.Windows.Rect bounds)
@@ -480,47 +536,50 @@ namespace AniloxRoll.DvtRunner
             if (!element.Current.IsEnabled)
                 throw new InvalidOperationException("Property is disabled: " + displayName);
 
-            DateTime editorDeadline =
-                DateTime.UtcNow.AddSeconds(timeoutSeconds);
-            AutomationElement editor = null;
-            object valuePattern = null;
-            while (DateTime.UtcNow < editorDeadline)
+            ValuePattern editorValue = null;
+            bool editorIsReadOnly = false;
+            Exception directSetFailure = null;
+            for (int attempt = 1; attempt <= 3; attempt++)
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                element = await BringDataItemIntoViewAsync(
-                    displayName, occurrence, timeoutSeconds, cancellationToken);
-                NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
-                System.Windows.Rect bounds = element.Current.BoundingRectangle;
-                NativeMethods.ClickScreenPoint(
-                    (int)Math.Round(bounds.Left + bounds.Width * 0.75),
-                    (int)Math.Round(bounds.Top + bounds.Height / 2.0));
-                await Task.Delay(100, cancellationToken);
+                editorValue = await FocusPropertyEditorAsync(
+                    displayName,
+                    occurrence,
+                    timeoutSeconds,
+                    cancellationToken);
+                editorIsReadOnly = editorValue.Current.IsReadOnly;
+                if (editorIsReadOnly)
+                    break;
 
-                editor = AutomationElement.FocusedElement;
-                if (editor != null &&
-                    editor.TryGetCurrentPattern(
-                        ValuePattern.Pattern, out valuePattern))
+                try
                 {
+                    editorValue.SetValue(value);
+                    directSetFailure = null;
                     break;
                 }
+                catch (FormatException ex)
+                {
+                    directSetFailure = ex;
+                }
+                catch (ElementNotAvailableException ex)
+                {
+                    directSetFailure = ex;
+                }
 
-                // A first click can select the row without opening its editor.
-                // Retry against the current row instead of assuming a fixed delay.
-                editor = null;
-                valuePattern = null;
-                await Task.Delay(100, cancellationToken);
+                // PropertyGrid can recreate its editor after the preceding
+                // setting refresh. Discard that transient UIA object and
+                // resolve the same property again; the read-back below still
+                // decides whether the requested value was really committed.
+                NativeMethods.PressKey((byte)NativeMethods.VkEscape);
+                await Task.Delay(150 * attempt, cancellationToken);
             }
 
-            if (editor == null || valuePattern == null)
+            if (directSetFailure != null)
                 throw new InvalidOperationException(
-                    "Property editor does not expose ValuePattern: " + displayName);
+                    $"Property editor rejected value after retry: {displayName}={value}",
+                    directSetFailure);
 
-            var editorValue = (ValuePattern)valuePattern;
-            bool editorIsReadOnly = editorValue.Current.IsReadOnly;
             if (!editorIsReadOnly)
             {
-                editorValue.SetValue(value);
-
                 // PropertyGrid accessibility SetValue only updates the edit
                 // box. Enter commits it and raises PropertyValueChanged. A
                 // cross-process SendMessage waits for the whole value-change
@@ -628,6 +687,45 @@ namespace AniloxRoll.DvtRunner
             }
             throw new TimeoutException(
                 $"Property value did not settle: {displayName} expected={value}");
+        }
+
+        private async Task<ValuePattern> FocusPropertyEditorAsync(
+            string displayName,
+            int occurrence,
+            int timeoutSeconds,
+            CancellationToken cancellationToken)
+        {
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                AutomationElement element = await BringDataItemIntoViewAsync(
+                    displayName,
+                    occurrence,
+                    timeoutSeconds,
+                    cancellationToken);
+                NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+                System.Windows.Rect bounds = element.Current.BoundingRectangle;
+                NativeMethods.ClickScreenPoint(
+                    (int)Math.Round(bounds.Left + bounds.Width * 0.75),
+                    (int)Math.Round(bounds.Top + bounds.Height / 2.0));
+                await Task.Delay(100, cancellationToken);
+
+                AutomationElement editor = AutomationElement.FocusedElement;
+                object valuePattern;
+                if (editor != null &&
+                    editor.TryGetCurrentPattern(
+                        ValuePattern.Pattern, out valuePattern))
+                {
+                    return (ValuePattern)valuePattern;
+                }
+
+                // A first click can select the row without opening its editor.
+                await Task.Delay(100, cancellationToken);
+            }
+
+            throw new InvalidOperationException(
+                "Property editor does not expose ValuePattern: " + displayName);
         }
 
         public string LastPropertySelectionMode { get; private set; }
@@ -794,6 +892,40 @@ namespace AniloxRoll.DvtRunner
                     if (NativeMethods.ClickWindowCenter(handle))
                         return;
                 }
+
+                // WinForms controls do not have to expose their field name as
+                // MSAA accName (a Chart commonly reports its Text instead).
+                // Scenario ControlRefs are control names, which UI Automation
+                // exposes as AutomationId, so resolve that contract directly.
+                var idCondition = new AndCondition(
+                    new PropertyCondition(
+                        AutomationElement.ProcessIdProperty,
+                        _process.Id),
+                    new PropertyCondition(
+                        AutomationElement.AutomationIdProperty,
+                        automationId));
+                AutomationElement element =
+                    AutomationElement.RootElement.FindFirst(
+                        TreeScope.Descendants,
+                        idCondition);
+                if (element != null &&
+                    element.Current.IsEnabled &&
+                    !element.Current.IsOffscreen)
+                {
+                    System.Windows.Rect bounds =
+                        element.Current.BoundingRectangle;
+                    if (!bounds.IsEmpty &&
+                        bounds.Width > 1 &&
+                        bounds.Height > 1)
+                    {
+                        NativeMethods.SetForegroundWindow(
+                            _process.MainWindowHandle);
+                        NativeMethods.ClickScreenPoint(
+                            (int)Math.Round(bounds.Left + bounds.Width / 2.0),
+                            (int)Math.Round(bounds.Top + bounds.Height / 2.0));
+                        return;
+                    }
+                }
                 await Task.Delay(150, cancellationToken);
             }
             throw new TimeoutException(
@@ -811,14 +943,103 @@ namespace AniloxRoll.DvtRunner
                 throw new InvalidOperationException(
                     "Wheel delta must be a non-zero integer.");
 
-            IntPtr handle = await WaitForAccessibleWindowAsync(
-                name, timeoutSeconds, cancellationToken);
-            NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
-            if (!NativeMethods.WheelWindowCenter(handle, delta))
-                throw new InvalidOperationException(
-                    "Failed to wheel UI target: " + name);
+            DateTime deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            bool wheeled = false;
+            while (DateTime.UtcNow < deadline && !wheeled)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                IntPtr handle =
+                    NativeMethods.FindDescendantWindowByAccessibleName(
+                        _process.MainWindowHandle,
+                        name,
+                        string.Empty);
+                NativeMethods.SetForegroundWindow(_process.MainWindowHandle);
+                if (handle != IntPtr.Zero &&
+                    NativeMethods.IsWindowVisible(handle) &&
+                    NativeMethods.IsWindowEnabled(handle))
+                {
+                    wheeled = NativeMethods.WheelWindowCenter(handle, delta);
+                }
+
+                if (!wheeled)
+                {
+                    // Panels and custom canvases often expose the Designer field
+                    // name only on a UIA parent. Hit-test the visible Monitor
+                    // surface and walk upward instead of traversing the complete
+                    // desktop UIA tree, which can block on image controls.
+                    Point point;
+                    if (TryFindControlPointByHitTest(name, out point))
+                    {
+                        NativeMethods.WheelAt(point.X, point.Y, delta);
+                        wheeled = true;
+                    }
+                }
+
+                if (!wheeled)
+                    await Task.Delay(100, cancellationToken);
+            }
+            if (!wheeled)
+                throw new TimeoutException(
+                    "Timed out locating wheel target: " + name);
             await Task.Delay(250, cancellationToken);
             return $"{name} wheel={delta}";
+        }
+
+        private bool TryFindControlPointByHitTest(
+            string automationId,
+            out Point point)
+        {
+            point = Point.Empty;
+            System.Windows.Rect rootBounds = _root.Current.BoundingRectangle;
+            if (rootBounds.IsEmpty || rootBounds.Width < 20 || rootBounds.Height < 20)
+                return false;
+
+            TreeWalker walker = TreeWalker.RawViewWalker;
+            const int columns = 20;
+            const int rows = 14;
+            for (int row = 0; row < rows; row++)
+            {
+                int y = (int)Math.Round(
+                    rootBounds.Top + rootBounds.Height * (row + 0.5) / rows);
+                for (int column = 0; column < columns; column++)
+                {
+                    int x = (int)Math.Round(
+                        rootBounds.Left + rootBounds.Width * (column + 0.5) / columns);
+                    AutomationElement current;
+                    try
+                    {
+                        current = AutomationElement.FromPoint(
+                            new System.Windows.Point(x, y));
+                    }
+                    catch (ElementNotAvailableException)
+                    {
+                        continue;
+                    }
+
+                    for (int depth = 0; current != null && depth < 20; depth++)
+                    {
+                        try
+                        {
+                            if (current.Current.ProcessId != _process.Id)
+                                break;
+                            if (string.Equals(
+                                    current.Current.AutomationId,
+                                    automationId,
+                                    StringComparison.OrdinalIgnoreCase))
+                            {
+                                point = new Point(x, y);
+                                return true;
+                            }
+                            current = walker.GetParent(current);
+                        }
+                        catch (ElementNotAvailableException)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            return false;
         }
 
         public async Task<string> DragAsync(
