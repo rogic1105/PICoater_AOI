@@ -28,6 +28,7 @@ class HardwareFlowValidator:
                     "IO poll state ",
                     "io:DI START ",
                     "IO grab ",
+                    "IO pause ",
                     "IO START edge=",
                     "grab stop armed condition=IoSignal ",
                     "auto:",
@@ -284,7 +285,17 @@ class HardwareFlowValidator:
             if line.message.startswith("auto:")
             and "condition=IoSignal" in line.message
         ]
-        if not lines and not fixed_lows and not io_arms and not io_timer_stops:
+        pause_pattern = re.compile(
+            r"^IO pause activeCapture=(?P<active>True|False) "
+            r"stopCondition=(?P<condition>IoSignal|Time|Height) "
+            r"preserveTerminalStop=(?P<preserve>True|False)$"
+        )
+        pauses = [
+            (line, pause_pattern.match(line.message))
+            for line in session.lines
+            if line.message.startswith("IO pause activeCapture=")
+        ]
+        if not lines and not fixed_lows and not io_arms and not io_timer_stops and not pauses:
             report.add(
                 self.domain,
                 "H4.io-stop-policy",
@@ -303,6 +314,20 @@ class HardwareFlowValidator:
             failures.append(
                 f"{line.timestamp} IO mode was terminated by a timer"
             )
+
+        for line, match in pauses:
+            if match is None:
+                failures.append(f"{line.timestamp} IO pause format invalid")
+                continue
+            active = match.group("active") == "True"
+            condition = match.group("condition")
+            preserve = match.group("preserve") == "True"
+            expected = active and condition == "IoSignal"
+            if preserve != expected:
+                failures.append(
+                    f"{line.timestamp} IO pause active={active} condition={condition} "
+                    f"preserveTerminalStop={preserve} expected={expected}"
+                )
 
         for line, match in lines:
             if match is None:
@@ -351,7 +376,7 @@ class HardwareFlowValidator:
             "H4.io-stop-policy",
             CheckStatus.PASS if not failures else CheckStatus.FAIL,
             f"requests={len(lines)} fixedLow={len(fixed_lows)} "
-            f"arms={len(io_arms)} timerStops={len(io_timer_stops)} "
+            f"arms={len(io_arms)} timerStops={len(io_timer_stops)} pauses={len(pauses)} "
             f"invalid={len(failures)}"
             + (f"；首例 {failures[0]}" if failures else ""),
         )

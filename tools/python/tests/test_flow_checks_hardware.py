@@ -121,6 +121,32 @@ class HardwareFlowValidatorTests(unittest.TestCase):
         )
         self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
 
+    def test_io_pause_preserves_terminal_stop_for_active_io_capture(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO pause activeCapture=True stopCondition=IoSignal preserveTerminalStop=True",
+                "IO grab stop accepted reason=StartLow stopCondition=IoSignal drainTail=True",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H4.io-stop-policy").status)
+
+    def test_io_pause_rejects_swallowed_terminal_stop_policy(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO pause activeCapture=True stopCondition=IoSignal preserveTerminalStop=False",
+            )
+        )
+        self.assertEqual(CheckStatus.FAIL, result(report, "H4.io-stop-policy").status)
+
+    def test_io_pause_does_not_claim_fixed_target_stop_ownership(self):
+        report = HardwareFlowValidator().validate(
+            session(
+                "IO pause activeCapture=True stopCondition=Time preserveTerminalStop=False",
+                "IO grab stop ignored reason=StartLow stopCondition=Time captureContinues=True",
+            )
+        )
+        self.assertEqual(CheckStatus.PASS, result(report, "H4.io-stop-policy").status)
+
     def test_io_stop_policy_accepts_io_low_only_arm(self):
         report = HardwareFlowValidator().validate(
             session(

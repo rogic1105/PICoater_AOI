@@ -89,6 +89,9 @@
     <None Include="Scenarios\monitor-io-basic-cycle.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
+    <None Include="Scenarios\monitor-io-pause-high.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
     <None Include="Scenarios\property-grid-core-matrix.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

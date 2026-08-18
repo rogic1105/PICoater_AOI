@@ -165,6 +165,8 @@ namespace AniloxRoll.Monitor.Forms
         {
             if (!IsCurrentIoController(controller, controllerGeneration))
                 return "controller-stale";
+            if (_isIoSuspended)
+                return "io-suspended";
             if (!controller.IsConnected)
                 return "io-disconnected";
             if (requestGeneration != System.Threading.Volatile.Read(ref _ioGrabRequestGeneration))
@@ -210,11 +212,6 @@ namespace AniloxRoll.Monitor.Forms
                 if (invalidReason != null)
                 {
                     await RejectIoGrabStartAsync(controller, generation, invalidReason);
-                    return;
-                }
-                if (_isIoSuspended)
-                {
-                    await RejectIoGrabStartAsync(controller, generation, "io-suspended");
                     return;
                 }
                 if (_liveCameraManager == null)
@@ -272,6 +269,15 @@ namespace AniloxRoll.Monitor.Forms
                             controller,
                             generation,
                             requestGeneration));
+                    // Once the product gate is open, stop ownership has moved to the
+                    // snapshotted CaptureStopCoordinator. A pause arriving at this boundary
+                    // must not turn a successful start into a rejection and reset the IO FSM.
+                    if (started && _liveCameraManager.IsLiveGrabbing)
+                    {
+                        await controller.NotifyGrabStarted();
+                        FlowTrace.Log("IO grab accepted busy=on");
+                        return;
+                    }
                     invalidReason = GetIoGrabRequestInvalidReason(
                         controller,
                         generation,
@@ -281,13 +287,6 @@ namespace AniloxRoll.Monitor.Forms
                         await RejectIoGrabStartAsync(controller, generation, invalidReason);
                         return;
                     }
-                    if (started && _liveCameraManager.IsLiveGrabbing)
-                    {
-                        await controller.NotifyGrabStarted();
-                        FlowTrace.Log("IO grab accepted busy=on");
-                        return;
-                    }
-
                     await RejectIoGrabStartAsync(controller, generation, "capture-start-failed");
                 }
                 catch (Exception ex)
@@ -318,7 +317,9 @@ namespace AniloxRoll.Monitor.Forms
             await _ioGrabTransitionGate.WaitAsync();
             try
             {
-                if (!IsCurrentIoController(controller, generation) || _isIoSuspended) return;
+                // IO pause blocks new starts only. An IO-owned capture must still consume
+                // its terminal Low/disconnect event or the controller edge is lost forever.
+                if (!IsCurrentIoController(controller, generation)) return;
                 if (_liveCameraManager == null || !_liveCameraManager.IsLiveGrabbing) return;
                 CaptureStopRequest stopRequest;
                 if (_captureStopCoordinator == null ||
@@ -561,6 +562,16 @@ namespace AniloxRoll.Monitor.Forms
             FlowTrace.Log($"ui:【IO暫停】鈕 → {(_isIoSuspended ? "暫停" : "恢復")}");   // intent 行（原本完全無痕＝盲區）
             if (_isIoSuspended)
             {
+                // Cancel a High edge that is still waiting for camera preparation. Captures
+                // whose gate is already open retain their own stop-condition ownership.
+                System.Threading.Interlocked.Increment(ref _ioGrabRequestGeneration);
+                CaptureStopCondition stopCondition =
+                    _captureStopCoordinator?.Condition ?? CaptureStopCondition.IoSignal;
+                bool activeCapture = _liveCameraManager?.IsLiveGrabbing ?? false;
+                FlowTrace.Log(
+                    $"IO pause activeCapture={activeCapture} " +
+                    $"stopCondition={stopCondition} " +
+                    $"preserveTerminalStop={activeCapture && stopCondition == CaptureStopCondition.IoSignal}");
                 lblIoConn.BackColor = IecYellow;
                 lblIoConn.ForeColor = Color.White;   // 統一白字（原黑字）
                 lblIoConn.Text = "● IO 暫停 ⏸";

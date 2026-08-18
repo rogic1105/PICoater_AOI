@@ -362,6 +362,13 @@ Boundary invariants:
   `StopGrab`; that would consume the next HIGH while the previous grab is still closing.
 - A phase fault may reject the next IO pulse, but must not silently shorten an already accepted
   machine pulse.
+- **IO 暫停只封鎖新 Start，不得吞掉既有擷取的終止事件**：在 DI High 且
+  `IoSignal` 擷取已開啟時按下暫停，後續 `StartLow`、`CommunicationLost` 或
+  `PlcAliveLost` 仍須進入 `CaptureStopCoordinator` 並關閉本輪 gate；否則 falling edge
+  已被 controller 消耗，畫面會無限取圖。暫停發生在 gate 開啟前則取消該次 pending
+  request；gate 開啟後 ownership 已交給停止協調器，不得再以事後的 `io-suspended`
+  將成功 Start 改判 rejected、把 IO FSM 退回 Idle。`Time`／`Height` 擷取仍由自己的
+  停止條件收尾，IO Low 只能記 ignored。
 
 IO edge log-flow (this supersedes the legacy `reason=start` sequence below for IO starts):
 ```
@@ -389,6 +396,11 @@ Tn: capture first-set ready path=verified-standby cams=... aligned=True
 Tn: grab stop armed condition=Time limit=Ns configured=Ns grace=0s source=io
     start=first-set grab=...                                              ← 僅 Time 模式
 
+（DI High 且本輪仍在擷取時按 IO 暫停）
+T1: ui:【IO暫停】鈕 → 暫停
+T1: IO pause activeCapture=True stopCondition=IoSignal preserveTerminalStop=True
+T1: IO grab stop accepted reason=StartLow stopCondition=IoSignal drainTail=True
+
 T1: capture tail begin cams=... timeoutMs=N
 Tn: capture tail frame accepted camN tick=T
 Tn: capture tail frame complete camN tick=T
@@ -404,11 +416,13 @@ CameraStatusTimer_Tick@LiveCameraManager.Telemetry.cs
     -> SynchronizeAcquisitionAsync(reason=idle) -> MarkCapturePhaseVerified
 
 IoStartGrabAsync@AniloxRollForm.IoControl.cs
+ -> GetIoGrabRequestInvalidReason（IO 暫停使 pending request 失效）
  -> snapshot CaptureStopCondition and set IoGrabController.StopCaptureOnStartLow
  -> TryGetCaptureStandbyReady
  -> ToggleLiveGrabAsync(ioControlled=true)
     -> StartGrabAsync(requireVerifiedStandby=true)
        -> verified standby: no Pause/Resume/fixed delay/next-frame target
+    -> gate 已開且 IsLiveGrabbing=True：先 NotifyGrabStarted；不得再走 post-start rejected
     -> capture plan + selected duration/height guard
     -> Arm@CaptureStopCoordinator.cs
        -> IO: ArmedIo; no timer, only an IO stop request may terminate the capture
@@ -429,12 +443,17 @@ ProcessingFunction@MilCamera.cs
              -> terminal request only in ArmedHeight at the snapshotted threshold
 
 IoStopGrabAsync@AniloxRollForm.IoControl.cs
+ -> 不以 _isIoSuspended 擋掉 StartLow/CommunicationLost/PlcAliveLost
  -> TryRequestIoStop@CaptureStopCoordinator.cs evaluates the snapshotted state and IoStopRequestReason
  -> IO condition + StartLow: ToggleLiveGrabAsync(drainIoTail=true)
     -> DrainIoTailAsync: exactly one newer completed frame per connected camera, or timeout
     -> StopGrab
  -> IO condition + PlcAliveLost/CommunicationLost: ToggleLiveGrabAsync(drainIoTail=false) -> StopGrab immediately
  -> Time/Height condition + any IO stop reason: log ignored and keep the product capture gate open
+
+lblIoConn_Click@AniloxRollForm.IoControl.cs
+ -> 暫停：遞增 _ioGrabRequestGeneration，取消尚未開 gate 的 IO Start
+ -> 已開 gate：保留 CaptureStopCoordinator 的終止事件 ownership
 
 HandleCaptureStopRequested@AniloxRollForm.Live.cs
  -> ToggleLiveGrabAsync
